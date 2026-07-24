@@ -55,8 +55,7 @@ export interface LeavePolicy {
     approverIds: string[]; // specific employee IDs required to approve this leave type
   };
   requiresDocumentUpload: boolean;
-  documentRequirement?: 'optional' | 'required'; // Document attachment (Requirement 3)
-  minDaysNoticeRequired: number;
+  documentRequirement?: 'optional' | 'required' | 'not_required';  minDaysNoticeRequired: number;
   isPaid: boolean;
 }
 

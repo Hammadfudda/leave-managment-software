@@ -57,8 +57,9 @@ export default function ApplyLeave() {
     }
   };
 
-  const isDocRequired = policy?.documentRequirement === 'required' || policy?.requiresDocumentUpload;
-
+  const isDocRequired = policy?.documentRequirement === 'required';
+  const isDocNotRequired = policy?.documentRequirement === 'not_required';
+  
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 

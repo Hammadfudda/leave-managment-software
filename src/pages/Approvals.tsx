@@ -26,18 +26,22 @@ export default function Approvals() {
 
   const isAdminOrManager = user.role === 'admin' || user.role === 'manager';
 
-  const pending = leaveRequests.filter(
-    (l) => l.currentApproverRole === user.role && l.status !== 'approved' && l.status !== 'rejected' && l.status !== 'cancelled'
-  );
+ const pending = leaveRequests.filter((l) => {
+    if (l.status === 'approved' || l.status === 'rejected' || l.status === 'cancelled') return false;
+    if (user.role === 'admin') return true;
+    return l.requiredApproverIds?.includes(user.id);
+  });
 
-  const history = leaveRequests.filter((l) =>
+ const history = leaveRequests.filter((l) =>
     l.approvalHistory.some((h) => h.approverId === user.id) ||
-    (isAdminOrManager && ['approved', 'rejected', 'cancelled'].includes(l.status))
+    (user.role === 'admin' && ['approved', 'rejected', 'cancelled'].includes(l.status))
   );
 
-  const activeApproved = leaveRequests.filter(
-    (l) => l.status === 'approved' && isAdminOrManager
-  );
+  const activeApproved = leaveRequests.filter((l) => {
+    if (l.status !== 'approved') return false;
+    if (user.role === 'admin') return true;
+    return l.requiredApproverIds?.includes(user.id);
+  });
 
   const employee = detail ? getUserById(detail.employeeId) : undefined;
   const balances = detail ? (leaveBalances[detail.employeeId] || []).filter((b) => CORE_LEAVE_TYPES.includes(b.leaveType as typeof CORE_LEAVE_TYPES[number])) : [];

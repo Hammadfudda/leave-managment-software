@@ -8,13 +8,13 @@ import { formatDate } from '../utils/formatDate';
 import type { User, Role } from '../types';
 
 const roleLabel: Record<Role, string> = {
-  admin: 'Admin', manager: 'Manager', team_leader: 'Team Leader', employee: 'Employee',
+  admin: 'Admin', manager: 'Manager', employee: 'Employee',
 };
 
 const emptyForm = {
   fullName: '', email: '', employeeId: '', cnic: '', phone: '',
   role: 'employee' as Role, designation: '', grade: 'Grade C', department: '',
-  dateOfJoining: '', status: 'active' as 'active' | 'inactive', teamLeaderId: '', managerId: '',
+  dateOfJoining: '', status: 'active' as 'active' | 'inactive', managerId: '',
 };
 
 export default function Employees() {
@@ -70,7 +70,7 @@ export default function Employees() {
     if (!validate()) return;
 
     const payload: User = editingUser
-      ? { ...editingUser, fullName: form.fullName.trim(), email: form.email.trim(), employeeId: form.employeeId.trim(), cnic: form.cnic.trim(), phone: form.phone.trim(), role: form.role, designation: form.designation, grade: form.grade, department: form.department, dateOfJoining: form.dateOfJoining, status: form.status as User['status'], teamLeaderId: form.teamLeaderId || undefined, managerId: form.managerId || undefined }
+      ? { ...editingUser, fullName: form.fullName.trim(), email: form.email.trim(), employeeId: form.employeeId.trim(), cnic: form.cnic.trim(), phone: form.phone.trim(), role: form.role, designation: form.designation, grade: form.grade, department: form.department, dateOfJoining: form.dateOfJoining, status: form.status as User['status'], managerId: form.managerId || undefined }
       : {
           id: `u${Date.now()}`,
           fullName: form.fullName.trim(),
@@ -84,7 +84,6 @@ export default function Employees() {
           department: form.department,
           dateOfJoining: form.dateOfJoining,
           status: form.status as User['status'],
-          teamLeaderId: form.teamLeaderId || undefined,
           managerId: form.managerId || undefined,
         };
 
@@ -129,7 +128,7 @@ export default function Employees() {
     lines.forEach((line) => {
       const [fullName, email, employeeId, cnic, phone, role, designation, grade, department, dateOfJoining, status] = line.split(',').map((value) => value.replace(/^"|"$/g, ''));
       if (!fullName || !email || !employeeId) return;
-      addUser({ id: `u${Date.now()}-${Math.random()}`, fullName, email, employeeId, cnic, phone, role: role as User['role'], designation, grade, department, dateOfJoining, status: status as User['status'], teamLeaderId: undefined, managerId: undefined });
+      addUser({ id: `u${Date.now()}-${Math.random()}`, fullName, email, employeeId, cnic, phone, role: role as User['role'], designation, grade, department, dateOfJoining, status: status as User['status'], managerId: undefined });
     });
     setImporting(false);
     event.target.value = '';
@@ -218,7 +217,7 @@ export default function Employees() {
                       <button onClick={() => setViewUser(u)} className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700">
                         <Eye size={14} /> View
                       </button>
-                      <button onClick={() => { setEditingUser(u); setForm({ fullName: u.fullName, email: u.email, employeeId: u.employeeId, cnic: u.cnic, phone: u.phone, role: u.role, designation: u.designation, grade: u.grade, department: u.department, dateOfJoining: u.dateOfJoining, status: u.status, teamLeaderId: u.teamLeaderId || '', managerId: u.managerId || '' }); setShowAdd(true); }} className="text-sm font-medium text-amber-600 hover:text-amber-700">
+                      <button onClick={() => { setEditingUser(u); setForm({ fullName: u.fullName, email: u.email, employeeId: u.employeeId, cnic: u.cnic, phone: u.phone, role: u.role, designation: u.designation, grade: u.grade, department: u.department, dateOfJoining: u.dateOfJoining, status: u.status, managerId: u.managerId || '' }); setShowAdd(true); }} className="text-sm font-medium text-amber-600 hover:text-amber-700">
                         Edit
                       </button>
                     </div>
@@ -310,47 +309,37 @@ export default function Employees() {
                 {errors.department && <p className={errorCls}>{errors.department}</p>}
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Role</label>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Portal Access</label>
                 <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })} className={inputCls}>
                   <option value="employee">Employee</option>
-                  <option value="team_leader">Team Leader</option>
                   <option value="manager">Manager</option>
-                  <option value="admin">Admin</option>
                 </select>
+                <p className="mt-1 text-xs text-gray-400">Manager access shows the approvals dashboard and team leave calendar.</p>
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-700">Date of joining <span className="text-rose-500">*</span></label>
                 <input type="date" value={form.dateOfJoining} onChange={(e) => setForm({ ...form, dateOfJoining: e.target.value })} className={inputCls} />
                 {errors.dateOfJoining && <p className={errorCls}>{errors.dateOfJoining}</p>}
               </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Status</label>
-                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as 'active' | 'inactive' })} className={inputCls}>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </div>
-              {form.role === 'employee' && (
-                <>
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Team Leader</label>
-                    <select value={form.teamLeaderId} onChange={(e) => setForm({ ...form, teamLeaderId: e.target.value })} className={inputCls}>
-                      <option value="">No team leader</option>
-                      {users.filter((u) => u.role === 'team_leader').map((u) => (
-                        <option key={u.id} value={u.id}>{u.fullName} — {u.designation}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Manager</label>
-                    <select value={form.managerId} onChange={(e) => setForm({ ...form, managerId: e.target.value })} className={inputCls}>
-                      <option value="">Auto (via team leader)</option>
-                      {users.filter((u) => u.role === 'manager').map((u) => (
-                        <option key={u.id} value={u.id}>{u.fullName} — {u.designation}</option>
-                      ))}
-                    </select>
-                  </div>
-                </>
+              {editingUser && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Status</label>
+                  <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as 'active' | 'inactive' })} className={inputCls}>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              )}
+              {form.role !== 'admin' && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Manager</label>
+                  <select value={form.managerId} onChange={(e) => setForm({ ...form, managerId: e.target.value })} className={inputCls}>
+                    <option value="">No manager</option>
+                    {users.filter((u) => u.role === 'manager' || u.role === 'admin').map((u) => (
+                      <option key={u.id} value={u.id}>{u.fullName} — {u.designation}</option>
+                    ))}
+                  </select>
+                </div>
               )}
             </div>
           </div>
@@ -379,7 +368,7 @@ export default function Employees() {
 
       <Modal open={!!viewUser} onClose={() => setViewUser(null)} title="Employee Details" size="lg">
         {viewUser && (() => {
-          const { teamLeader, manager } = getReportingChain(viewUser, getUserById);
+          const { manager } = getReportingChain(viewUser, getUserById);
           return (
             <div className="space-y-5">
               <div className="flex items-center gap-4 rounded-xl bg-gradient-to-r from-blue-50 to-slate-50 p-5">
@@ -404,7 +393,6 @@ export default function Employees() {
                 <DetailField label="Department" value={viewUser.department} />
                 <DetailField label="Role" value={roleLabel[viewUser.role]} />
                 <DetailField label="Date of Joining" value={formatDate(viewUser.dateOfJoining)} />
-                <DetailField label="Team Leader" value={teamLeader?.fullName || '—'} />
                 <DetailField label="Manager" value={manager?.fullName || '—'} />
               </div>
             </div>

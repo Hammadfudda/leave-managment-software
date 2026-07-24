@@ -327,11 +327,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     // Request is fully approved only once every required approver has signed off.
     // If no specific approvers were set on the policy, fall back to a single admin/manager approval.
-    const required = request.requiredApproverIds || [];
+   const required = request.requiredApproverIds || [];
     const allRequiredHaveApproved =
-      required.length > 0
-        ? required.every((id) => updatedApprovedByIds.includes(id))
-        : true;
+      approver.role === 'admin' // Admin override — turant finalize karta hai
+        ? true
+        : required.length > 0
+          ? required.every((id) => updatedApprovedByIds.includes(id))
+          : true;
 
     const newStatus: LeaveRequest['status'] = allRequiredHaveApproved ? 'approved' : 'pending';
 

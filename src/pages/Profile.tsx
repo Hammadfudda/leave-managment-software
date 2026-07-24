@@ -6,8 +6,7 @@ import { Mail, Phone, Building2, CalendarDays, CreditCard, Briefcase, UserCircle
 import { formatDate } from '../utils/formatDate';
 
 const roleLabel: Record<string, string> = {
-  admin: 'Administrator', manager: 'Manager', team_leader: 'Team Leader', employee: 'Employee',
-};
+admin: 'Administrator', manager: 'Manager', employee: 'Employee',};
 
 export default function Profile() {
   const { user } = useAuth();
@@ -16,8 +15,7 @@ export default function Profile() {
 
   const balances = (leaveBalances[user.id] || []).filter((b) => ['annual', 'sick', 'casual'].includes(b.leaveType));
   const myLeaves = leaveRequests.filter((l) => l.employeeId === user.id);
-  const { teamLeader, manager } = getReportingChain(user, getUserById);
-
+const { manager } = getReportingChain(user, getUserById);
   const fields = [
     { icon: CreditCard, label: 'Employee ID', value: user.employeeId, mono: true },
     { icon: Mail, label: 'Email', value: user.email },
@@ -27,7 +25,6 @@ export default function Profile() {
     { icon: BadgeCheck, label: 'Grade', value: user.grade },
     { icon: Building2, label: 'Department', value: user.department },
     { icon: CalendarDays, label: 'Date of Joining', value: formatDate(user.dateOfJoining) },
-    { icon: Users, label: 'Team Leader', value: teamLeader?.fullName || '—' },
     { icon: UserCircle, label: 'Manager', value: manager?.fullName || '— (Top level)' },
   ];
 

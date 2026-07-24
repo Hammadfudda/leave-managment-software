@@ -92,7 +92,6 @@ export default function Login() {
                 {[
                   { label: 'Admin', em: 'admin@nutrilov.com', pw: 'admin123' },
                   { label: 'Manager', em: 'manager@nutrilov.com', pw: 'manager123' },
-                  { label: 'Team Lead', em: 'tl@nutrilov.com', pw: 'tl123' },
                   { label: 'Employee', em: 'employee@nutrilov.com', pw: 'emp123' },
                 ].map((a) => (
                   <button
@@ -110,6 +109,11 @@ export default function Login() {
         </div>
 
         <p className="mt-3 text-center text-[10px] text-gray-400">© 2026 Nutrilov · Internal use only</p>
+
+        <div className="mt-4 flex flex-row items-center justify-center gap-2">
+          <img src="/nedd-logo.png" alt="Nedd Consultant" className="h-10 w-auto object-contain opacity-100" />
+          <p className="text-xs font-medium text-gray-500">Made by Nedd Consultant</p>
+        </div>
       </div>
     </div>
   );
