@@ -30,6 +30,7 @@ const navItems: NavItem[] = [
   { to: '/leave/apply', label: 'Apply Leave', icon: CalendarPlus, roles: ['admin', 'manager', 'employee'] },
   { to: '/leave/history', label: 'My Leaves', icon: History, roles: ['admin', 'manager', 'employee'] },
   { to: '/approvals', label: 'Approvals', icon: CheckSquare, roles: ['manager', 'admin'] },
+    { to: '/my-team', label: 'My Team', icon: Users, roles: ['manager', 'admin'] },
   { to: '/calendar', label: 'Leave Calendar', icon: CalendarDays, roles: ['admin', 'manager'] },
   { to: '/notifications', label: 'Notifications', icon: Bell, roles: ['admin', 'manager', 'employee'] },
   { to: '/employees', label: 'Employees', icon: Users, roles: ['admin'] },
@@ -75,8 +76,9 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
           </div>
 
           <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-            {items.map((item) => {
+           {items.map((item) => {
               const Icon = item.icon;
+              const label = item.to === '/my-team' ? (user.role === 'admin' ? 'Managers' : 'My Team') : item.label;
               return (
                 <NavLink
                   key={item.to}
@@ -91,7 +93,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                   }
                 >
                   <Icon size={18} />
-                  {item.label}
+                  {label}
                 </NavLink>
               );
             })}
