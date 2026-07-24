@@ -11,7 +11,7 @@ const extraTypes: LeaveType[] = ['unpaid', 'maternity', 'paternity'];
 
 export default function Policies() {
   const { user } = useAuth();
-  const { leavePolicies, addLeavePolicy, updateLeavePolicy, designations, departments } = useAppData();
+  const { leavePolicies, addLeavePolicy, updateLeavePolicy, designations, departments, users } = useAppData();
   const isAdmin = user?.role === 'admin';
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<LeavePolicy | null>(null);
@@ -21,7 +21,7 @@ export default function Policies() {
     isPaid: true,
     designation: 'All Designations',
     department: 'All Departments',
-    approvers: ['manager'] as ('team_leader' | 'manager' | 'admin' | 'hr')[],
+    approverIds: [] as string[],
     minDaysNoticeRequired: 3,
     documentRequirement: 'optional' as 'optional' | 'required',
   });
@@ -34,7 +34,7 @@ export default function Policies() {
       isPaid: p.isPaid,
       designation: p.approvalRouting?.designation || 'All Designations',
       department: p.approvalRouting?.department || 'All Departments',
-      approvers: p.approvalRouting?.approvers || [p.requiresApprovalFrom],
+      approverIds: p.approvalRouting?.approverIds || [],
       minDaysNoticeRequired: p.minDaysNoticeRequired,
       documentRequirement: p.documentRequirement || (p.requiresDocumentUpload ? 'required' : 'optional'),
     });
@@ -47,11 +47,11 @@ export default function Policies() {
       id: editing ? editing.id : `lp${Date.now()}`,
       leaveType: leaveTypeKey,
       role: form.role,
-      requiresApprovalFrom: form.approvers[0] || 'manager',
+      requiresApprovalFrom: 'manager',
       approvalRouting: {
         designation: form.designation !== 'All Designations' ? form.designation : undefined,
         department: form.department !== 'All Departments' ? form.department : undefined,
-        approvers: form.approvers,
+        approverIds: form.approverIds,
       },
       requiresDocumentUpload: form.documentRequirement === 'required',
       documentRequirement: form.documentRequirement,
@@ -114,7 +114,7 @@ export default function Policies() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {leavePolicies.map((p) => {
-          const approversList = p.approvalRouting?.approvers || [p.requiresApprovalFrom];
+          const approversList = p.approvalRouting?.approverIds || [];
           return (
             <div key={p.id} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm animate-fade-in">
               <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -127,9 +127,13 @@ export default function Policies() {
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">Approval from</span>
                   <div className="flex gap-1 flex-wrap">
-                    {approversList.map((app) => (
-                      <Badge key={app} variant="blue">{app.replace('_', ' ')}</Badge>
-                    ))}
+                    {approversList.length === 0 && <span className="text-xs text-gray-400">Not set</span>}
+                    {approversList.map((id) => {
+                      const approver = users.find((u) => u.id === id);
+                      return (
+                        <Badge key={id} variant="blue">{approver?.fullName || 'Unknown'}</Badge>
+                      );
+                    })}
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
@@ -182,8 +186,7 @@ export default function Policies() {
               >
                 <option value="All Employees">All Employees</option>
                 <option value="employee">Employee</option>
-                <option value="team_leader">Team Leader</option>
-                <option value="manager">Manager</option>
+                                <option value="manager">Manager</option>
                 <option value="admin">Administrator</option>
               </select>
             </div>
@@ -230,28 +233,28 @@ export default function Policies() {
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Multi-level Approvers</label>
-              <div className="rounded-lg border border-gray-200 p-3 space-y-2 bg-gray-50/50">
-                <p className="text-[11px] text-gray-500 mb-2">Select required approvers:</p>
-                {(['team_leader', 'manager', 'admin', 'hr'] as const).map((role) => {
-                  const isChecked = form.approvers.includes(role);
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Required Approvers</label>
+              <div className="rounded-lg border border-gray-200 p-3 space-y-2 bg-gray-50/50 max-h-48 overflow-y-auto">
+                <p className="text-[11px] text-gray-500 mb-2">Select specific people who must approve this leave type (all selected must approve):</p>
+                {users.filter((u) => u.role !== 'employee').map((approver) => {
+                  const isChecked = form.approverIds.includes(approver.id);
                   return (
-                    <label key={role} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <label key={approver.id} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={isChecked}
                         onChange={() => {
-                          let nextApprovers = [...form.approvers];
+                          let next = [...form.approverIds];
                           if (isChecked) {
-                            nextApprovers = nextApprovers.filter((r) => r !== role);
+                            next = next.filter((id) => id !== approver.id);
                           } else {
-                            nextApprovers.push(role);
+                            next.push(approver.id);
                           }
-                          setForm({ ...form, approvers: nextApprovers });
+                          setForm({ ...form, approverIds: next });
                         }}
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
-                      <span className="capitalize">{role.replace('_', ' ')}</span>
+                      <span>{approver.fullName} <span className="text-xs text-gray-400">({approver.role})</span></span>
                     </label>
                   );
                 })}

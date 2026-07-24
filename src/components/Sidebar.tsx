@@ -25,15 +25,15 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'team_leader', 'employee'] },
-  { to: '/profile', label: 'My Profile', icon: UserCircle, roles: ['admin', 'manager', 'team_leader', 'employee'] },
-  { to: '/leave/apply', label: 'Apply Leave', icon: CalendarPlus, roles: ['admin', 'manager', 'team_leader', 'employee'] },
-  { to: '/leave/history', label: 'My Leaves', icon: History, roles: ['admin', 'manager', 'team_leader', 'employee'] },
-  { to: '/approvals', label: 'Approvals', icon: CheckSquare, roles: ['manager', 'team_leader', 'admin'] },
-  { to: '/calendar', label: 'Leave Calendar', icon: CalendarDays, roles: ['admin', 'manager', 'team_leader'] },
-  { to: '/notifications', label: 'Notifications', icon: Bell, roles: ['admin', 'manager', 'team_leader', 'employee'] },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'employee'] },
+  { to: '/profile', label: 'My Profile', icon: UserCircle, roles: ['admin', 'manager', 'employee'] },
+  { to: '/leave/apply', label: 'Apply Leave', icon: CalendarPlus, roles: ['admin', 'manager', 'employee'] },
+  { to: '/leave/history', label: 'My Leaves', icon: History, roles: ['admin', 'manager', 'employee'] },
+  { to: '/approvals', label: 'Approvals', icon: CheckSquare, roles: ['manager', 'admin'] },
+  { to: '/calendar', label: 'Leave Calendar', icon: CalendarDays, roles: ['admin', 'manager'] },
+  { to: '/notifications', label: 'Notifications', icon: Bell, roles: ['admin', 'manager', 'employee'] },
   { to: '/employees', label: 'Employees', icon: Users, roles: ['admin'] },
-  { to: '/master-data', label: 'Leave Types', icon: Settings2, roles: ['admin'] },
+  { to: '/master-data', label: 'Roles', icon: Settings2, roles: ['admin'] },
   { to: '/policies', label: 'Leave Policies', icon: FileText, roles: ['admin'] },
   { to: '/audit', label: 'Audit Logs', icon: ScrollText, roles: ['admin'] },
 ];
@@ -41,7 +41,6 @@ const navItems: NavItem[] = [
 const roleLabel: Record<Role, string> = {
   admin: 'Administrator',
   manager: 'Manager',
-  team_leader: 'Team Leader',
   employee: 'Employee',
 };
 

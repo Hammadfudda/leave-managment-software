@@ -3,32 +3,23 @@ import { useAppData } from '../context/AppDataContext';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import Badge from '../components/ui/Badge';
-import { Plus, Briefcase, Building2, GraduationCap, ClipboardList } from 'lucide-react';
-import type { Grade, LeavePolicy } from '../types';
+import { Plus, Briefcase, Building2, GraduationCap, ShieldCheck } from 'lucide-react';
+import type { Grade } from '../types';
 
-type Tab = 'designations' | 'departments' | 'grades' | 'leaveTypes';
+type Tab = 'designations' | 'departments' | 'grades' | 'roles';
 
 export default function MasterData() {
-  const { designations, departments, grades, leavePolicies, addDesignation, addDepartment, addGrade, addLeavePolicy } = useAppData();
+  const { designations, departments, grades, roles, addDesignation, addDepartment, addGrade, addRole } = useAppData();
   const [tab, setTab] = useState<Tab>('designations');
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState('');
   const [gradeForm, setGradeForm] = useState({ name: '', annualLeaveQuota: 14, sickLeaveQuota: 7, casualLeaveQuota: 5, carryForwardAllowed: false, maxCarryForwardDays: 0, description: '' });
-  const [policyForm, setPolicyForm] = useState({
-    leaveTypeName: '',
-    role: 'All Employees',
-    isPaid: true,
-    designation: 'All Designations',
-    department: 'All Departments',
-    approvers: ['manager'] as ('team_leader' | 'manager' | 'admin' | 'hr')[],
-    minDaysNoticeRequired: 3,
-    documentRequirement: 'optional' as 'optional' | 'required',
-  });
 
   const handleAdd = () => {
     if (!name.trim()) return;
     if (tab === 'designations') addDesignation(name.trim());
     else if (tab === 'departments') addDepartment(name.trim());
+    else if (tab === 'roles') addRole(name.trim());
     setName('');
     setShowAdd(false);
   };
@@ -40,42 +31,11 @@ export default function MasterData() {
     setShowAdd(false);
   };
 
-  const handleAddPolicy = () => {
-    if (!policyForm.leaveTypeName.trim()) return;
-    const leaveTypeKey = policyForm.leaveTypeName.trim().toLowerCase().replace(/\s+/g, '_');
-    addLeavePolicy({
-      id: `lp${Date.now()}`,
-      leaveType: leaveTypeKey,
-      role: policyForm.role,
-      requiresApprovalFrom: policyForm.approvers[0] || 'manager',
-      approvalRouting: {
-        designation: policyForm.designation !== 'All Designations' ? policyForm.designation : undefined,
-        department: policyForm.department !== 'All Departments' ? policyForm.department : undefined,
-        approvers: policyForm.approvers,
-      },
-      requiresDocumentUpload: policyForm.documentRequirement === 'required',
-      documentRequirement: policyForm.documentRequirement,
-      minDaysNoticeRequired: policyForm.minDaysNoticeRequired,
-      isPaid: policyForm.isPaid,
-    });
-    setPolicyForm({
-      leaveTypeName: '',
-      role: 'All Employees',
-      isPaid: true,
-      designation: 'All Designations',
-      department: 'All Departments',
-      approvers: ['manager'],
-      minDaysNoticeRequired: 3,
-      documentRequirement: 'optional',
-    });
-    setShowAdd(false);
-  };
-
   const tabs = [
     { key: 'designations' as const, label: 'Designations', icon: Briefcase },
     { key: 'departments' as const, label: 'Departments', icon: Building2 },
     { key: 'grades' as const, label: 'Grades', icon: GraduationCap },
-    { key: 'leaveTypes' as const, label: 'Leave Types', icon: ClipboardList },
+    { key: 'roles' as const, label: 'Roles', icon: ShieldCheck },
   ];
 
   const renderContent = () => {
@@ -99,41 +59,7 @@ export default function MasterData() {
       );
     }
 
-    if (tab === 'leaveTypes') {
-      return (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {leavePolicies.map((policy: LeavePolicy) => {
-            const approversList = policy.approvalRouting?.approvers || [policy.requiresApprovalFrom];
-            return (
-              <div key={policy.id} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <h3 className="text-base font-semibold capitalize text-gray-900">{policy.leaveType.replace(/_/g, ' ')} leave</h3>
-                  <div className="flex gap-1 flex-wrap">
-                    {approversList.map((app) => (
-                      <Badge key={app} variant="blue">{app.replace('_', ' ')}</Badge>
-                    ))}
-                  </div>
-                </div>
-                <div className="mt-4 space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-500">Role</span><span className="font-medium text-gray-900">{policy.role || 'All Employees'}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Notice</span><span className="font-medium text-gray-900">{policy.minDaysNoticeRequired} day(s)</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Document upload</span><span className="font-medium text-gray-900">{policy.documentRequirement ? (policy.documentRequirement === 'required' ? 'Required' : 'Optional') : (policy.requiresDocumentUpload ? 'Required' : 'Optional')}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Pay type</span><span className="font-medium text-gray-900">{policy.isPaid ? 'Paid' : 'Unpaid'}</span></div>
-                  {policy.approvalRouting?.designation && (
-                    <div className="flex justify-between"><span className="text-gray-500">Routing Designation</span><span className="font-medium text-gray-900">{policy.approvalRouting.designation}</span></div>
-                  )}
-                  {policy.approvalRouting?.department && (
-                    <div className="flex justify-between"><span className="text-gray-500">Routing Department</span><span className="font-medium text-gray-900">{policy.approvalRouting.department}</span></div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      );
-    }
-
-    const items = tab === 'designations' ? designations : departments;
+    const items = tab === 'designations' ? designations : tab === 'departments' ? departments : roles;
     return (
       <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
         <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 lg:grid-cols-3">
@@ -150,8 +76,8 @@ export default function MasterData() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Leave Types</h1>
-        <p className="mt-1 text-sm text-gray-500">Manage HR references and create leave types for the system.</p>
+        <h1 className="text-2xl font-semibold text-gray-900">Roles</h1>
+        <p className="mt-1 text-sm text-gray-500">Manage HR references and system roles.</p>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -165,7 +91,7 @@ export default function MasterData() {
             );
           })}
         </div>
-        <Button onClick={() => setShowAdd(true)}><Plus size={16} /> {tab === 'designations' ? 'Add Designation' : tab === 'departments' ? 'Add Department' : tab === 'grades' ? 'Add Grade' : 'Create Leave Type'}</Button>
+        <Button onClick={() => setShowAdd(true)}><Plus size={16} /> {tab === 'designations' ? 'Add Designation' : tab === 'departments' ? 'Add Department' : tab === 'grades' ? 'Add Grade' : 'Add Role'}</Button>
       </div>
 
       {renderContent()}
@@ -176,36 +102,16 @@ export default function MasterData() {
           setShowAdd(false);
           setName('');
           setGradeForm({ name: '', annualLeaveQuota: 14, sickLeaveQuota: 7, casualLeaveQuota: 5, carryForwardAllowed: false, maxCarryForwardDays: 0, description: '' });
-          setPolicyForm({
-            leaveTypeName: '',
-            role: 'All Employees',
-            isPaid: true,
-            designation: 'All Designations',
-            department: 'All Departments',
-            approvers: ['manager'],
-            minDaysNoticeRequired: 3,
-            documentRequirement: 'optional',
-          });
         }}
-        title={tab === 'designations' ? 'Add Designation' : tab === 'departments' ? 'Add Department' : tab === 'grades' ? 'Add Grade' : 'Create Leave Type'}
+        title={tab === 'designations' ? 'Add Designation' : tab === 'departments' ? 'Add Department' : tab === 'grades' ? 'Add Grade' : 'Add Role'}
         footer={
           <>
             <Button variant="secondary" onClick={() => {
               setShowAdd(false);
               setName('');
               setGradeForm({ name: '', annualLeaveQuota: 14, sickLeaveQuota: 7, casualLeaveQuota: 5, carryForwardAllowed: false, maxCarryForwardDays: 0, description: '' });
-              setPolicyForm({
-                leaveTypeName: '',
-                role: 'All Employees',
-                isPaid: true,
-                designation: 'All Designations',
-                department: 'All Departments',
-                approvers: ['manager'],
-                minDaysNoticeRequired: 3,
-                documentRequirement: 'optional',
-              });
             }}>Cancel</Button>
-            <Button onClick={tab === 'grades' ? handleAddGrade : tab === 'leaveTypes' ? handleAddPolicy : handleAdd}>{tab === 'grades' ? 'Create Grade' : tab === 'leaveTypes' ? 'Create Policy' : 'Add'}</Button>
+            <Button onClick={tab === 'grades' ? handleAddGrade : handleAdd}>{tab === 'grades' ? 'Create Grade' : 'Add'}</Button>
           </>
         }
       >
@@ -222,127 +128,8 @@ export default function MasterData() {
             </div>
             <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Description</label><input value={gradeForm.description} onChange={(e) => setGradeForm({ ...gradeForm, description: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20" /></div>
           </div>
-        ) : tab === 'leaveTypes' ? (
-          <div className="space-y-4 text-left max-h-[60vh] overflow-y-auto px-1">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Leave Type Name</label>
-              <input
-                type="text"
-                placeholder="e.g. Compassionate"
-                value={policyForm.leaveTypeName}
-                onChange={(e) => setPolicyForm({ ...policyForm, leaveTypeName: e.target.value })}
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Applicable Role</label>
-              <select
-                value={policyForm.role}
-                onChange={(e) => setPolicyForm({ ...policyForm, role: e.target.value })}
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              >
-                <option value="All Employees">All Employees</option>
-                <option value="employee">Employee</option>
-                <option value="team_leader">Team Leader</option>
-                <option value="manager">Manager</option>
-                <option value="admin">Administrator</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Pay Type</label>
-              <select
-                value={policyForm.isPaid ? 'paid' : 'unpaid'}
-                onChange={(e) => setPolicyForm({ ...policyForm, isPaid: e.target.value === 'paid' })}
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              >
-                <option value="paid">Paid Leave</option>
-                <option value="unpaid">Unpaid Leave</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 font-semibold mt-4">Approval Routing Filters</label>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs text-gray-500">Designation</label>
-                  <select
-                    value={policyForm.designation}
-                    onChange={(e) => setPolicyForm({ ...policyForm, designation: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  >
-                    <option value="All Designations">All Designations</option>
-                    {designations.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-gray-500">Department</label>
-                  <select
-                    value={policyForm.department}
-                    onChange={(e) => setPolicyForm({ ...policyForm, department: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  >
-                    <option value="All Departments">All Departments</option>
-                    {departments.map((dep) => (
-                      <option key={dep} value={dep}>{dep}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 font-semibold">Multi-level Approvers</label>
-              <div className="rounded-lg border border-gray-200 p-3 space-y-2 bg-gray-50/50">
-                <p className="text-[11px] text-gray-500 mb-2">Select required approvers for this leave type:</p>
-                {(['team_leader', 'manager', 'admin', 'hr'] as const).map((role) => {
-                  const isChecked = policyForm.approvers.includes(role);
-                  return (
-                    <label key={role} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => {
-                          let nextApprovers = [...policyForm.approvers];
-                          if (isChecked) {
-                            nextApprovers = nextApprovers.filter((r) => r !== role);
-                          } else {
-                            nextApprovers.push(role);
-                          }
-                          setPolicyForm({ ...policyForm, approvers: nextApprovers });
-                        }}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="capitalize">{role.replace('_', ' ')}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Minimum Notice Days Required</label>
-              <input
-                type="number"
-                min={0}
-                value={policyForm.minDaysNoticeRequired}
-                onChange={(e) => setPolicyForm({ ...policyForm, minDaysNoticeRequired: Math.max(0, Number(e.target.value)) })}
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Document Attachment</label>
-              <select
-                value={policyForm.documentRequirement}
-                onChange={(e) => setPolicyForm({ ...policyForm, documentRequirement: e.target.value as 'optional' | 'required' })}
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              >
-                <option value="optional">Optional</option>
-                <option value="required">Required</option>
-              </select>
-            </div>
-          </div>
         ) : (
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={tab === 'designations' ? 'e.g. Data Scientist' : 'e.g. Research'} className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20" autoFocus />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={tab === 'designations' ? 'e.g. Data Scientist' : tab === 'departments' ? 'e.g. Research' : 'e.g. Team Lead'} className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20" autoFocus />
         )}
       </Modal>
     </div>

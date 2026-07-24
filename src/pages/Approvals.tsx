@@ -36,7 +36,7 @@ export default function Approvals() {
   );
 
   const activeApproved = leaveRequests.filter(
-    (l) => ['approved', 'approved_by_team_leader'].includes(l.status) && isAdminOrManager
+    (l) => l.status === 'approved' && isAdminOrManager
   );
 
   const employee = detail ? getUserById(detail.employeeId) : undefined;
@@ -105,12 +105,13 @@ export default function Approvals() {
                 <th className="px-5 py-3 font-medium">Dates</th>
                 <th className="px-5 py-3 font-medium">Days</th>
                 <th className="px-5 py-3 font-medium">Status</th>
+                <th className="px-5 py-3 font-medium">Approvals</th>
                 <th className="px-5 py-3 font-medium">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {list.length === 0 && (
-                <tr><td colSpan={6} className="px-5 py-8 text-center text-gray-400">No records.</td></tr>
+                <tr><td colSpan={7} className="px-5 py-8 text-center text-gray-400">No records.</td></tr>
               )}
               {list.map((l) => (
                 <tr key={l.id} className="hover:bg-gray-50/50 animate-fade-in">
@@ -120,11 +121,33 @@ export default function Approvals() {
                   <td className="px-5 py-3 text-gray-600">{l.totalDaysRequested}</td>
                   <td className="px-5 py-3"><StatusBadge status={l.status} /></td>
                   <td className="px-5 py-3">
+                    {l.requiredApproverIds && l.requiredApproverIds.length > 0 ? (
+                      <div className="space-y-1">
+                        {l.requiredApproverIds.map((id) => {
+                          const approver = getUserById(id);
+                          const hasApproved = l.approvedByIds?.includes(id);
+                          return (
+                            <div key={id} className="flex items-center gap-1.5 text-xs">
+                              <span className={hasApproved ? 'text-emerald-600' : 'text-gray-400'}>
+                                {hasApproved ? '✓' : '○'}
+                              </span>
+                              <span className={hasApproved ? 'text-gray-700' : 'text-gray-400'}>
+                                {approver?.fullName || 'Unknown'} ({approver?.role})
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3">
                     {tab === 'pending' && (
                       <button onClick={() => openReview(l)} className="text-sm font-medium text-blue-600 hover:text-blue-700">Review</button>
                     )}
                     {tab === 'active' && (
-                      <button onClick={() => openReview(l, true)} className="text-sm font-medium text-rose-600 hover:text-rose-700">Stop / Cancel</button>
+                      <button onClick={() => openReview(l, true)} className="text-sm font-medium text-rose-600 hover:text-rose-700">Stop</button>
                     )}
                     {tab === 'history' && (
                       <button onClick={() => openReview(l)} className="text-sm font-medium text-blue-600 hover:text-blue-700">View</button>
@@ -140,7 +163,7 @@ export default function Approvals() {
       <Modal
         open={!!detail}
         onClose={() => { setDetail(null); setComment(''); setCancelMode(false); }}
-        title={cancelMode ? 'Stop / Cancel Leave' : tab === 'pending' ? 'Review Leave Request' : 'Leave Details'}
+        title={cancelMode ? 'Stop Leave' : tab === 'pending' ? 'Review Leave Request' : 'Leave Details'}
         size="lg"
         footer={
           cancelMode ? (

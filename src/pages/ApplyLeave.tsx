@@ -7,6 +7,9 @@ import type { LeaveType } from '../types';
 import { Upload, CalendarDays } from 'lucide-react';
 import { formatDate, calcWorkingDays } from '../utils/formatDate';
 
+const CLOUDINARY_CLOUD_NAME = 'apna_cloud_name_yahan_daalein';
+const CLOUDINARY_UPLOAD_PRESET = 'apna_upload_preset_yahan_daalein';
+
 export default function ApplyLeave() {
   const { user } = useAuth();
   const { leaveBalances, leavePolicies, getActiveLeaveTypes, submitLeaveRequest } = useAppData();
@@ -18,8 +21,6 @@ export default function ApplyLeave() {
   const [fileName, setFileName] = useState('');
   const [uploadUrl, setUploadUrl] = useState('');
   const [attachmentName, setAttachmentName] = useState('');
-  const [cloudName, setCloudName] = useState('');
-  const [uploadPreset, setUploadPreset] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
   if (!user) return null;
@@ -40,20 +41,12 @@ export default function ApplyLeave() {
     setFileName(selectedFile.name);
     setAttachmentName(selectedFile.name);
 
-    if (!cloudName || !uploadPreset) {
-      // Simulate/mock Cloudinary upload
-      setTimeout(() => {
-        setUploadUrl(`https://res.cloudinary.com/demo/image/upload/v1570979139/simulated_leave_doc_${Date.now()}_${selectedFile.name}`);
-      }, 500);
-      return;
-    }
-
     const formData = new FormData();
     formData.append('file', selectedFile);
-    formData.append('upload_preset', uploadPreset);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
 
     try {
-      const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/upload`, {
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -87,7 +80,7 @@ export default function ApplyLeave() {
       totalDaysRequested: totalDays,
       totalWorkingDays: totalDays,
       reason,
-      currentApproverRole: policy?.requiresApprovalFrom === 'admin' ? 'admin' : policy?.requiresApprovalFrom === 'manager' ? 'manager' : 'team_leader',
+      currentApproverRole: policy?.requiresApprovalFrom === 'admin' ? 'admin' : 'manager',
       attachmentUrl: uploadUrl || undefined,
       attachmentName: attachmentName || fileName || undefined,
     });
@@ -187,19 +180,6 @@ export default function ApplyLeave() {
               </p>
             )}
 
-            <details className="mt-2 text-xs text-gray-500">
-              <summary className="cursor-pointer select-none font-medium text-blue-600 hover:text-blue-700">Cloudinary Custom Setup (Optional)</summary>
-              <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 bg-white p-3 rounded-lg border border-gray-100">
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-gray-600">Cloud name</label>
-                  <input value={cloudName} onChange={(e) => setCloudName(e.target.value)} placeholder="your-cloud-name" className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs focus:border-blue-500 focus:outline-none" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-gray-600">Upload preset</label>
-                  <input value={uploadPreset} onChange={(e) => setUploadPreset(e.target.value)} placeholder="leave-documents" className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs focus:border-blue-500 focus:outline-none" />
-                </div>
-              </div>
-            </details>
           </div>
 
           <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">

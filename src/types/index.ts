@@ -1,8 +1,7 @@
-export type Role = 'admin' | 'manager' | 'team_leader' | 'employee';
+export type Role = 'admin' | 'manager' | 'employee';
 
 export type LeaveStatus =
   | 'pending'
-  | 'approved_by_team_leader'
   | 'approved'
   | 'rejected'
   | 'cancelled';
@@ -31,7 +30,6 @@ export interface User {
   phone: string;
   status: 'active' | 'inactive';
   managerId?: string;
-  teamLeaderId?: string;
   profilePhotoUrl?: string;
 }
 
@@ -50,11 +48,11 @@ export interface LeavePolicy {
   id: string;
   leaveType: string;
   role?: string; // Role applicable to this leave type (Requirement 1)
-  requiresApprovalFrom: 'team_leader' | 'manager' | 'admin';
+  requiresApprovalFrom: 'manager' | 'admin';
   approvalRouting?: {
     designation?: string;
     department?: string;
-    approvers: ('team_leader' | 'manager' | 'admin' | 'hr')[]; // multi-level approvers
+    approverIds: string[]; // specific employee IDs required to approve this leave type
   };
   requiresDocumentUpload: boolean;
   documentRequirement?: 'optional' | 'required'; // Document attachment (Requirement 3)
@@ -83,8 +81,10 @@ export interface LeaveRequest {
   totalWorkingDays: number;
   reason: string;
   status: LeaveStatus;
-  currentApproverRole: 'team_leader' | 'manager' | 'admin';
+  currentApproverRole: 'manager' | 'admin';
   approvalHistory: ApprovalHistoryEntry[];
+  requiredApproverIds?: string[]; // copied from policy at submission time
+  approvedByIds?: string[]; // who has approved so far
   cancelledBy?: string;
   cancelledByName?: string;
   cancelledReason?: string;
