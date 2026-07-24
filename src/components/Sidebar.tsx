@@ -33,7 +33,7 @@ const navItems: NavItem[] = [
   { to: '/calendar', label: 'Leave Calendar', icon: CalendarDays, roles: ['admin', 'manager'] },
   { to: '/notifications', label: 'Notifications', icon: Bell, roles: ['admin', 'manager', 'employee'] },
   { to: '/employees', label: 'Employees', icon: Users, roles: ['admin'] },
-  { to: '/master-data', label: 'Roles', icon: Settings2, roles: ['admin'] },
+{ to: '/create', label: 'Create', icon: Settings2, roles: ['admin'] },
   { to: '/policies', label: 'Leave Policies', icon: FileText, roles: ['admin'] },
   { to: '/audit', label: 'Audit Logs', icon: ScrollText, roles: ['admin'] },
 ];

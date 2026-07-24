@@ -71,7 +71,7 @@ export default function Policies() {
       isPaid: true,
       designation: 'All Designations',
       department: 'All Departments',
-      approvers: ['manager'],
+      approverIds: [],  
       minDaysNoticeRequired: 3,
       documentRequirement: 'optional',
     });
@@ -99,7 +99,7 @@ export default function Policies() {
               isPaid: true,
               designation: 'All Designations',
               department: 'All Departments',
-              approvers: ['manager'],
+              approverIds: [],
               minDaysNoticeRequired: 3,
               documentRequirement: 'optional',
             });

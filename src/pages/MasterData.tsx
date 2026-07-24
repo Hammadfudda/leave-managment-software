@@ -10,7 +10,7 @@ type Tab = 'designations' | 'departments' | 'grades' | 'roles';
 
 export default function MasterData() {
   const { designations, departments, grades, roles, addDesignation, addDepartment, addGrade, addRole } = useAppData();
-  const [tab, setTab] = useState<Tab>('designations');
+ const [tab, setTab] = useState<Tab>('roles');
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState('');
   const [gradeForm, setGradeForm] = useState({ name: '', annualLeaveQuota: 14, sickLeaveQuota: 7, casualLeaveQuota: 5, carryForwardAllowed: false, maxCarryForwardDays: 0, description: '' });
@@ -76,7 +76,7 @@ export default function MasterData() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Roles</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Create</h1>
         <p className="mt-1 text-sm text-gray-500">Manage HR references and system roles.</p>
       </div>
 
