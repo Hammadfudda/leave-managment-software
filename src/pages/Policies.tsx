@@ -4,7 +4,7 @@ import { useAppData } from '../context/AppDataContext';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
-import { Pencil, Plus, Lock } from 'lucide-react';
+import { Pencil, Plus, Lock, Trash2 } from 'lucide-react';
 import type { LeavePolicy, LeaveType } from '../types';
 
 const extraTypes: LeaveType[] = ['unpaid', 'maternity', 'paternity'];
@@ -71,7 +71,7 @@ export default function Policies() {
       isPaid: true,
       designation: 'All Designations',
       department: 'All Departments',
-      approverIds: [],  
+      approverIds: [],
       minDaysNoticeRequired: 3,
       documentRequirement: 'optional',
     });
@@ -234,30 +234,57 @@ export default function Policies() {
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-gray-700">Required Approvers</label>
-              <div className="rounded-lg border border-gray-200 p-3 space-y-2 bg-gray-50/50 max-h-48 overflow-y-auto">
-                <p className="text-[11px] text-gray-500 mb-2">Select specific people who must approve this leave type (all selected must approve):</p>
-                {users.filter((u) => u.role !== 'employee').map((approver) => {
-                  const isChecked = form.approverIds.includes(approver.id);
-                  return (
-                    <label key={approver.id} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => {
-                          let next = [...form.approverIds];
-                          if (isChecked) {
-                            next = next.filter((id) => id !== approver.id);
-                          } else {
-                            next.push(approver.id);
-                          }
-                          setForm({ ...form, approverIds: next });
-                        }}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span>{approver.fullName} <span className="text-xs text-gray-400">({approver.role})</span></span>
-                    </label>
-                  );
-                })}
+
+              {form.approverIds.length > 0 && (
+                <div className="mb-3 space-y-1.5">
+                  {form.approverIds.map((id) => {
+                    const approver = users.find((u) => u.id === id);
+                    if (!approver) return null;
+                    return (
+                      <div key={id} className="flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-sm">
+                        <span className="text-gray-800">{approver.fullName} <span className="text-xs text-gray-400">({approver.designation})</span></span>
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, approverIds: form.approverIds.filter((aid) => aid !== id) })}
+                          className="text-rose-500 hover:text-rose-700"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="rounded-lg border border-gray-200 p-3 space-y-1 bg-gray-50/50 max-h-40 overflow-y-auto">
+                <p className="text-[11px] text-gray-500 mb-1">
+                  {form.designation !== 'All Designations' || form.department !== 'All Departments'
+                    ? 'Matching people (based on filters above) — click to add:'
+                    : 'Click to add an approver:'}
+                </p>
+                {users
+                  .filter((u) => u.role !== 'employee')
+                  .filter((u) => form.designation === 'All Designations' || u.designation === form.designation)
+                  .filter((u) => form.department === 'All Departments' || u.department === form.department)
+                  .filter((u) => !form.approverIds.includes(u.id))
+                  .map((approver) => (
+                    <button
+                      type="button"
+                      key={approver.id}
+                      onClick={() => setForm({ ...form, approverIds: [...form.approverIds, approver.id] })}
+                      className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm text-gray-700 hover:bg-white hover:shadow-sm"
+                    >
+                      <span>{approver.fullName} <span className="text-xs text-gray-400">({approver.designation} · {approver.department})</span></span>
+                      <span className="text-xs text-blue-600">+ Add</span>
+                    </button>
+                  ))}
+                {users
+                  .filter((u) => u.role !== 'employee')
+                  .filter((u) => form.designation === 'All Designations' || u.designation === form.designation)
+                  .filter((u) => form.department === 'All Departments' || u.department === form.department)
+                  .filter((u) => !form.approverIds.includes(u.id)).length === 0 && (
+                  <p className="text-xs text-gray-400 py-2 text-center">No matching people for this filter.</p>
+                )}
               </div>
             </div>
             <div>
