@@ -14,6 +14,7 @@ interface AppDataContextType {
   grades: Grade[];
   designations: string[];
   departments: string[];
+  roles: string[];
   leavePolicies: LeavePolicy[];
   leaveRequests: LeaveRequest[];
   auditLogs: AuditLog[];
@@ -22,12 +23,12 @@ interface AppDataContextType {
   updateUser: (user: User) => void;
   addDesignation: (name: string) => void;
   addDepartment: (name: string) => void;
+  addRole: (name: string) => void;
   addGrade: (grade: Grade) => void;
   updateGrade: (grade: Grade) => void;
   addLeavePolicy: (policy: LeavePolicy) => void;
   updateLeavePolicy: (policy: LeavePolicy) => void;
   getUserById: (id: string) => User | undefined;
-  getTeamLeader: (user: User) => User | undefined;
   getManager: (user: User) => User | undefined;
   getActiveLeaveTypes: () => LeaveType[];
   cancelLeaveByAdmin: (
@@ -50,6 +51,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [grades, setGrades] = useState<Grade[]>(() => [...mockGrades]);
   const [designations, setDesignations] = useState<string[]>(() => [...initialDesignations]);
   const [departments, setDepartments] = useState<string[]>(() => [...initialDepartments]);
+  const [roles, setRoles] = useState<string[]>(() => ['Employee', 'Manager', 'Admin']);
   const [leavePolicies, setLeavePolicies] = useState<LeavePolicy[]>(() => [...mockLeavePolicies]);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => [...mockLeaveRequests]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => [...mockAuditLogs]);
@@ -57,17 +59,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const getUserById = useCallback((id: string) => users.find((u) => u.id === id), [users]);
 
-  const getTeamLeader = useCallback((user: User) => {
-    if (!user.teamLeaderId) return undefined;
-    return users.find((u) => u.id === user.teamLeaderId);
-  }, [users]);
-
   const getManager = useCallback((user: User) => {
     if (user.managerId) return users.find((u) => u.id === user.managerId);
-    if (user.teamLeaderId) {
-      const tl = users.find((u) => u.id === user.teamLeaderId);
-      if (tl?.managerId) return users.find((u) => u.id === tl.managerId);
-    }
     return undefined;
   }, [users]);
 
@@ -167,6 +160,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setDepartments((prev) => [...prev, trimmed].sort());
   };
 
+  const addRole = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || roles.includes(trimmed)) return;
+    setRoles((prev) => [...prev, trimmed]);
+  };
+
   const addGrade = (grade: Grade) => {
     setGrades((prev) => [...prev, grade]);
     addAuditLog({
@@ -228,6 +227,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   };
 
   const submitLeaveRequest = (request: Omit<LeaveRequest, 'id' | 'createdAt' | 'status' | 'approvalHistory'>) => {
+    const policy = leavePolicies.find((p) => p.leaveType === request.leaveType);
     const newRequest: LeaveRequest = {
       ...request,
       id: `lr${Date.now()}`,
@@ -235,6 +235,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       status: 'pending',
       approvalHistory: [],
       totalWorkingDays: request.totalWorkingDays || request.totalDaysRequested,
+      requiredApproverIds: policy?.approvalRouting?.approverIds || [],
+      approvedByIds: [],
     };
 
     setLeaveRequests((prev) => [newRequest, ...prev]);
@@ -260,7 +262,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     returnDate: string,
   ) => {
     const request = leaveRequests.find((r) => r.id === requestId);
-    if (!request || !['approved', 'approved_by_team_leader'].includes(request.status)) return;
+    if (!request || request.status !== 'approved') return;
 
     const daysUsed = calcWorkingDays(request.startDate, returnDate);
     const entry = {
@@ -320,27 +322,35 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       actionDate: new Date().toISOString(),
     };
 
-    let newStatus = request.status;
-    let nextApproverRole: LeaveRequest['currentApproverRole'] = request.currentApproverRole;
+    // Add this approver to the approved-by list (avoid duplicates)
+    const updatedApprovedByIds = Array.from(new Set([...(request.approvedByIds || []), approver.id]));
 
-    if (approver.role === 'team_leader' && request.currentApproverRole === 'team_leader') {
-      newStatus = 'approved_by_team_leader';
-      nextApproverRole = 'manager';
-    } else if ((approver.role === 'manager' && request.currentApproverRole === 'manager') || approver.role === 'admin') {
-      newStatus = 'approved';
-      nextApproverRole = 'admin';
-    } else if (request.status === 'approved_by_team_leader' && approver.role === 'manager') {
-      newStatus = 'approved';
-      nextApproverRole = 'admin';
-    }
+    // Request is fully approved only once every required approver has signed off.
+    // If no specific approvers were set on the policy, fall back to a single admin/manager approval.
+    const required = request.requiredApproverIds || [];
+    const allRequiredHaveApproved =
+      required.length > 0
+        ? required.every((id) => updatedApprovedByIds.includes(id))
+        : true;
+
+    const newStatus: LeaveRequest['status'] = allRequiredHaveApproved ? 'approved' : 'pending';
 
     setLeaveRequests((prev) =>
       prev.map((r) =>
         r.id === requestId
-          ? { ...r, status: newStatus, currentApproverRole: nextApproverRole, approvalHistory: [...r.approvalHistory, entry] }
+          ? {
+              ...r,
+              status: newStatus,
+              approvedByIds: updatedApprovedByIds,
+              approvalHistory: [...r.approvalHistory, entry],
+            }
           : r
       )
     );
+
+    if (allRequiredHaveApproved && request.totalWorkingDays > 0) {
+      updateBalanceUsed(request.employeeId, request.leaveType as LeaveType, request.totalWorkingDays);
+    }
 
     addAuditLog({
       actorId: approver.id,
@@ -398,6 +408,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         grades,
         designations,
         departments,
+        roles,
         leavePolicies,
         leaveRequests,
         auditLogs,
@@ -406,12 +417,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         updateUser,
         addDesignation,
         addDepartment,
+        addRole,
         addGrade,
         updateGrade,
         addLeavePolicy,
         updateLeavePolicy,
         getUserById,
-        getTeamLeader,
         getManager,
         getActiveLeaveTypes,
         cancelLeaveByAdmin,
@@ -434,11 +445,6 @@ export function useAppData() {
 }
 
 export function getReportingChain(user: User, getUserById: (id: string) => User | undefined) {
-  const teamLeader = user.teamLeaderId ? getUserById(user.teamLeaderId) : undefined;
-  const manager = user.managerId
-    ? getUserById(user.managerId)
-    : teamLeader?.managerId
-      ? getUserById(teamLeader.managerId)
-      : undefined;
-  return { teamLeader, manager };
+  const manager = user.managerId ? getUserById(user.managerId) : undefined;
+  return { manager };
 }
