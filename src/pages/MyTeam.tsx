@@ -245,6 +245,8 @@ export default function MyTeam() {
                                 const approver = getUserById(id);
                                 const isApproved = approved.includes(id);
                                 const isRejected = rejected.includes(id);
+                                const historyEntry = req.approvalHistory.find((h) => h.approverId === id);
+                                const wasViaAdmin = !!historyEntry?.comment?.includes('Admin on behalf of');
                                 return (
                                   <div key={id} className="flex items-center gap-2">
                                     <div className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs ${
@@ -254,6 +256,7 @@ export default function MyTeam() {
                                     }`}>
                                       {isApproved ? <CheckCircle2 size={13} /> : isRejected ? <XCircle size={13} /> : <Circle size={13} />}
                                       <span>{approver?.fullName || 'Unknown'}{approver?.designation ? <span className="opacity-60"> — {approver.designation}</span> : null}</span>
+                                      {wasViaAdmin && <span className="ml-1 rounded bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-700">by Admin</span>}
                                     </div>
                                     {idx < required.length - 1 && <span className="text-gray-300">→</span>}
                                   </div>

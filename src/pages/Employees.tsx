@@ -14,7 +14,7 @@ const roleLabel: Record<Role, string> = {
 const emptyForm = {
   fullName: '', email: '', employeeId: '', cnic: '', phone: '',
   role: 'employee' as Role, designation: '', grade: 'Grade C', department: '',
-  dateOfJoining: '', status: 'active' as 'active' | 'inactive', managerId: '',
+  dateOfJoining: '', status: 'active' as 'active' | 'inactive', managerId: '', canApproveOtherDepartments: false,
 };
 
 export default function Employees() {
@@ -70,7 +70,7 @@ export default function Employees() {
     if (!validate()) return;
 
     const payload: User = editingUser
-      ? { ...editingUser, fullName: form.fullName.trim(), email: form.email.trim(), employeeId: form.employeeId.trim(), cnic: form.cnic.trim(), phone: form.phone.trim(), role: form.role, designation: form.designation, grade: form.grade, department: form.department, dateOfJoining: form.dateOfJoining, status: form.status as User['status'], managerId: form.managerId || undefined }
+      ? { ...editingUser, fullName: form.fullName.trim(), email: form.email.trim(), employeeId: form.employeeId.trim(), cnic: form.cnic.trim(), phone: form.phone.trim(), role: form.role, designation: form.designation, grade: form.grade, department: form.department, dateOfJoining: form.dateOfJoining, status: form.status as User['status'], managerId: form.managerId || undefined, canApproveOtherDepartments: form.canApproveOtherDepartments }
       : {
           id: `u${Date.now()}`,
           fullName: form.fullName.trim(),
@@ -85,6 +85,7 @@ export default function Employees() {
           dateOfJoining: form.dateOfJoining,
           status: form.status as User['status'],
           managerId: form.managerId || undefined,
+          canApproveOtherDepartments: form.canApproveOtherDepartments,
         };
 
     if (editingUser) updateUser(payload);
@@ -217,7 +218,7 @@ export default function Employees() {
                       <button onClick={() => setViewUser(u)} className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700">
                         <Eye size={14} /> View
                       </button>
-                      <button onClick={() => { setEditingUser(u); setForm({ fullName: u.fullName, email: u.email, employeeId: u.employeeId, cnic: u.cnic, phone: u.phone, role: u.role, designation: u.designation, grade: u.grade, department: u.department, dateOfJoining: u.dateOfJoining, status: u.status, managerId: u.managerId || '' }); setShowAdd(true); }} className="text-sm font-medium text-amber-600 hover:text-amber-700">
+                      <button onClick={() => { setEditingUser(u); setForm({ fullName: u.fullName, email: u.email, employeeId: u.employeeId, cnic: u.cnic, phone: u.phone, role: u.role, designation: u.designation, grade: u.grade, department: u.department, dateOfJoining: u.dateOfJoining, status: u.status, managerId: u.managerId || '', canApproveOtherDepartments: u.canApproveOtherDepartments || false }); setShowAdd(true); }} className="text-sm font-medium text-amber-600 hover:text-amber-700">
                         Edit
                       </button>
                     </div>
@@ -309,12 +310,11 @@ export default function Employees() {
                 {errors.department && <p className={errorCls}>{errors.department}</p>}
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Portal Access</label>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Role</label>
                 <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })} className={inputCls}>
                   <option value="employee">Employee</option>
                   <option value="manager">Manager</option>
                 </select>
-                <p className="mt-1 text-xs text-gray-400">Manager access shows the approvals dashboard and team leave calendar.</p>
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-700">Date of joining <span className="text-rose-500">*</span></label>
@@ -339,6 +339,22 @@ export default function Employees() {
                       <option key={u.id} value={u.id}>{u.fullName} — {u.designation}</option>
                     ))}
                   </select>
+                </div>
+              )}
+              {form.role === 'manager' && (
+                <div className="sm:col-span-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.canApproveOtherDepartments || false}
+                      onChange={(e) => setForm({ ...form, canApproveOtherDepartments: e.target.checked })}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    Can approve leaves from other departments too
+                  </label>
+                  <p className="mt-1 text-xs text-gray-400">
+                    If off, this manager will only appear as an eligible approver when setting up Leave Policies for their own department ({form.department || 'select a department first'}).
+                  </p>
                 </div>
               )}
             </div>

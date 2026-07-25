@@ -30,6 +30,7 @@ export interface User {
   phone: string;
   status: 'active' | 'inactive';
   managerId?: string;
+  canApproveOtherDepartments?: boolean; // Manager/Admin ke liye — kya yeh apne department se bahar bhi approver ban sakta hai
   profilePhotoUrl?: string;
 }
 
