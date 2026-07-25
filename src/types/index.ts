@@ -55,7 +55,8 @@ export interface LeavePolicy {
     approverIds: string[]; // specific employee IDs required to approve this leave type
   };
   requiresDocumentUpload: boolean;
-  documentRequirement?: 'optional' | 'required' | 'not_required';  minDaysNoticeRequired: number;
+  documentRequirement?: 'optional' | 'required'; // Document attachment (Requirement 3)
+  minDaysNoticeRequired: number;
   isPaid: boolean;
 }
 
@@ -84,6 +85,8 @@ export interface LeaveRequest {
   approvalHistory: ApprovalHistoryEntry[];
   requiredApproverIds?: string[]; // copied from policy at submission time
   approvedByIds?: string[]; // who has approved so far
+  rejectedByIds?: string[]; // who has rejected (non-gatekeeper stage — tracks conflicts)
+  excludedWeekendDates?: string[]; // dates dropped from the day count due to weekend
   cancelledBy?: string;
   cancelledByName?: string;
   cancelledReason?: string;

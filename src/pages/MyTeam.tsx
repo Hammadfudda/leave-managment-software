@@ -253,8 +253,7 @@ export default function MyTeam() {
                                       'border-gray-200 bg-gray-50 text-gray-500'
                                     }`}>
                                       {isApproved ? <CheckCircle2 size={13} /> : isRejected ? <XCircle size={13} /> : <Circle size={13} />}
-                                      <span>{approver?.fullName || 'Unknown'}</span>
-                                      {idx === 0 && <span className="text-[10px] opacity-70">(Gatekeeper)</span>}
+                                      <span>{approver?.fullName || 'Unknown'}{approver?.designation ? <span className="opacity-60"> — {approver.designation}</span> : null}</span>
                                     </div>
                                     {idx < required.length - 1 && <span className="text-gray-300">→</span>}
                                   </div>
@@ -276,7 +275,7 @@ export default function MyTeam() {
                                 const person = getUserById(id);
                                 return (
                                   <div key={id} className="flex items-center gap-2">
-                                    <span className="text-xs text-gray-500">On behalf of {person?.fullName}:</span>
+                                    <span className="text-xs text-gray-500">On behalf of {person?.fullName}{person?.designation ? ` (${person.designation})` : ''}:</span>
                                     <button onClick={() => handleActOnBehalf(req.id, id, 'approved')} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700">Approve</button>
                                     <button onClick={() => handleActOnBehalf(req.id, id, 'rejected')} className="rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-rose-700">Reject</button>
                                   </div>
@@ -287,8 +286,10 @@ export default function MyTeam() {
 
                           {isAdmin && req.status === 'rejected' && (
                             <div className="mt-3 border-t border-gray-50 pt-3">
-                              <p className="text-xs text-rose-600 mb-1.5">Rejected — you can override and approve on behalf of the gatekeeper:</p>
-                              <button onClick={() => handleActOnBehalf(req.id, (req.requiredApproverIds || [])[0], 'approved')} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">Approve on behalf of Gatekeeper</button>
+                              <p className="text-xs text-rose-600 mb-1.5">Rejected — you can still override:</p>
+                              <button onClick={() => handleActOnBehalf(req.id, (req.requiredApproverIds || [])[0], 'approved')} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
+                                Approve on behalf of {getUserById((req.requiredApproverIds || [])[0])?.fullName || 'first approver'}
+                              </button>
                             </div>
                           )}
 

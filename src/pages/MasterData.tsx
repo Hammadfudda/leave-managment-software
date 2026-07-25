@@ -16,11 +16,13 @@ export default function MasterData() {
     updateDepartment, deleteDepartment,
     updateRole, deleteRole,
     updateGrade, deleteGrade,
+    departmentSaturdayOff, toggleDepartmentSaturday,
   } = useAppData();
 
   const [tab, setTab] = useState<Tab>('roles');
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState('');
+  const [saturdayOffValue, setSaturdayOffValue] = useState(true);
   const [editingItem, setEditingItem] = useState<string | null>(null); // original name being edited (designations/departments/roles)
   const [editingGrade, setEditingGrade] = useState<Grade | null>(null);
   const [gradeForm, setGradeForm] = useState({ name: '', annualLeaveQuota: 14, sickLeaveQuota: 7, casualLeaveQuota: 5, carryForwardAllowed: false, maxCarryForwardDays: 0, description: '' });
@@ -31,6 +33,7 @@ export default function MasterData() {
     setName('');
     setEditingItem(null);
     setEditingGrade(null);
+    setSaturdayOffValue(true);
     resetGradeForm();
     setShowAdd(true);
   };
@@ -38,6 +41,7 @@ export default function MasterData() {
   const openEditItem = (item: string) => {
     setName(item);
     setEditingItem(item);
+    if (tab === 'departments') setSaturdayOffValue(departmentSaturdayOff[item] ?? true);
     setShowAdd(true);
   };
 
@@ -54,20 +58,24 @@ export default function MasterData() {
   };
 
   const handleDeleteGrade = (grade: Grade) => {
-    if (!window.confirm(`Delete grade "${grade.name}"? This cannot be undone.`)) return;
     deleteGrade(grade.id);
   };
 
   const handleAdd = () => {
     if (!name.trim()) return;
+    const trimmedName = name.trim();
     if (editingItem) {
-      if (tab === 'designations') updateDesignation(editingItem, name.trim());
-      else if (tab === 'departments') updateDepartment(editingItem, name.trim());
-      else if (tab === 'roles') updateRole(editingItem, name.trim());
+      if (tab === 'designations') updateDesignation(editingItem, trimmedName);
+      else if (tab === 'departments') updateDepartment(editingItem, trimmedName);
+      else if (tab === 'roles') updateRole(editingItem, trimmedName);
     } else {
-      if (tab === 'designations') addDesignation(name.trim());
-      else if (tab === 'departments') addDepartment(name.trim());
-      else if (tab === 'roles') addRole(name.trim());
+      if (tab === 'designations') addDesignation(trimmedName);
+      else if (tab === 'departments') addDepartment(trimmedName);
+      else if (tab === 'roles') addRole(trimmedName);
+    }
+    if (tab === 'departments') {
+      const currentValue = departmentSaturdayOff[trimmedName] ?? true;
+      if (currentValue !== saturdayOffValue) toggleDepartmentSaturday(trimmedName);
     }
     setName('');
     setEditingItem(null);
@@ -124,7 +132,12 @@ export default function MasterData() {
         <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => (
             <div key={item} className="flex items-center justify-between border-b border-r border-gray-50 px-5 py-3 text-sm text-gray-800">
-              <span>{item}</span>
+              <div className="flex items-center gap-2">
+                <span>{item}</span>
+                {tab === 'departments' && !(departmentSaturdayOff[item] ?? true) && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">6-day week</span>
+                )}
+              </div>
               <div className="flex items-center gap-1">
                 <button onClick={() => openEditItem(item)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"><Pencil size={13} /></button>
                 <button onClick={() => handleDeleteItem(item)} className="rounded-lg p-1.5 text-gray-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={13} /></button>
@@ -166,6 +179,7 @@ export default function MasterData() {
           setName('');
           setEditingItem(null);
           setEditingGrade(null);
+          setSaturdayOffValue(true);
           resetGradeForm();
         }}
         title={
@@ -180,6 +194,7 @@ export default function MasterData() {
               setName('');
               setEditingItem(null);
               setEditingGrade(null);
+              setSaturdayOffValue(true);
               resetGradeForm();
             }}>Cancel</Button>
             <Button onClick={tab === 'grades' ? handleAddGrade : handleAdd}>
@@ -202,7 +217,20 @@ export default function MasterData() {
             <div><label className="mb-1.5 block text-sm font-medium text-gray-700">Description</label><input value={gradeForm.description} onChange={(e) => setGradeForm({ ...gradeForm, description: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20" /></div>
           </div>
         ) : (
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={tab === 'designations' ? 'e.g. Data Scientist' : tab === 'departments' ? 'e.g. Research' : 'e.g. Team Lead'} className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20" autoFocus />
+          <div className="space-y-4">
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder={tab === 'designations' ? 'e.g. Data Scientist' : tab === 'departments' ? 'e.g. Research' : 'e.g. Team Lead'} className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20" autoFocus />
+            {tab === 'departments' && (
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={saturdayOffValue}
+                  onChange={(e) => setSaturdayOffValue(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                Saturday is a day off for this department
+              </label>
+            )}
+          </div>
         )}
       </Modal>
     </div>

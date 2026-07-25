@@ -5,14 +5,14 @@ import { useAppData } from '../context/AppDataContext';
 import Button from '../components/ui/Button';
 import type { LeaveType } from '../types';
 import { Upload, CalendarDays } from 'lucide-react';
-import { formatDate, calcWorkingDays } from '../utils/formatDate';
+import { formatDate, calcWorkingDays, getExcludedWeekendDates } from '../utils/formatDate';
 
 const CLOUDINARY_CLOUD_NAME = 'apna_cloud_name_yahan_daalein';
 const CLOUDINARY_UPLOAD_PRESET = 'apna_upload_preset_yahan_daalein';
 
 export default function ApplyLeave() {
   const { user } = useAuth();
-  const { leaveBalances, leavePolicies, getActiveLeaveTypes, submitLeaveRequest } = useAppData();
+  const { leaveBalances, leavePolicies, getActiveLeaveTypes, submitLeaveRequest, departmentSaturdayOff } = useAppData();
   const navigate = useNavigate();
   const [leaveType, setLeaveType] = useState<LeaveType>('annual');
   const [startDate, setStartDate] = useState('');
@@ -25,14 +25,25 @@ export default function ApplyLeave() {
 
   if (!user) return null;
 
-  const leaveTypes = getActiveLeaveTypes();
+  const saturdayOff = departmentSaturdayOff[user.department] ?? true;
+
+  const allLeaveTypes = getActiveLeaveTypes();
+  const leaveTypes = allLeaveTypes.filter((t) => {
+    const p = leavePolicies.find((pol) => pol.leaveType === t);
+    const gradeRestriction = p?.approvalRouting?.grade;
+    if (!gradeRestriction) return true; // no grade restriction — available to everyone
+    return user.grade === gradeRestriction; // only matching grade sees this leave type
+  });
+
   const balances = (leaveBalances[user.id] || []).filter((b) => leaveTypes.includes(b.leaveType));
   const policy = leavePolicies.find((p) => p.leaveType === leaveType);
 
   const calcDays = () => {
     if (!startDate || !endDate) return 0;
-    return calcWorkingDays(startDate, endDate);
+    return calcWorkingDays(startDate, endDate, saturdayOff);
   };
+
+  const excludedDates = startDate && endDate ? getExcludedWeekendDates(startDate, endDate, saturdayOff) : [];
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -59,7 +70,7 @@ export default function ApplyLeave() {
 
   const isDocRequired = policy?.documentRequirement === 'required';
   const isDocNotRequired = policy?.documentRequirement === 'not_required';
-  
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -80,6 +91,7 @@ export default function ApplyLeave() {
       endDate,
       totalDaysRequested: totalDays,
       totalWorkingDays: totalDays,
+      excludedWeekendDates: excludedDates,
       reason,
       currentApproverRole: policy?.requiresApprovalFrom === 'admin' ? 'admin' : 'manager',
       attachmentUrl: uploadUrl || undefined,
@@ -120,7 +132,7 @@ export default function ApplyLeave() {
             </select>
             {policy && (
               <p className="mt-1.5 text-xs text-gray-500">
-                Requires approval from {policy.requiresApprovalFrom.replace('_', ' ')}. Min notice: {policy.minDaysNoticeRequired} day(s). Document upload: {policy.requiresDocumentUpload ? 'Required' : 'Not required'}.
+                Requires approval from {policy.requiresApprovalFrom.replace('_', ' ')}. Min notice: {policy.minDaysNoticeRequired || 0} day(s) (optional). Document upload: {policy.documentRequirement === 'required' ? 'Required' : policy.documentRequirement === 'not_required' ? 'Not required' : 'Optional'}.
               </p>
             )}
           </div>
@@ -139,9 +151,16 @@ export default function ApplyLeave() {
           </div>
 
           {startDate && endDate && (
-            <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-3.5 py-2.5 text-sm text-blue-700">
-              <CalendarDays size={16} />
-              {formatDate(startDate)} → {formatDate(endDate)} · Total days: <strong className="font-semibold">{calcDays()}</strong>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-3.5 py-2.5 text-sm text-blue-700">
+                <CalendarDays size={16} />
+                {formatDate(startDate)} → {formatDate(endDate)} · Working days: <strong className="font-semibold">{calcDays()}</strong>
+              </div>
+              {excludedDates.length > 0 && (
+                <p className="px-1 text-xs text-amber-600">
+                  Sat/Sun included in this range — {excludedDates.length} day(s) excluded from the count above.
+                </p>
+              )}
             </div>
           )}
 
@@ -157,31 +176,32 @@ export default function ApplyLeave() {
             />
           </div>
 
-          <div className="space-y-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-            <div>
-              <label className="mb-1.5 flex items-center justify-between text-sm font-medium text-gray-700">
-                <span>Document Attachment</span>
-                {isDocRequired ? (
-                  <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-semibold text-rose-700 animate-pulse">Required</span>
-                ) : (
-                  <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">Optional</span>
-                )}
+          {!isDocNotRequired && (
+            <div className="space-y-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+              <div>
+                <label className="mb-1.5 flex items-center justify-between text-sm font-medium text-gray-700">
+                  <span>Document Attachment</span>
+                  {isDocRequired ? (
+                    <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-semibold text-rose-700 animate-pulse">Required</span>
+                  ) : (
+                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">Optional</span>
+                  )}
+                </label>
+                <p className="text-xs text-gray-500 mb-2">Upload a supporting document for your leave request.</p>
+              </div>
+
+              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-blue-300 bg-white px-4 py-3 text-sm text-gray-600 transition-colors hover:border-blue-400 hover:bg-blue-50/50">
+                <Upload size={16} />
+                {fileName || 'Click to select supporting document'}
+                <input type="file" className="hidden" onChange={handleFileChange} />
               </label>
-              <p className="text-xs text-gray-500 mb-2">Upload a supporting document for your leave request.</p>
+              {uploadUrl && (
+                <p className="break-all text-xs text-emerald-700 font-medium bg-emerald-50 p-2 rounded-lg border border-emerald-100">
+                  Document Uploaded: <a href={uploadUrl} target="_blank" rel="noreferrer" className="underline hover:text-emerald-800">{fileName || 'View attached document'}</a>
+                </p>
+              )}
             </div>
-
-            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-blue-300 bg-white px-4 py-3 text-sm text-gray-600 transition-colors hover:border-blue-400 hover:bg-blue-50/50">
-              <Upload size={16} />
-              {fileName || 'Click to select supporting document'}
-              <input type="file" className="hidden" onChange={handleFileChange} />
-            </label>
-            {uploadUrl && (
-              <p className="break-all text-xs text-emerald-700 font-medium bg-emerald-50 p-2 rounded-lg border border-emerald-100">
-                Document Uploaded: <a href={uploadUrl} target="_blank" rel="noreferrer" className="underline hover:text-emerald-800">{fileName || 'View attached document'}</a>
-              </p>
-            )}
-
-          </div>
+          )}
 
           <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
             <Button type="button" variant="secondary" onClick={() => navigate('/leave/history')}>Cancel</Button>
