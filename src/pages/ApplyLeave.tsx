@@ -28,9 +28,16 @@ export default function ApplyLeave() {
   const allLeaveTypes = getActiveLeaveTypes();
   const leaveTypes = allLeaveTypes.filter((t) => {
     const p = leavePolicies.find((pol) => pol.leaveType === t);
-    const gradeRestriction = p?.approvalRouting?.grade;
-    if (!gradeRestriction) return true; // no grade restriction — available to everyone
-    return user.grade === gradeRestriction; // only matching grade sees this leave type
+    if (!p) return true;
+
+    const gradeRestriction = p.approvalRouting?.grade;
+    if (gradeRestriction && user.grade !== gradeRestriction) return false;
+
+    // "Applicable Role" set on the policy — restricts which employee roles can even
+    // see/apply for this leave type. "All Employees" (or unset) means no restriction.
+    if (p.role && p.role !== 'All Employees' && p.role !== user.role) return false;
+
+    return true;
   });
 
   const balances = (leaveBalances[user.id] || []).filter((b) => leaveTypes.includes(b.leaveType));

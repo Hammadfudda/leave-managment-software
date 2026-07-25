@@ -129,7 +129,7 @@ export default function Employees() {
     lines.forEach((line) => {
       const [fullName, email, employeeId, cnic, phone, role, designation, grade, department, dateOfJoining, status] = line.split(',').map((value) => value.replace(/^"|"$/g, ''));
       if (!fullName || !email || !employeeId) return;
-      addUser({ id: `u${Date.now()}-${Math.random()}`, fullName, email, employeeId, cnic, phone, role: role as User['role'], designation, grade, department, dateOfJoining, status: status as User['status'], managerId: undefined });
+      addUser({ id: `u${Date.now()}-${Math.random()}`, fullName, email, employeeId, cnic, phone, role: role as User['role'], designation, grade, department, dateOfJoining, status: status as User['status'], managerId: undefined, canApproveOtherDepartments: false });
     });
     setImporting(false);
     event.target.value = '';

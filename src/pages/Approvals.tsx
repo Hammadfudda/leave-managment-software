@@ -130,12 +130,13 @@ export default function Approvals() {
                         {l.requiredApproverIds.map((id) => {
                           const approver = getUserById(id);
                           const hasApproved = l.approvedByIds?.includes(id);
+                          const hasRejected = l.rejectedByIds?.includes(id);
                           return (
                             <div key={id} className="flex items-center gap-1.5 text-xs">
-                              <span className={hasApproved ? 'text-emerald-600' : 'text-gray-400'}>
-                                {hasApproved ? '✓' : '○'}
+                              <span className={hasApproved ? 'text-emerald-600' : hasRejected ? 'text-rose-600' : 'text-gray-400'}>
+                                {hasApproved ? '✓' : hasRejected ? '✗' : '○'}
                               </span>
-                              <span className={hasApproved ? 'text-gray-700' : 'text-gray-400'}>
+                              <span className={hasApproved ? 'text-gray-700' : hasRejected ? 'text-rose-600' : 'text-gray-400'}>
                                 {approver?.fullName || 'Unknown'} ({approver?.role})
                               </span>
                             </div>

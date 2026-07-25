@@ -32,16 +32,30 @@ export default function Dashboard() {
 
   const teamLeaves = leaveRequests.filter((l) => {
     const emp = users.find((u) => u.id === l.employeeId);
-    return emp?.managerId === user.id || emp?.teamLeaderId === user.id;
+    return emp?.managerId === user.id;
   });
 
-  const pendingApprovals = leaveRequests.filter(
-    (l) => l.currentApproverRole === role && l.status !== 'approved' && l.status !== 'rejected' && l.status !== 'cancelled'
-  );
+  // Whose turn is it right now on a pending request (gatekeeper first, then the
+  // remaining tier once the gatekeeper has approved) — mirrors the logic in MyTeam.tsx.
+  const isCurrentApprover = (l: typeof leaveRequests[number]) => {
+    if (l.status !== 'pending') return false;
+    if (role === 'admin') return true; // Admin can act on anything pending
+    const required = l.requiredApproverIds || [];
+    if (required.length === 0) return false;
+    const approved = l.approvedByIds || [];
+    const rejected = l.rejectedByIds || [];
+    const gatekeeperId = required[0];
+    if (!approved.includes(gatekeeperId) && !rejected.includes(gatekeeperId)) {
+      return gatekeeperId === user.id;
+    }
+    return required.slice(1).some((id) => id === user.id && !approved.includes(id) && !rejected.includes(id));
+  };
+
+  const pendingApprovals = leaveRequests.filter(isCurrentApprover);
 
   const onLeaveToday = leaveRequests.filter((l) => {
-    const today = '2026-07-18';
-    return l.startDate <= today && l.endDate >= today && (l.status === 'approved' || l.status === 'approved_by_team_leader');
+    const today = new Date().toISOString().split('T')[0];
+    return l.startDate <= today && l.endDate >= today && l.status === 'approved';
   });
 
   return (
