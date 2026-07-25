@@ -58,14 +58,7 @@ export default function App() {
                   </Protected>
                 }
               />
-              <Route
-                path="/my-team"
-                element={
-                  <Protected roles={["manager", "admin"]}>
-                    <MyTeam />
-                  </Protected>
-                }
-              />
+              <Route path="/approvals" element={<Protected roles={['manager']}><Approvals /></Protected>} />
               <Route path="/calendar" element={<LeaveCalendar />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route

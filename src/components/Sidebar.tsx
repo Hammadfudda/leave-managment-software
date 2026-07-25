@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
   CalendarPlus,
@@ -13,9 +13,9 @@ import {
   X,
   UserCircle,
   Settings2,
-} from 'lucide-react';
-import type { Role } from '../types';
-import { useAuth } from '../context/AuthContext';
+} from "lucide-react";
+import type { Role } from "../types";
+import { useAuth } from "../context/AuthContext";
 
 interface NavItem {
   to: string;
@@ -25,27 +25,78 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'employee'] },
-  { to: '/profile', label: 'My Profile', icon: UserCircle, roles: ['admin', 'manager', 'employee'] },
-  { to: '/leave/apply', label: 'Apply Leave', icon: CalendarPlus, roles: ['admin', 'manager', 'employee'] },
-  { to: '/leave/history', label: 'My Leaves', icon: History, roles: ['admin', 'manager', 'employee'] },
-  { to: '/approvals', label: 'Approvals', icon: CheckSquare, roles: ['manager', 'admin'] },
-    { to: '/my-team', label: 'My Team', icon: Users, roles: ['manager', 'admin'] },
-  { to: '/calendar', label: 'Leave Calendar', icon: CalendarDays, roles: ['admin', 'manager'] },
-  { to: '/notifications', label: 'Notifications', icon: Bell, roles: ['admin', 'manager', 'employee'] },
-  { to: '/employees', label: 'Employees', icon: Users, roles: ['admin'] },
-{ to: '/create', label: 'Create', icon: Settings2, roles: ['admin'] },
-  { to: '/policies', label: 'Leave Policies', icon: FileText, roles: ['admin'] },
-  { to: '/audit', label: 'Audit Logs', icon: ScrollText, roles: ['admin'] },
+  {
+    to: "/dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    roles: ["admin", "manager", "employee"],
+  },
+  {
+    to: "/profile",
+    label: "My Profile",
+    icon: UserCircle,
+    roles: ["admin", "manager", "employee"],
+  },
+  {
+    to: "/leave/apply",
+    label: "Apply Leave",
+    icon: CalendarPlus,
+    roles: ["admin", "manager", "employee"],
+  },
+  {
+    to: "/leave/history",
+    label: "My Leaves",
+    icon: History,
+    roles: ["admin", "manager", "employee"],
+  },
+  {
+    to: "/approvals",
+    label: "Approvals",
+    icon: CheckSquare,
+    roles: ["manager"],
+  },
+  {
+    to: "/my-team",
+    label: "My Team",
+    icon: Users,
+    roles: ["manager", "admin"],
+  },
+  {
+    to: "/calendar",
+    label: "Leave Calendar",
+    icon: CalendarDays,
+    roles: ["admin", "manager"],
+  },
+  {
+    to: "/notifications",
+    label: "Notifications",
+    icon: Bell,
+    roles: ["admin", "manager", "employee"],
+  },
+  { to: "/employees", label: "Employees", icon: Users, roles: ["admin"] },
+  { to: "/create", label: "Create", icon: Settings2, roles: ["admin"] },
+  {
+    to: "/policies",
+    label: "Leave Policies",
+    icon: FileText,
+    roles: ["admin"],
+  },
+  { to: "/audit", label: "Audit Logs", icon: ScrollText, roles: ["admin"] },
 ];
 
 const roleLabel: Record<Role, string> = {
-  admin: 'Administrator',
-  manager: 'Manager',
-  employee: 'Employee',
+  admin: "Administrator",
+  manager: "Manager",
+  employee: "Employee",
 };
 
-export default function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function Sidebar({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
   const { user, logout } = useAuth();
   if (!user) return null;
 
@@ -54,31 +105,48 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   return (
     <>
       {open && (
-        <div className="fixed inset-0 z-30 bg-gray-900/30 backdrop-blur-sm lg:hidden" onClick={onClose} />
+        <div
+          className="fixed inset-0 z-30 bg-gray-900/30 backdrop-blur-sm lg:hidden"
+          onClick={onClose}
+        />
       )}
       <aside
         className={`fixed inset-y-0 left-0 z-40 w-64 transform border-r border-gray-200 bg-white transition-transform duration-300 lg:static lg:translate-x-0 ${
-          open ? 'translate-x-0' : '-translate-x-full'
+          open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex h-full flex-col">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div className="flex items-center gap-2.5">
-              <img src="/Nutrilov_Logo.webp" alt="Nutrilov" className="h-9 w-9 rounded-lg object-contain" />
+              <img
+                src="/Nutrilov_Logo.webp"
+                alt="Nutrilov"
+                className="h-9 w-9 rounded-lg object-contain"
+              />
               <div>
                 <p className="text-sm font-semibold text-gray-900">Nutrilov</p>
-                <p className="text-[11px] text-gray-500">Leave Management Software</p>
+                <p className="text-[11px] text-gray-500">
+                  Leave Management Software
+                </p>
               </div>
             </div>
-            <button onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 lg:hidden">
+            <button
+              onClick={onClose}
+              className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 lg:hidden"
+            >
               <X size={18} />
             </button>
           </div>
 
           <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-           {items.map((item) => {
+            {items.map((item) => {
               const Icon = item.icon;
-              const label = item.to === '/my-team' ? (user.role === 'admin' ? 'Managers' : 'My Team') : item.label;
+              const label =
+                item.to === "/my-team"
+                  ? user.role === "admin"
+                    ? "Managers"
+                    : "My Team"
+                  : item.label;
               return (
                 <NavLink
                   key={item.to}
@@ -87,8 +155,8 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                   className={({ isActive }) =>
                     `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                       isActive
-                        ? 'bg-blue-50 text-blue-700'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        ? "bg-blue-50 text-blue-700"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                     }`
                   }
                 >
@@ -105,8 +173,12 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                 {user.fullName.charAt(0)}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-gray-900">{user.fullName}</p>
-                <p className="truncate text-xs text-gray-500">{roleLabel[user.role]}</p>
+                <p className="truncate text-sm font-medium text-gray-900">
+                  {user.fullName}
+                </p>
+                <p className="truncate text-xs text-gray-500">
+                  {roleLabel[user.role]}
+                </p>
               </div>
             </div>
             <button

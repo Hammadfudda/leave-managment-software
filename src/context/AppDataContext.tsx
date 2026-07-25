@@ -15,6 +15,7 @@ interface AppDataContextType {
   designations: string[];
   departments: string[];
   roles: string[];
+  departmentSaturdayOff: Record<string, boolean>;
   leavePolicies: LeavePolicy[];
   leaveRequests: LeaveRequest[];
   auditLogs: AuditLog[];
@@ -24,6 +25,14 @@ interface AppDataContextType {
   addDesignation: (name: string) => void;
   addDepartment: (name: string) => void;
   addRole: (name: string) => void;
+  updateDesignation: (oldName: string, newName: string) => void;
+  deleteDesignation: (name: string) => void;
+  updateDepartment: (oldName: string, newName: string) => void;
+  deleteDepartment: (name: string) => void;
+  updateRole: (oldName: string, newName: string) => void;
+  deleteRole: (name: string) => void;
+  deleteGrade: (id: string) => void;
+  toggleDepartmentSaturday: (department: string) => void;
   addGrade: (grade: Grade) => void;
   updateGrade: (grade: Grade) => void;
   addLeavePolicy: (policy: LeavePolicy) => void;
@@ -41,6 +50,7 @@ interface AppDataContextType {
   submitLeaveRequest: (request: Omit<LeaveRequest, 'id' | 'createdAt' | 'status' | 'approvalHistory'>) => void;
   approveLeave: (requestId: string, approver: User, comment?: string) => void;
   rejectLeave: (requestId: string, approver: User, comment?: string) => void;
+  actOnBehalf: (requestId: string, admin: User, targetApproverId: string, action: 'approved' | 'rejected', comment?: string) => void;
   addAuditLog: (log: Omit<AuditLog, 'id' | 'createdAt'>) => void;
 }
 
@@ -52,6 +62,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [designations, setDesignations] = useState<string[]>(() => [...initialDesignations]);
   const [departments, setDepartments] = useState<string[]>(() => [...initialDepartments]);
   const [roles, setRoles] = useState<string[]>(() => ['Employee', 'Manager', 'Admin']);
+  const [departmentSaturdayOff, setDepartmentSaturdayOff] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(initialDepartments.map((d) => [d, true]))
+  );
   const [leavePolicies, setLeavePolicies] = useState<LeavePolicy[]>(() => [...mockLeavePolicies]);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => [...mockLeaveRequests]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => [...mockAuditLogs]);
@@ -166,6 +179,44 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setRoles((prev) => [...prev, trimmed]);
   };
 
+  const updateDesignation = (oldName: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    setDesignations((prev) => prev.map((d) => (d === oldName ? trimmed : d)).sort());
+  };
+
+  const deleteDesignation = (name: string) => {
+    setDesignations((prev) => prev.filter((d) => d !== name));
+  };
+
+  const updateDepartment = (oldName: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    setDepartments((prev) => prev.map((d) => (d === oldName ? trimmed : d)).sort());
+  };
+
+  const deleteDepartment = (name: string) => {
+    setDepartments((prev) => prev.filter((d) => d !== name));
+  };
+
+  const updateRole = (oldName: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    setRoles((prev) => prev.map((r) => (r === oldName ? trimmed : r)));
+  };
+
+  const deleteRole = (name: string) => {
+    setRoles((prev) => prev.filter((r) => r !== name));
+  };
+
+  const deleteGrade = (id: string) => {
+    setGrades((prev) => prev.filter((g) => g.id !== id));
+  };
+
+  const toggleDepartmentSaturday = (department: string) => {
+    setDepartmentSaturdayOff((prev) => ({ ...prev, [department]: !prev[department] }));
+  };
+
   const addGrade = (grade: Grade) => {
     setGrades((prev) => [...prev, grade]);
     addAuditLog({
@@ -237,6 +288,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       totalWorkingDays: request.totalWorkingDays || request.totalDaysRequested,
       requiredApproverIds: policy?.approvalRouting?.approverIds || [],
       approvedByIds: [],
+      rejectedByIds: [],
     };
 
     setLeaveRequests((prev) => [newRequest, ...prev]);
@@ -309,6 +361,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  // Sequential approval status computation:
+  // requiredApproverIds[0] = gatekeeper (must approve first, reject = immediate stop)
+  // requiredApproverIds[1..] = parallel tier (all must approve after gatekeeper; any reject = conflict/pending)
+  const computeLeaveStatus = (
+    requiredApproverIds: string[],
+    approvedByIds: string[],
+    rejectedByIds: string[]
+  ): LeaveRequest['status'] => {
+    if (requiredApproverIds.length === 0) return 'approved';
+
+    const gatekeeperId = requiredApproverIds[0];
+    const restIds = requiredApproverIds.slice(1);
+
+    if (rejectedByIds.includes(gatekeeperId)) return 'rejected';
+    if (!approvedByIds.includes(gatekeeperId)) return 'pending';
+
+    if (restIds.length === 0) return 'approved';
+
+    const allRestApproved = restIds.every((id) => approvedByIds.includes(id));
+    if (allRestApproved) return 'approved';
+
+    return 'pending';
+  };
+
   const approveLeave = (requestId: string, approver: User, comment?: string) => {
     const request = leaveRequests.find((r) => r.id === requestId);
     if (!request) return;
@@ -322,35 +398,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       actionDate: new Date().toISOString(),
     };
 
-    // Add this approver to the approved-by list (avoid duplicates)
     const updatedApprovedByIds = Array.from(new Set([...(request.approvedByIds || []), approver.id]));
+    const rejectedByIds = request.rejectedByIds || [];
+    const required = request.requiredApproverIds || [];
 
-    // Request is fully approved only once every required approver has signed off.
-    // If no specific approvers were set on the policy, fall back to a single admin/manager approval.
-   const required = request.requiredApproverIds || [];
-    const allRequiredHaveApproved =
-      approver.role === 'admin' // Admin override — turant finalize karta hai
-        ? true
-        : required.length > 0
-          ? required.every((id) => updatedApprovedByIds.includes(id))
-          : true;
-
-    const newStatus: LeaveRequest['status'] = allRequiredHaveApproved ? 'approved' : 'pending';
+    const newStatus: LeaveRequest['status'] =
+      approver.role === 'admin' ? 'approved' : computeLeaveStatus(required, updatedApprovedByIds, rejectedByIds);
 
     setLeaveRequests((prev) =>
       prev.map((r) =>
         r.id === requestId
-          ? {
-              ...r,
-              status: newStatus,
-              approvedByIds: updatedApprovedByIds,
-              approvalHistory: [...r.approvalHistory, entry],
-            }
+          ? { ...r, status: newStatus, approvedByIds: updatedApprovedByIds, approvalHistory: [...r.approvalHistory, entry] }
           : r
       )
     );
 
-    if (allRequiredHaveApproved && request.totalWorkingDays > 0) {
+    if (newStatus === 'approved' && request.totalWorkingDays > 0) {
       updateBalanceUsed(request.employeeId, request.leaveType as LeaveType, request.totalWorkingDays);
     }
 
@@ -381,10 +444,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       actionDate: new Date().toISOString(),
     };
 
+    const updatedRejectedByIds = Array.from(new Set([...(request.rejectedByIds || []), approver.id]));
+    const approvedByIds = request.approvedByIds || [];
+    const required = request.requiredApproverIds || [];
+
+    const newStatus: LeaveRequest['status'] =
+      approver.role === 'admin' ? 'rejected' : computeLeaveStatus(required, approvedByIds, updatedRejectedByIds);
+
     setLeaveRequests((prev) =>
       prev.map((r) =>
         r.id === requestId
-          ? { ...r, status: 'rejected' as const, approvalHistory: [...r.approvalHistory, entry] }
+          ? { ...r, status: newStatus, rejectedByIds: updatedRejectedByIds, approvalHistory: [...r.approvalHistory, entry] }
           : r
       )
     );
@@ -403,6 +473,65 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  // Admin acts as a substitute for whoever's current turn it is (e.g., Manager rejected
+  // by mistake and it's now resolved) — this fills that specific person's slot and lets
+  // the chain continue normally to the next required approver, rather than skipping everyone.
+  const actOnBehalf = (
+    requestId: string,
+    admin: User,
+    targetApproverId: string,
+    action: 'approved' | 'rejected',
+    comment?: string
+  ) => {
+    const request = leaveRequests.find((r) => r.id === requestId);
+    if (!request) return;
+
+    const targetApprover = getUserById(targetApproverId);
+    const entry = {
+      approverId: targetApproverId,
+      approverName: targetApprover?.fullName || 'Unknown',
+      approverRole: targetApprover?.role || 'manager',
+      action,
+      comment: comment ? `${comment} (approved by Admin on behalf of ${targetApprover?.fullName})` : `Approved by Admin on behalf of ${targetApprover?.fullName}`,
+      actionDate: new Date().toISOString(),
+    };
+
+    const required = request.requiredApproverIds || [];
+    const updatedApprovedByIds = action === 'approved'
+      ? Array.from(new Set([...(request.approvedByIds || []), targetApproverId]))
+      : (request.approvedByIds || []);
+    const updatedRejectedByIds = action === 'rejected'
+      ? Array.from(new Set([...(request.rejectedByIds || []), targetApproverId]))
+      : (request.rejectedByIds || []);
+
+    const newStatus = computeLeaveStatus(required, updatedApprovedByIds, updatedRejectedByIds);
+
+    setLeaveRequests((prev) =>
+      prev.map((r) =>
+        r.id === requestId
+          ? { ...r, status: newStatus, approvedByIds: updatedApprovedByIds, rejectedByIds: updatedRejectedByIds, approvalHistory: [...r.approvalHistory, entry] }
+          : r
+      )
+    );
+
+    if (newStatus === 'approved' && request.totalWorkingDays > 0) {
+      updateBalanceUsed(request.employeeId, request.leaveType as LeaveType, request.totalWorkingDays);
+    }
+
+    addAuditLog({
+      actorId: admin.id,
+      actorName: admin.fullName,
+      action: action === 'approved' ? 'APPROVE_LEAVE' : 'REJECT_LEAVE',
+      targetType: 'LeaveRequest',
+      targetId: requestId,
+      details: `Admin ${action} ${request.leaveType} leave for ${request.employeeName} on behalf of ${targetApprover?.fullName}`,
+      affectedPerson: request.employeeName,
+      department: request.department,
+      leaveType: request.leaveType,
+      comment,
+    });
+  };
+
   return (
     <AppDataContext.Provider
       value={{
@@ -411,6 +540,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         designations,
         departments,
         roles,
+        departmentSaturdayOff,
         leavePolicies,
         leaveRequests,
         auditLogs,
@@ -420,6 +550,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         addDesignation,
         addDepartment,
         addRole,
+        updateDesignation,
+        deleteDesignation,
+        updateDepartment,
+        deleteDepartment,
+        updateRole,
+        deleteRole,
+        deleteGrade,
+        toggleDepartmentSaturday,
         addGrade,
         updateGrade,
         addLeavePolicy,
@@ -432,6 +570,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         submitLeaveRequest,
         approveLeave,
         rejectLeave,
+        actOnBehalf,
         addAuditLog,
       }}
     >
