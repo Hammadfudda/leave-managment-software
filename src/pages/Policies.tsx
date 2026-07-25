@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import Modal from '../components/ui/Modal';
@@ -23,8 +23,18 @@ export default function Policies() {
     department: 'All Departments',
     approverIds: [] as string[],
     minDaysNoticeRequired: 3,
-    documentRequirement: 'optional' as 'optional' | 'required',
+    documentRequirement: 'optional' as 'optional' | 'required' | 'not_required',
   });
+
+  // Computed once per render (not twice) and only recalculated when the filters
+  // or candidate pool actually change — matters once the employee list gets large.
+  const availableApprovers = useMemo(() => {
+    return users
+      .filter((u) => u.role !== 'employee')
+      .filter((u) => form.designation === 'All Designations' || u.designation === form.designation)
+      .filter((u) => u.role === 'admin' || form.department === 'All Departments' || u.department === form.department || u.canApproveOtherDepartments)
+      .filter((u) => !form.approverIds.includes(u.id));
+  }, [users, form.designation, form.department, form.approverIds]);
 
   const openEdit = (p: LeavePolicy) => {
     setEditing(p);
@@ -142,7 +152,7 @@ export default function Policies() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">Document upload</span>
-                  {p.documentRequirement === 'required' || p.requiresDocumentUpload ? <Badge variant="orange">Required</Badge> : <Badge variant="gray">Optional</Badge>}
+                  {p.documentRequirement === 'required' ? <Badge variant="orange">Required</Badge> : p.documentRequirement === 'not_required' ? <Badge variant="gray">Not Required</Badge> : <Badge variant="gray">Optional</Badge>}
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">Min notice</span>
@@ -262,27 +272,18 @@ export default function Policies() {
                     ? 'Matching people (based on filters above) — click to add:'
                     : 'Click to add an approver:'}
                 </p>
-                {users
-                  .filter((u) => u.role !== 'employee')
-                  .filter((u) => form.designation === 'All Designations' || u.designation === form.designation)
-                  .filter((u) => u.role === 'admin' || form.department === 'All Departments' || u.department === form.department || u.canApproveOtherDepartments)
-                  .filter((u) => !form.approverIds.includes(u.id))
-                  .map((approver) => (
-                    <button
-                      type="button"
-                      key={approver.id}
-                      onClick={() => setForm({ ...form, approverIds: [...form.approverIds, approver.id] })}
-                      className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm text-gray-700 hover:bg-white hover:shadow-sm"
-                    >
-                      <span>{approver.fullName}</span>
-                      <span className="text-xs text-blue-600">+ Add</span>
-                    </button>
-                  ))}
-                {users
-                  .filter((u) => u.role !== 'employee')
-                  .filter((u) => form.designation === 'All Designations' || u.designation === form.designation)
-                  .filter((u) => u.role === 'admin' || form.department === 'All Departments' || u.department === form.department || u.canApproveOtherDepartments)
-                  .filter((u) => !form.approverIds.includes(u.id)).length === 0 && (
+                {availableApprovers.map((approver) => (
+                  <button
+                    type="button"
+                    key={approver.id}
+                    onClick={() => setForm({ ...form, approverIds: [...form.approverIds, approver.id] })}
+                    className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm text-gray-700 hover:bg-white hover:shadow-sm"
+                  >
+                    <span>{approver.fullName}</span>
+                    <span className="text-xs text-blue-600">+ Add</span>
+                  </button>
+                ))}
+                {availableApprovers.length === 0 && (
                   <p className="text-xs text-gray-400 py-2 text-center">No matching people for this filter.</p>
                 )}
               </div>
@@ -301,9 +302,10 @@ export default function Policies() {
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Document Attachment</label>
               <select
                 value={form.documentRequirement}
-                onChange={(e) => setForm({ ...form, documentRequirement: e.target.value as 'optional' | 'required' })}
+                onChange={(e) => setForm({ ...form, documentRequirement: e.target.value as 'optional' | 'required' | 'not_required' })}
                 className={inputCls}
               >
+                <option value="not_required">Not Required</option>
                 <option value="optional">Optional</option>
                 <option value="required">Required</option>
               </select>

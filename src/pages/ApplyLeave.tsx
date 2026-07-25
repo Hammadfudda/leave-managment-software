@@ -7,9 +7,6 @@ import type { LeaveType } from '../types';
 import { Upload, CalendarDays } from 'lucide-react';
 import { formatDate, calcWorkingDays, getExcludedWeekendDates } from '../utils/formatDate';
 
-const CLOUDINARY_CLOUD_NAME = 'apna_cloud_name_yahan_daalein';
-const CLOUDINARY_UPLOAD_PRESET = 'apna_upload_preset_yahan_daalein';
-
 export default function ApplyLeave() {
   const { user } = useAuth();
   const { leaveBalances, leavePolicies, getActiveLeaveTypes, submitLeaveRequest, departmentSaturdayOff } = useAppData();
@@ -21,6 +18,7 @@ export default function ApplyLeave() {
   const [fileName, setFileName] = useState('');
   const [uploadUrl, setUploadUrl] = useState('');
   const [attachmentName, setAttachmentName] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
   if (!user) return null;
@@ -45,27 +43,19 @@ export default function ApplyLeave() {
 
   const excludedDates = startDate && endDate ? getExcludedWeekendDates(startDate, endDate, saturdayOff) : [];
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // File upload now happens on the backend (Cloudinary is called server-side, not from
+  // here). This just keeps the selected file locally; the real request submission is
+  // expected to POST it as multipart/form-data to the leave-requests API, which returns
+  // the final Cloudinary URL to store as attachmentUrl. Until that backend endpoint exists,
+  // we just track the file name/object so the form can still be filled in and tested.
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
 
     setFileName(selectedFile.name);
     setAttachmentName(selectedFile.name);
-
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
-    try {
-      const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await response.json();
-      setUploadUrl(data.secure_url || 'Upload failed.');
-    } catch {
-      setUploadUrl('Upload failed.');
-    }
+    setSelectedFile(selectedFile);
+    setUploadUrl(''); // cleared until the backend actually uploads it and returns a URL
   };
 
   const isDocRequired = policy?.documentRequirement === 'required';
@@ -76,7 +66,7 @@ export default function ApplyLeave() {
 
     if (!user) return;
 
-    if (isDocRequired && (!uploadUrl || uploadUrl.includes('failed'))) {
+    if (isDocRequired && !selectedFile) {
       alert('A document attachment is required for this leave type. Please upload a file.');
       return;
     }
@@ -195,9 +185,9 @@ export default function ApplyLeave() {
                 {fileName || 'Click to select supporting document'}
                 <input type="file" className="hidden" onChange={handleFileChange} />
               </label>
-              {uploadUrl && (
-                <p className="break-all text-xs text-emerald-700 font-medium bg-emerald-50 p-2 rounded-lg border border-emerald-100">
-                  Document Uploaded: <a href={uploadUrl} target="_blank" rel="noreferrer" className="underline hover:text-emerald-800">{fileName || 'View attached document'}</a>
+              {selectedFile && (
+                <p className="text-xs text-emerald-700 font-medium bg-emerald-50 p-2 rounded-lg border border-emerald-100">
+                  File selected: {selectedFile.name} — this will be uploaded when you submit.
                 </p>
               )}
             </div>

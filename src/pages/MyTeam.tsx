@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import { Users, Briefcase, Building2, CheckCircle2, XCircle, Circle } from 'lucide-react';
@@ -39,15 +39,25 @@ export default function MyTeam() {
 
   const activeManagerId = isAdmin ? selectedManagerId : user.id;
   const selectedManager = users.find((u) => u.id === activeManagerId);
-  const team = users.filter((u) => u.managerId === activeManagerId && u.status === 'active');
-  const teamIds = team.map((t) => t.id);
 
-  const teamRequests = leaveRequests
-    .filter((r) => teamIds.includes(r.employeeId))
-    .filter((r) => r.status === 'pending' || r.status === 'approved' || r.status === 'rejected')
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  // Memoized so these full-list scans only re-run when the underlying data or the
+  // selected manager actually changes — not on every unrelated re-render. Matters
+  // once users/leaveRequests grow into the hundreds or thousands.
+  const team = useMemo(
+    () => users.filter((u) => u.managerId === activeManagerId && u.status === 'active'),
+    [users, activeManagerId]
+  );
+  const teamIds = useMemo(() => team.map((t) => t.id), [team]);
 
-  const pendingCount = teamRequests.filter((r) => r.status === 'pending').length;
+  const teamRequests = useMemo(() => {
+    const idSet = new Set(teamIds);
+    return leaveRequests
+      .filter((r) => idSet.has(r.employeeId))
+      .filter((r) => r.status === 'pending' || r.status === 'approved' || r.status === 'rejected')
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [leaveRequests, teamIds]);
+
+  const pendingCount = useMemo(() => teamRequests.filter((r) => r.status === 'pending').length, [teamRequests]);
 
   const handleApprove = (requestId: string) => {
     if (!user) return;
