@@ -88,6 +88,12 @@ export interface LeaveRequest {
   approvedByIds?: string[]; // who has approved so far
   rejectedByIds?: string[]; // who has rejected (non-gatekeeper stage — tracks conflicts)
   excludedWeekendDates?: string[]; // dates dropped from the day count due to weekend
+  isExtension?: boolean; // true if this request extends an already-approved leave
+  originalRequestId?: string; // the LeaveRequest this one extends, if isExtension is true
+  isPaidOverride?: boolean; // set by Manager/Admin when creating an extension — paid or unpaid, independent of the policy default
+  isExtension?: boolean; // true if this request is an extension of an already-approved leave
+  originalRequestId?: string; // the LeaveRequest this extends, if isExtension is true
+  isPaid?: boolean; // for extensions only — Manager/Admin can override; Employee-initiated defaults to the policy's isPaid
   cancelledBy?: string;
   cancelledByName?: string;
   cancelledReason?: string;

@@ -5,17 +5,22 @@ import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import { formatDate } from '../utils/formatDate';
-import type { LeaveRequest, LeaveStatus } from '../types';
+import type { LeaveStatus } from '../types';
 
 export default function LeaveHistory() {
   const { user } = useAuth();
   const { leaveRequests, cancelPendingLeave } = useAppData();
   const [filter, setFilter] = useState<LeaveStatus | 'all'>('all');
-  const [detail, setDetail] = useState<LeaveRequest | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   if (!user) return null;
   const myLeaves = leaveRequests.filter((l) => l.employeeId === user.id);
   const filtered = filter === 'all' ? myLeaves : myLeaves.filter((l) => l.status === filter);
+
+  // Derived live from leaveRequests on every render — never a frozen local copy.
+  // This guarantees the modal always shows the request's real current status; if a
+  // cancel action doesn't actually go through for any reason, the UI won't lie about it.
+  const detail = detailId ? leaveRequests.find((l) => l.id === detailId) || null : null;
 
   const filters: { value: LeaveStatus | 'all'; label: string }[] = [
     { value: 'all', label: 'All' },
@@ -27,7 +32,6 @@ export default function LeaveHistory() {
   const handleCancelPending = () => {
     if (!detail || !user) return;
     cancelPendingLeave(detail.id, user.id);
-    setDetail({ ...detail, status: 'cancelled', cancelledReason: 'Cancelled by employee' });
   };
 
   return (
@@ -79,7 +83,7 @@ export default function LeaveHistory() {
                   </td>
                   <td className="px-5 py-3"><StatusBadge status={l.status} /></td>
                   <td className="px-5 py-3">
-                    <button onClick={() => setDetail(l)} className="text-sm font-medium text-blue-600 hover:text-blue-700">View</button>
+                    <button onClick={() => setDetailId(l.id)} className="text-sm font-medium text-blue-600 hover:text-blue-700">View</button>
                   </td>
                 </tr>
               ))}
@@ -88,7 +92,7 @@ export default function LeaveHistory() {
         </div>
       </div>
 
-      <Modal open={!!detail} onClose={() => setDetail(null)} title="Leave Request Details" size="md">
+      <Modal open={!!detail} onClose={() => setDetailId(null)} title="Leave Request Details" size="md">
         {detail && (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">

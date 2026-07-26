@@ -9,13 +9,31 @@ import { formatDate } from '../utils/formatDate';
 import { CORE_LEAVE_TYPES } from '../types';
 import type { LeaveRequest } from '../types';
 
+// Whose turn is it right now on a pending request — mirrors MyTeam.tsx exactly.
+// A manager who has already acted (approved their gatekeeper step, or already
+// responded in the parallel tier) should NOT keep seeing the request in "Pending" —
+// it's no longer their turn, even though they're still listed in requiredApproverIds.
+function getCurrentTurnApproverIds(req: LeaveRequest): string[] {
+  if (req.status !== 'pending') return [];
+  const required = req.requiredApproverIds || [];
+  if (required.length === 0) return [];
+  const approved = req.approvedByIds || [];
+  const rejected = req.rejectedByIds || [];
+  const gatekeeperId = required[0];
+
+  if (!approved.includes(gatekeeperId) && !rejected.includes(gatekeeperId)) {
+    return [gatekeeperId];
+  }
+  return required.slice(1).filter((id) => !approved.includes(id) && !rejected.includes(id));
+}
+
 export default function Approvals() {
   const { user } = useAuth();
   const {
     leaveRequests, leaveBalances, getUserById,
     approveLeave, rejectLeave, cancelLeaveByAdmin,
   } = useAppData();
-  const [tab, setTab] = useState<'pending' | 'history' | 'active'>('pending');
+  const [tab, setTab] = useState<'pending' | 'history'>('pending');
   const [detail, setDetail] = useState<LeaveRequest | null>(null);
   const [comment, setComment] = useState('');
   const [cancelMode, setCancelMode] = useState(false);
@@ -29,7 +47,7 @@ export default function Approvals() {
  const pending = leaveRequests.filter((l) => {
     if (l.status === 'approved' || l.status === 'rejected' || l.status === 'cancelled') return false;
     if (user.role === 'admin') return true;
-    return l.requiredApproverIds?.includes(user.id);
+    return getCurrentTurnApproverIds(l).includes(user.id);
   });
 
  const history = leaveRequests.filter((l) =>
@@ -37,13 +55,12 @@ export default function Approvals() {
     (user.role === 'admin' && ['approved', 'rejected', 'cancelled'].includes(l.status))
   );
 
-  const activeApproved = leaveRequests.filter((l) => {
-    if (l.status !== 'approved') return false;
-    if (user.role === 'admin') return true;
-    return l.requiredApproverIds?.includes(user.id);
-  });
-
   const employee = detail ? getUserById(detail.employeeId) : undefined;
+  // Defense in depth: even though the "Pending" list itself is already turn-scoped,
+  // the modal footer independently re-checks whose turn it is before showing Approve/
+  // Reject — so re-opening a request you've already acted on (still pending on someone
+  // else) never shows you action buttons again.
+  const isMyTurnOnDetail = !!detail && (user.role === 'admin' || getCurrentTurnApproverIds(detail).includes(user.id));
   const balances = detail ? (leaveBalances[detail.employeeId] || []).filter((b) => CORE_LEAVE_TYPES.includes(b.leaveType as typeof CORE_LEAVE_TYPES[number])) : [];
 
   const takeAction = (action: 'approved' | 'rejected') => {
@@ -72,19 +89,18 @@ export default function Approvals() {
     setCancelReason('');
   };
 
-  const list = tab === 'pending' ? pending : tab === 'active' ? activeApproved : history;
+  const list = tab === 'pending' ? pending : history;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Approvals</h1>
-        <p className="mt-1 text-sm text-gray-500">Review leave requests and manage active leaves.</p>
+        <p className="mt-1 text-sm text-gray-500">Review pending leave requests. Your own team's active leaves and history live in My Team.</p>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
         {([
           { key: 'pending' as const, label: `Pending (${pending.length})` },
-          ...(isAdminOrManager ? [{ key: 'active' as const, label: `Active Leaves (${activeApproved.length})` }] : []),
           { key: 'history' as const, label: 'History' },
         ]).map((t) => (
           <button
@@ -121,7 +137,12 @@ export default function Approvals() {
                 <tr key={l.id} className="hover:bg-gray-50/50 animate-fade-in">
                   <td className="px-5 py-3 text-gray-900">{l.employeeName}</td>
                   <td className="px-5 py-3 capitalize text-gray-600">{l.leaveType}</td>
-                  <td className="px-5 py-3 text-gray-600">{formatDate(l.startDate)} → {formatDate(l.endDate)}</td>
+                  <td className="px-5 py-3 text-gray-600">
+                    {formatDate(l.startDate)} → {formatDate(l.endDate)}
+                    {l.excludedWeekendDates && l.excludedWeekendDates.length > 0 && (
+                      <p className="text-[10px] text-amber-600 mt-0.5">Sat/Sun included — {l.excludedWeekendDates.length} day(s) excluded</p>
+                    )}
+                  </td>
                   <td className="px-5 py-3 text-gray-600">{l.totalDaysRequested}</td>
                   <td className="px-5 py-3"><StatusBadge status={l.status} /></td>
                   <td className="px-5 py-3">
@@ -151,9 +172,6 @@ export default function Approvals() {
                     {tab === 'pending' && (
                       <button onClick={() => openReview(l)} className="text-sm font-medium text-blue-600 hover:text-blue-700">Review</button>
                     )}
-                    {tab === 'active' && (
-                      <button onClick={() => openReview(l, true)} className="text-sm font-medium text-rose-600 hover:text-rose-700">Stop</button>
-                    )}
                     {tab === 'history' && (
                       <button onClick={() => openReview(l)} className="text-sm font-medium text-blue-600 hover:text-blue-700">View</button>
                     )}
@@ -168,7 +186,7 @@ export default function Approvals() {
       <Modal
         open={!!detail}
         onClose={() => { setDetail(null); setComment(''); setCancelMode(false); }}
-        title={cancelMode ? 'Stop Leave' : tab === 'pending' ? 'Review Leave Request' : 'Leave Details'}
+        title={cancelMode ? 'Stop Leave' : isMyTurnOnDetail ? 'Review Leave Request' : 'Leave Details'}
         size="lg"
         footer={
           cancelMode ? (
@@ -176,7 +194,7 @@ export default function Approvals() {
               <Button variant="secondary" onClick={() => setCancelMode(false)}>Back</Button>
               <Button variant="danger" onClick={handleCancelLeave} disabled={!returnDate || !cancelReason.trim()}>Confirm Cancel</Button>
             </>
-          ) : tab === 'pending' ? (
+          ) : isMyTurnOnDetail ? (
             <>
               <Button variant="danger" onClick={() => takeAction('rejected')}>Reject</Button>
               <Button variant="success" onClick={() => takeAction('approved')}>Approve</Button>

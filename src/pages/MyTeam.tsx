@@ -3,6 +3,9 @@ import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import { Users, Briefcase, Building2, CheckCircle2, XCircle, Circle } from 'lucide-react';
 import Badge from '../components/ui/Badge';
+import Modal from '../components/ui/Modal';
+import Button from '../components/ui/Button';
+import { formatDate } from '../utils/formatDate';
 import type { LeaveRequest } from '../types';
 
 function getCurrentTurnApproverIds(req: LeaveRequest): string[] {
@@ -22,7 +25,7 @@ function getCurrentTurnApproverIds(req: LeaveRequest): string[] {
 
 export default function MyTeam() {
   const { user } = useAuth();
-  const { users, leaveBalances, grades, departments, leaveRequests, getUserById, approveLeave, rejectLeave, cancelLeaveByAdmin, actOnBehalf } = useAppData();
+  const { users, leaveBalances, grades, departments, leaveRequests, getUserById, approveLeave, rejectLeave, cancelLeaveByAdmin, actOnBehalf, extendLeave } = useAppData();
 
   if (!user) return null;
 
@@ -32,6 +35,8 @@ export default function MyTeam() {
   const [departmentFilter, setDepartmentFilter] = useState('All Departments');
   const [selectedManagerId, setSelectedManagerId] = useState<string>(isAdmin ? '' : user.id);
   const [activeTab, setActiveTab] = useState<'team' | 'requests'>('team');
+  const [requestStatusFilter, setRequestStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [requestSearchQuery, setRequestSearchQuery] = useState('');
 
   const managers = departmentFilter === 'All Departments'
     ? allManagers
@@ -59,6 +64,18 @@ export default function MyTeam() {
 
   const pendingCount = useMemo(() => teamRequests.filter((r) => r.status === 'pending').length, [teamRequests]);
 
+  const filteredTeamRequests = useMemo(() => {
+    return teamRequests.filter((r) => {
+      if (requestStatusFilter !== 'all' && r.status !== requestStatusFilter) return false;
+      if (requestSearchQuery.trim()) {
+        const employee = getUserById(r.employeeId);
+        const q = requestSearchQuery.trim().toLowerCase();
+        if (!employee?.fullName.toLowerCase().includes(q) && !r.leaveType.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [teamRequests, requestStatusFilter, requestSearchQuery, getUserById]);
+
   const handleApprove = (requestId: string) => {
     if (!user) return;
     approveLeave(requestId, user);
@@ -75,12 +92,41 @@ export default function MyTeam() {
     actOnBehalf(requestId, user, targetApproverId, action);
   };
 
-  const handleStop = (req: LeaveRequest) => {
-    if (!user) return;
-    const reason = window.prompt('Reason for stopping this leave:');
-    if (!reason) return;
+  const [actionModal, setActionModal] = useState<{ type: 'stop' | 'extend'; request: LeaveRequest } | null>(null);
+  const [modalReason, setModalReason] = useState('');
+  const [extendEndDate, setExtendEndDate] = useState('');
+  const [extendIsPaid, setExtendIsPaid] = useState(true);
+
+  const openStopModal = (req: LeaveRequest) => {
+    setModalReason('');
+    setActionModal({ type: 'stop', request: req });
+  };
+
+  const openExtendModal = (req: LeaveRequest) => {
+    setModalReason('');
+    setExtendEndDate('');
+    setExtendIsPaid(true);
+    setActionModal({ type: 'extend', request: req });
+  };
+
+  const closeActionModal = () => {
+    setActionModal(null);
+    setModalReason('');
+    setExtendEndDate('');
+    setExtendIsPaid(true);
+  };
+
+  const confirmStop = () => {
+    if (!user || !actionModal || !modalReason.trim()) return;
     const returnDate = new Date().toISOString().split('T')[0];
-    cancelLeaveByAdmin(req.id, user, reason, returnDate);
+    cancelLeaveByAdmin(actionModal.request.id, user, modalReason.trim(), returnDate);
+    closeActionModal();
+  };
+
+  const confirmExtend = () => {
+    if (!user || !actionModal || !modalReason.trim() || !extendEndDate) return;
+    extendLeave(actionModal.request, user, extendEndDate, modalReason.trim(), extendIsPaid);
+    closeActionModal();
   };
 
   return (
@@ -222,13 +268,36 @@ export default function MyTeam() {
               )}
 
               {activeTab === 'requests' && (
-                teamRequests.length === 0 ? (
-                  <div className="rounded-2xl border border-gray-100 bg-white p-6 text-center text-sm text-gray-400">
-                    No leave requests from this team yet.
+                <>
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <div className="flex gap-1.5">
+                      {(['all', 'pending', 'approved', 'rejected'] as const).map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => setRequestStatusFilter(s)}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+                            requestStatusFilter === s ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 ring-1 ring-inset ring-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      value={requestSearchQuery}
+                      onChange={(e) => setRequestSearchQuery(e.target.value)}
+                      placeholder="Search by employee name or leave type..."
+                      className="min-w-[220px] flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
                   </div>
-                ) : (
+
+                  {filteredTeamRequests.length === 0 ? (
+                    <div className="rounded-2xl border border-gray-100 bg-white p-6 text-center text-sm text-gray-400">
+                      No leave requests match this filter.
+                    </div>
+                  ) : (
                   <div className="space-y-3">
-                    {teamRequests.map((req) => {
+                    {filteredTeamRequests.map((req) => {
                       const employee = getUserById(req.employeeId);
                       const required = req.requiredApproverIds || [];
                       const approved = req.approvedByIds || [];
@@ -241,13 +310,27 @@ export default function MyTeam() {
                         <div key={req.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
-                              <p className="text-sm font-semibold text-gray-900">{employee?.fullName || 'Unknown'} — <span className="capitalize">{req.leaveType}</span> leave</p>
-                              <p className="text-xs text-gray-500">{req.startDate} to {req.endDate} · {req.totalWorkingDays} working day(s)</p>
+                              <p className="text-sm font-semibold text-gray-900">
+                                {employee?.fullName || 'Unknown'} — <span className="capitalize">{req.leaveType}</span> leave
+                                {req.isExtension && <span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 align-middle">Extended{req.isPaidOverride === false ? ' · Unpaid' : ''}</span>}
+                              </p>
+                              <p className="text-xs text-gray-500">{formatDate(req.startDate)} to {formatDate(req.endDate)} · {req.totalWorkingDays} working day(s)</p>
                             </div>
                             <Badge variant={req.status === 'approved' ? 'teal' : req.status === 'rejected' ? 'rose' : conflictDetected ? 'orange' : 'gray'}>
                               {conflictDetected ? 'Conflict — needs Admin' : req.status}
                             </Badge>
                           </div>
+
+                          <p className="mt-2 text-xs text-gray-600"><span className="text-gray-400">Reason:</span> {req.reason}</p>
+                          {(() => {
+                            const latestActionEntry = [...req.approvalHistory].reverse().find((h) => h.comment);
+                            if (!latestActionEntry) return null;
+                            return (
+                              <p className={`mt-1 text-xs ${latestActionEntry.action === 'rejected' ? 'text-rose-600' : 'text-gray-500'}`}>
+                                <span className="text-gray-400 capitalize">{latestActionEntry.action} note:</span> "{latestActionEntry.comment}"
+                              </p>
+                            );
+                          })()}
 
                           {required.length > 0 && (
                             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -306,21 +389,101 @@ export default function MyTeam() {
                             </div>
                           )}
 
-                          {isAdmin && req.status === 'approved' && (
+                          {isAdmin && req.status === 'approved' && !req.isExtension && (
+                            <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-50 pt-3">
+                              <button onClick={() => openStopModal(req)} className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700">Stop Leave</button>
+                              <button onClick={() => openExtendModal(req)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">Extend Leave</button>
+                            </div>
+                          )}
+                          {isAdmin && req.status === 'approved' && req.isExtension && (
                             <div className="mt-3 border-t border-gray-50 pt-3">
-                              <button onClick={() => handleStop(req)} className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700">Stop Leave</button>
+                              <button onClick={() => openStopModal(req)} className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700">Stop Leave</button>
                             </div>
                           )}
                         </div>
                       );
                     })}
                   </div>
-                )
+                  )}
+                </>
               )}
             </>
           )}
         </>
       )}
+
+      <Modal
+        open={!!actionModal}
+        onClose={closeActionModal}
+        title={actionModal?.type === 'stop' ? 'Stop Leave' : 'Extend Leave'}
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeActionModal}>Cancel</Button>
+            {actionModal?.type === 'stop' ? (
+              <Button variant="danger" onClick={confirmStop} disabled={!modalReason.trim()}>Confirm Stop</Button>
+            ) : (
+              <Button onClick={confirmExtend} disabled={!modalReason.trim() || !extendEndDate}>Confirm Extension</Button>
+            )}
+          </>
+        }
+      >
+        {actionModal?.type === 'stop' ? (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Stopping <span className="font-medium">{getUserById(actionModal.request.employeeId)?.fullName}</span>'s {actionModal.request.leaveType} leave, effective today.
+            </p>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Reason</label>
+              <textarea
+                value={modalReason}
+                onChange={(e) => setModalReason(e.target.value)}
+                rows={3}
+                placeholder="Why is this leave being stopped?"
+                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                autoFocus
+              />
+            </div>
+          </div>
+        ) : actionModal?.type === 'extend' ? (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Extending <span className="font-medium">{getUserById(actionModal.request.employeeId)?.fullName}</span>'s {actionModal.request.leaveType} leave, currently approved through <span className="font-medium">{formatDate(actionModal.request.endDate)}</span>.
+            </p>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Extend until</label>
+              <input
+                type="date"
+                value={extendEndDate}
+                onChange={(e) => setExtendEndDate(e.target.value)}
+                min={actionModal.request.endDate}
+                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Reason</label>
+              <textarea
+                value={modalReason}
+                onChange={(e) => setModalReason(e.target.value)}
+                rows={3}
+                placeholder="Why is this leave being extended?"
+                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={extendIsPaid}
+                onChange={(e) => setExtendIsPaid(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              This extension is paid leave
+            </label>
+            <p className="text-xs text-gray-400">
+              This extension will go through the same approval chain as the original {actionModal.request.leaveType} leave policy — it doesn't get auto-approved just because you initiated it (unless you're also the required approver, in which case it still needs your explicit action).
+            </p>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

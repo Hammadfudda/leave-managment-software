@@ -48,6 +48,7 @@ interface AppDataContextType {
   ) => void;
   cancelPendingLeave: (requestId: string, userId: string) => void;
   submitLeaveRequest: (request: Omit<LeaveRequest, 'id' | 'createdAt' | 'status' | 'approvalHistory'>) => void;
+  extendLeave: (originalRequest: LeaveRequest, initiator: User, newEndDate: string, reason: string, isPaid: boolean) => void;
   approveLeave: (requestId: string, approver: User, comment?: string) => void;
   rejectLeave: (requestId: string, approver: User, comment?: string) => void;
   actOnBehalf: (requestId: string, admin: User, targetApproverId: string, action: 'approved' | 'rejected', comment?: string) => void;
@@ -304,6 +305,64 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       department: request.department,
       leaveType: request.leaveType,
       comment: request.reason,
+    });
+  };
+
+  // Manager/Admin-initiated — extends an already-approved leave. This creates a brand
+  // new LeaveRequest (tagged isExtension + originalRequestId) rather than mutating the
+  // original, so it flows through the exact same approval chain, balance deduction, and
+  // My Team / Approvals visibility rules as any normal request — no special-casing needed
+  // for "where does this show up for approval."
+  const extendLeave = (
+    originalRequest: LeaveRequest,
+    initiator: User,
+    newEndDate: string,
+    reason: string,
+    isPaid: boolean
+  ) => {
+    const policy = leavePolicies.find((p) => p.leaveType === originalRequest.leaveType);
+    const extensionStart = new Date(originalRequest.endDate);
+    extensionStart.setDate(extensionStart.getDate() + 1);
+    const startDateStr = extensionStart.toISOString().split('T')[0];
+
+    const workingDays = calcWorkingDays(startDateStr, newEndDate);
+
+    const newRequest: LeaveRequest = {
+      id: `lr${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      employeeId: originalRequest.employeeId,
+      employeeName: originalRequest.employeeName,
+      department: originalRequest.department,
+      leaveType: originalRequest.leaveType,
+      startDate: startDateStr,
+      endDate: newEndDate,
+      totalDaysRequested: workingDays,
+      totalWorkingDays: workingDays,
+      reason,
+      status: 'pending',
+      requiredApproverIds: policy?.approvalRouting?.approverIds || [],
+      approvedByIds: [],
+      rejectedByIds: [],
+      approvalHistory: [],
+      isExtension: true,
+      originalRequestId: originalRequest.id,
+      isPaidOverride: isPaid,
+      currentApproverRole: policy?.requiresApprovalFrom === 'admin' ? 'admin' : 'manager',
+    };
+
+    setLeaveRequests((prev) => [newRequest, ...prev]);
+
+    addAuditLog({
+      actorId: initiator.id,
+      actorName: initiator.fullName,
+      action: 'EXTEND_LEAVE',
+      targetType: 'LeaveRequest',
+      targetId: newRequest.id,
+      details: `Extended ${originalRequest.employeeName}'s ${originalRequest.leaveType} leave through ${newEndDate} (${isPaid ? 'paid' : 'unpaid'})`,
+      affectedPerson: originalRequest.employeeName,
+      department: originalRequest.department,
+      leaveType: originalRequest.leaveType,
+      comment: reason,
     });
   };
 
@@ -568,6 +627,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         cancelLeaveByAdmin,
         cancelPendingLeave,
         submitLeaveRequest,
+        extendLeave,
         approveLeave,
         rejectLeave,
         actOnBehalf,
