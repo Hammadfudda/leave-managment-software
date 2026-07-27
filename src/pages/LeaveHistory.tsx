@@ -29,9 +29,9 @@ export default function LeaveHistory() {
     { value: 'rejected', label: 'Rejected' },
   ];
 
-  const handleCancelPending = () => {
-    if (!detail || !user) return;
-    cancelPendingLeave(detail.id, user.id);
+ const handleCancelPending = () => {
+    if (!detail) return;
+    cancelPendingLeave(detail.id, detail.employeeId);
   };
 
   return (

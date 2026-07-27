@@ -53,12 +53,11 @@ export default function App() {
               <Route
                 path="/approvals"
                 element={
-                  <Protected roles={["manager", "admin"]}>
+                  <Protected roles={["manager"]}>
                     <Approvals />
                   </Protected>
                 }
               />
-              <Route path="/approvals" element={<Protected roles={['manager']}><Approvals /></Protected>} />
               <Route path="/calendar" element={<LeaveCalendar />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route
