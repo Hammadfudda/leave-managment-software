@@ -5,13 +5,17 @@ import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import { formatDate } from '../utils/formatDate';
+import { CheckCircle2, XCircle, Circle } from 'lucide-react';
 import type { LeaveStatus } from '../types';
 
 export default function LeaveHistory() {
   const { user } = useAuth();
-  const { leaveRequests, cancelPendingLeave } = useAppData();
+  const { leaveRequests, getUserById, extendLeave } = useAppData();
   const [filter, setFilter] = useState<LeaveStatus | 'all'>('all');
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [showExtendForm, setShowExtendForm] = useState(false);
+  const [extendEndDate, setExtendEndDate] = useState('');
+  const [extendReason, setExtendReason] = useState('');
 
   if (!user) return null;
   const myLeaves = leaveRequests.filter((l) => l.employeeId === user.id);
@@ -29,9 +33,17 @@ export default function LeaveHistory() {
     { value: 'rejected', label: 'Rejected' },
   ];
 
- const handleCancelPending = () => {
-    if (!detail) return;
-    cancelPendingLeave(detail.id, detail.employeeId);
+  const openExtendForm = () => {
+    setExtendEndDate('');
+    setExtendReason('');
+    setShowExtendForm(true);
+  };
+
+  const handleSubmitExtend = () => {
+    if (!detail || !user || !extendEndDate || !extendReason.trim()) return;
+    extendLeave(detail, user, extendEndDate, extendReason.trim(), true);
+    setShowExtendForm(false);
+    setDetailId(null);
   };
 
   return (
@@ -75,7 +87,10 @@ export default function LeaveHistory() {
               )}
               {filtered.map((l) => (
                 <tr key={l.id} className="hover:bg-gray-50/50 animate-fade-in">
-                  <td className="px-5 py-3 capitalize text-gray-900">{l.leaveType}</td>
+                  <td className="px-5 py-3 capitalize text-gray-900">
+                    {l.leaveType}
+                    {l.isExtension && <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 normal-case">Extended</span>}
+                  </td>
                   <td className="px-5 py-3 text-gray-600">{formatDate(l.startDate)}</td>
                   <td className="px-5 py-3 text-gray-600">{formatDate(l.actualEndDate || l.endDate)}</td>
                   <td className="px-5 py-3 text-gray-600">
@@ -92,11 +107,14 @@ export default function LeaveHistory() {
         </div>
       </div>
 
-      <Modal open={!!detail} onClose={() => setDetailId(null)} title="Leave Request Details" size="md">
-        {detail && (
+      <Modal open={!!detail} onClose={() => { setDetailId(null); setShowExtendForm(false); }} title="Leave Request Details" size="md">
+        {detail && !showExtendForm && (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
-              <div><p className="text-gray-500">Type</p><p className="font-medium capitalize text-gray-900">{detail.leaveType}</p></div>
+              <div><p className="text-gray-500">Type</p><p className="font-medium capitalize text-gray-900">
+                {detail.leaveType}
+                {detail.isExtension && <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 normal-case">Extended</span>}
+              </p></div>
               <div><p className="text-gray-500">Status</p><StatusBadge status={detail.status} /></div>
               <div><p className="text-gray-500">Start date</p><p className="font-medium text-gray-900">{formatDate(detail.startDate)}</p></div>
               <div><p className="text-gray-500">End date</p><p className="font-medium text-gray-900">{formatDate(detail.actualEndDate || detail.endDate)}</p></div>
@@ -109,8 +127,37 @@ export default function LeaveHistory() {
               </div>
             )}
             <div><p className="text-gray-500">Reason</p><p className="mt-1 text-gray-900">{detail.reason}</p></div>
+
+            {/* Who needs to approve this, and where each of them stands right now —
+                so the employee always knows exactly who's holding up their request. */}
+            {detail.requiredApproverIds && detail.requiredApproverIds.length > 0 && (
+              <div>
+                <p className="text-gray-500 mb-2">Approvers</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {detail.requiredApproverIds.map((id, idx) => {
+                    const approver = getUserById(id);
+                    const isApproved = detail.approvedByIds?.includes(id);
+                    const isRejected = detail.rejectedByIds?.includes(id);
+                    return (
+                      <div key={id} className="flex items-center gap-2">
+                        <div className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs ${
+                          isApproved ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                          isRejected ? 'border-rose-200 bg-rose-50 text-rose-700' :
+                          'border-gray-200 bg-gray-50 text-gray-500'
+                        }`}>
+                          {isApproved ? <CheckCircle2 size={13} /> : isRejected ? <XCircle size={13} /> : <Circle size={13} />}
+                          <span>{approver?.fullName || 'Unknown'}{approver?.designation ? <span className="opacity-60"> — {approver.designation}</span> : null}</span>
+                        </div>
+                        {idx < detail.requiredApproverIds!.length - 1 && <span className="text-gray-300">→</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div>
-              <p className="text-gray-500">Approval history</p>
+              <p className="text-gray-500">Approval notes</p>
               <div className="mt-2 space-y-2">
                 {detail.approvalHistory.length === 0 && <p className="text-gray-400">No approvals yet.</p>}
                 {detail.approvalHistory.map((h, i) => (
@@ -121,11 +168,45 @@ export default function LeaveHistory() {
                 ))}
               </div>
             </div>
-            {detail.status === 'pending' && (
-              <div className="flex justify-end gap-3 border-t border-gray-100 pt-3">
-                <Button variant="danger" onClick={handleCancelPending}>Cancel Request</Button>
+
+            {detail.status === 'approved' && !detail.isExtension && (
+              <div className="flex flex-wrap justify-end gap-3 border-t border-gray-100 pt-3">
+                <Button onClick={openExtendForm}>Request Extension</Button>
               </div>
             )}
+          </div>
+        )}
+
+        {detail && showExtendForm && (
+          <div className="space-y-4 text-sm">
+            <p className="text-gray-600">
+              Requesting an extension to your {detail.leaveType} leave, currently approved through <span className="font-medium">{formatDate(detail.endDate)}</span>.
+            </p>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Extend until</label>
+              <input
+                type="date"
+                value={extendEndDate}
+                onChange={(e) => setExtendEndDate(e.target.value)}
+                min={detail.endDate}
+                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Reason</label>
+              <textarea
+                value={extendReason}
+                onChange={(e) => setExtendReason(e.target.value)}
+                rows={3}
+                placeholder="Why do you need to extend this leave?"
+                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end gap-3 border-t border-gray-100 pt-3">
+              <Button variant="secondary" onClick={() => setShowExtendForm(false)}>Back</Button>
+              <Button onClick={handleSubmitExtend} disabled={!extendEndDate || !extendReason.trim()}>Submit Extension Request</Button>
+            </div>
           </div>
         )}
       </Modal>

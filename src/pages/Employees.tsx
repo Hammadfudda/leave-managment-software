@@ -310,11 +310,12 @@ export default function Employees() {
                 {errors.department && <p className={errorCls}>{errors.department}</p>}
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Role</label>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Portal Access</label>
                 <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })} className={inputCls}>
                   <option value="employee">Employee</option>
                   <option value="manager">Manager</option>
                 </select>
+                <p className="mt-1 text-xs text-gray-400">Manager access shows the approvals dashboard and team leave calendar.</p>
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-700">Date of joining <span className="text-rose-500">*</span></label>

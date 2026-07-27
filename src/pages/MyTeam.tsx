@@ -478,9 +478,6 @@ export default function MyTeam() {
               />
               This extension is paid leave
             </label>
-            <p className="text-xs text-gray-400">
-              This extension will go through the same approval chain as the original {actionModal.request.leaveType} leave policy — it doesn't get auto-approved just because you initiated it (unless you're also the required approver, in which case it still needs your explicit action).
-            </p>
           </div>
         ) : null}
       </Modal>

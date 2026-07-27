@@ -134,8 +134,12 @@ export default function MasterData() {
             <div key={item} className="flex items-center justify-between border-b border-r border-gray-50 px-5 py-3 text-sm text-gray-800">
               <div className="flex items-center gap-2">
                 <span>{item}</span>
-                {tab === 'departments' && !(departmentSaturdayOff[item] ?? true) && (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">6-day week</span>
+                {tab === 'departments' && (
+                  (departmentSaturdayOff[item] ?? true) ? (
+                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">Saturday off</span>
+                  ) : (
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">Saturday on · 6-day week</span>
+                  )
                 )}
               </div>
               <div className="flex items-center gap-1">

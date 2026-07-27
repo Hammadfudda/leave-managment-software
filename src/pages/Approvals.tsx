@@ -136,7 +136,10 @@ export default function Approvals() {
               {list.map((l) => (
                 <tr key={l.id} className="hover:bg-gray-50/50 animate-fade-in">
                   <td className="px-5 py-3 text-gray-900">{l.employeeName}</td>
-                  <td className="px-5 py-3 capitalize text-gray-600">{l.leaveType}</td>
+                  <td className="px-5 py-3 capitalize text-gray-600">
+                    {l.leaveType}
+                    {l.isExtension && <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 normal-case">Extended</span>}
+                  </td>
                   <td className="px-5 py-3 text-gray-600">
                     {formatDate(l.startDate)} → {formatDate(l.endDate)}
                     {l.excludedWeekendDates && l.excludedWeekendDates.length > 0 && (
@@ -227,7 +230,10 @@ export default function Approvals() {
             <div className="grid grid-cols-2 gap-4">
               <div><p className="text-gray-500">Employee</p><p className="font-medium text-gray-900">{detail.employeeName}</p></div>
               <div><p className="text-gray-500">Department</p><p className="font-medium text-gray-900">{detail.department}</p></div>
-              <div><p className="text-gray-500">Type</p><p className="font-medium capitalize text-gray-900">{detail.leaveType}</p></div>
+              <div><p className="text-gray-500">Type</p><p className="font-medium capitalize text-gray-900">
+                {detail.leaveType}
+                {detail.isExtension && <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 normal-case">Extended</span>}
+              </p></div>
               <div><p className="text-gray-500">Days requested</p><p className="font-medium text-gray-900">{detail.totalDaysRequested}</p></div>
               <div><p className="text-gray-500">Start</p><p className="font-medium text-gray-900">{formatDate(detail.startDate)}</p></div>
               <div><p className="text-gray-500">End</p><p className="font-medium text-gray-900">{formatDate(detail.endDate)}</p></div>
