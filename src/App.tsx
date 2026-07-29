@@ -48,8 +48,22 @@ export default function App() {
             >
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/profile" element={<Profile />} />
-              <Route path="/leave/apply" element={<ApplyLeave />} />
-              <Route path="/leave/history" element={<LeaveHistory />} />
+              <Route
+                path="/leave/apply"
+                element={
+                  <Protected roles={["manager", "employee"]}>
+                    <ApplyLeave />
+                  </Protected>
+                }
+              />
+              <Route
+                path="/leave/history"
+                element={
+                  <Protected roles={["manager", "employee"]}>
+                    <LeaveHistory />
+                  </Protected>
+                }
+              />
               <Route
                 path="/approvals"
                 element={

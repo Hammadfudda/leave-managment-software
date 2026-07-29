@@ -37,17 +37,17 @@ const navItems: NavItem[] = [
     icon: UserCircle,
     roles: ["admin", "manager", "employee"],
   },
-  {
+{
     to: "/leave/apply",
     label: "Apply Leave",
     icon: CalendarPlus,
-    roles: ["admin", "manager", "employee"],
+    roles: ["manager", "employee"],
   },
   {
     to: "/leave/history",
     label: "My Leaves",
     icon: History,
-    roles: ["admin", "manager", "employee"],
+    roles: ["manager", "employee"],
   },
   {
     to: "/approvals",

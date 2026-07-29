@@ -19,7 +19,6 @@ export default function LeaveHistory() {
 
   if (!user) return null;
   const myLeaves = leaveRequests.filter((l) => l.employeeId === user.id);
-  const todayStr = new Date().toISOString().split('T')[0];
   const filtered = filter === 'all' ? myLeaves : myLeaves.filter((l) => l.status === filter);
 
   // Derived live from leaveRequests on every render — never a frozen local copy —
@@ -121,7 +120,7 @@ export default function LeaveHistory() {
                   <td className="px-5 py-3">
                     <div className="flex flex-wrap items-center gap-3">
                       <button onClick={() => setDetailId(l.id)} className="text-sm font-medium text-blue-600 hover:text-blue-700">View</button>
-                      {l.status === 'approved' && !l.isExtension && !l.isStopRequest && l.endDate >= todayStr && (
+                      {l.status === 'approved' && !l.isExtension && !l.isStopRequest && (
                         <>
                           <button onClick={() => openExtend(l)} className="text-sm font-medium text-indigo-600 hover:text-indigo-700">Extend</button>
                           <button onClick={() => openStop(l)} className="text-sm font-medium text-amber-600 hover:text-amber-700">Stop</button>
@@ -246,7 +245,7 @@ export default function LeaveHistory() {
         {actionForm?.type === 'stop' && (
           <div className="space-y-4 text-sm">
             <p className="text-gray-600">
-              Your {actionForm.request.leaveType} leave was approved through <span className="font-medium">{formatDate(actionForm.request.endDate)}</span>. Pick the date you actually want to return.
+              Your {actionForm.request.leaveType} leave runs <span className="font-medium">{formatDate(actionForm.request.startDate)} to {formatDate(actionForm.request.endDate)}</span>. Pick the date you actually want to return.
             </p>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Returning on</label>
@@ -254,11 +253,11 @@ export default function LeaveHistory() {
                 type="date"
                 value={formDate}
                 onChange={(e) => setFormDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
+                min={actionForm.request.startDate}
                 max={actionForm.request.endDate}
                 className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
-              <p className="mt-1 text-xs text-gray-400">Choose any date between today and your original end date ({formatDate(actionForm.request.endDate)}).</p>
+              <p className="mt-1 text-xs text-gray-400">Choose any date between the leave's start ({formatDate(actionForm.request.startDate)}) and its original end date ({formatDate(actionForm.request.endDate)}).</p>
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Reason</label>
