@@ -101,7 +101,7 @@ export default function Approvals() {
       <div className="flex flex-wrap gap-1.5">
         {([
           { key: 'pending' as const, label: `Pending (${pending.length})` },
-          { key: 'history' as const, label: 'History' },
+          { key: 'history' as const, label: `History (${history.length})` },
         ]).map((t) => (
           <button
             key={t.key}
@@ -138,7 +138,8 @@ export default function Approvals() {
                   <td className="px-5 py-3 text-gray-900">{l.employeeName}</td>
                   <td className="px-5 py-3 capitalize text-gray-600">
                     {l.leaveType}
-                    {l.isExtension && <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 normal-case">Extended</span>}
+                    {l.isExtension && <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 normal-case">Extend</span>}
+                    {l.isStopRequest && <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 normal-case">Stop</span>}
                   </td>
                   <td className="px-5 py-3 text-gray-600">
                     {formatDate(l.startDate)} → {formatDate(l.endDate)}
@@ -232,7 +233,8 @@ export default function Approvals() {
               <div><p className="text-gray-500">Department</p><p className="font-medium text-gray-900">{detail.department}</p></div>
               <div><p className="text-gray-500">Type</p><p className="font-medium capitalize text-gray-900">
                 {detail.leaveType}
-                {detail.isExtension && <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 normal-case">Extended</span>}
+                {detail.isExtension && <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 normal-case">Extend</span>}
+                {detail.isStopRequest && <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 normal-case">Stop</span>}
               </p></div>
               <div><p className="text-gray-500">Days requested</p><p className="font-medium text-gray-900">{detail.totalDaysRequested}</p></div>
               <div><p className="text-gray-500">Start</p><p className="font-medium text-gray-900">{formatDate(detail.startDate)}</p></div>

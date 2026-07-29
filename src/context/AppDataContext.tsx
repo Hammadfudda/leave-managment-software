@@ -49,6 +49,7 @@ interface AppDataContextType {
   cancelPendingLeave: (requestId: string, userId: string) => void;
   submitLeaveRequest: (request: Omit<LeaveRequest, 'id' | 'createdAt' | 'status' | 'approvalHistory'>) => void;
   extendLeave: (originalRequest: LeaveRequest, initiator: User, newEndDate: string, reason: string, isPaid: boolean) => void;
+  requestStopLeave: (originalRequest: LeaveRequest, employee: User, newReturnDate: string, reason: string) => void;
   approveLeave: (requestId: string, approver: User, comment?: string) => void;
   rejectLeave: (requestId: string, approver: User, comment?: string) => void;
   actOnBehalf: (requestId: string, admin: User, targetApproverId: string, action: 'approved' | 'rejected', comment?: string) => void;
@@ -366,6 +367,57 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  // Employee-initiated only — asks to end an already-approved leave early (e.g. approved
+  // through 30 July, but they want to come back on 25 July instead). This is a REQUEST,
+  // not an immediate action: it goes through the exact same approval chain as the leave
+  // itself. Admin never initiates this on someone's behalf — Admin's only role here is
+  // approving/acting-on-behalf-of a required approver, same as any other request.
+  const requestStopLeave = (
+    originalRequest: LeaveRequest,
+    employee: User,
+    newReturnDate: string,
+    reason: string
+  ) => {
+    const policy = leavePolicies.find((p) => p.leaveType === originalRequest.leaveType);
+
+    const newRequest: LeaveRequest = {
+      id: `lr${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      employeeId: originalRequest.employeeId,
+      employeeName: originalRequest.employeeName,
+      department: originalRequest.department,
+      leaveType: originalRequest.leaveType,
+      startDate: originalRequest.startDate,
+      endDate: newReturnDate, // the proposed earlier end date
+      totalDaysRequested: 0,
+      totalWorkingDays: 0,
+      reason,
+      status: 'pending',
+      requiredApproverIds: policy?.approvalRouting?.approverIds || [],
+      approvedByIds: [],
+      rejectedByIds: [],
+      approvalHistory: [],
+      isStopRequest: true,
+      originalRequestId: originalRequest.id,
+      currentApproverRole: policy?.requiresApprovalFrom === 'admin' ? 'admin' : 'manager',
+    };
+
+    setLeaveRequests((prev) => [newRequest, ...prev]);
+
+    addAuditLog({
+      actorId: employee.id,
+      actorName: employee.fullName,
+      action: 'REQUEST_STOP_LEAVE',
+      targetType: 'LeaveRequest',
+      targetId: newRequest.id,
+      details: `Requested to end ${originalRequest.leaveType} leave early, returning ${newReturnDate}`,
+      affectedPerson: employee.fullName,
+      department: originalRequest.department,
+      leaveType: originalRequest.leaveType,
+      comment: reason,
+    });
+  };
+
   const cancelLeaveByAdmin = (
     requestId: string,
     cancelledBy: User,
@@ -472,8 +524,28 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       )
     );
 
-    if (newStatus === 'approved' && request.totalWorkingDays > 0) {
-      updateBalanceUsed(request.employeeId, request.leaveType as LeaveType, request.totalWorkingDays);
+    if (newStatus === 'approved') {
+      if (request.isStopRequest && request.originalRequestId) {
+        const original = leaveRequests.find((r) => r.id === request.originalRequestId);
+        if (original) {
+          const daysActuallyUsed = calcWorkingDays(original.startDate, request.endDate);
+          const daysRestored = Math.max(0, original.totalWorkingDays - daysActuallyUsed);
+
+          setLeaveRequests((prev) =>
+            prev.map((r) =>
+              r.id === original.id
+                ? { ...r, actualEndDate: request.endDate, daysUsedBeforeCancel: daysActuallyUsed }
+                : r
+            )
+          );
+
+          if (daysRestored > 0) {
+            updateBalanceUsed(original.employeeId, original.leaveType as LeaveType, -daysRestored);
+          }
+        }
+      } else if (request.totalWorkingDays > 0) {
+        updateBalanceUsed(request.employeeId, request.leaveType as LeaveType, request.totalWorkingDays);
+      }
     }
 
     addAuditLog({
@@ -573,8 +645,28 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       )
     );
 
-    if (newStatus === 'approved' && request.totalWorkingDays > 0) {
-      updateBalanceUsed(request.employeeId, request.leaveType as LeaveType, request.totalWorkingDays);
+    if (newStatus === 'approved') {
+      if (request.isStopRequest && request.originalRequestId) {
+        const original = leaveRequests.find((r) => r.id === request.originalRequestId);
+        if (original) {
+          const daysActuallyUsed = calcWorkingDays(original.startDate, request.endDate);
+          const daysRestored = Math.max(0, original.totalWorkingDays - daysActuallyUsed);
+
+          setLeaveRequests((prev) =>
+            prev.map((r) =>
+              r.id === original.id
+                ? { ...r, actualEndDate: request.endDate, daysUsedBeforeCancel: daysActuallyUsed }
+                : r
+            )
+          );
+
+          if (daysRestored > 0) {
+            updateBalanceUsed(original.employeeId, original.leaveType as LeaveType, -daysRestored);
+          }
+        }
+      } else if (request.totalWorkingDays > 0) {
+        updateBalanceUsed(request.employeeId, request.leaveType as LeaveType, request.totalWorkingDays);
+      }
     }
 
     addAuditLog({
@@ -628,6 +720,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         cancelPendingLeave,
         submitLeaveRequest,
         extendLeave,
+        requestStopLeave,
         approveLeave,
         rejectLeave,
         actOnBehalf,

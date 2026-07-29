@@ -90,7 +90,8 @@ export interface LeaveRequest {
   excludedWeekendDates?: string[]; // dates dropped from the day count due to weekend
   isExtension?: boolean; // true if this request extends an already-approved leave
   originalRequestId?: string; // the LeaveRequest this one extends, if isExtension is true
-  isPaidOverride?: boolean; // set by Manager/Admin when creating an extension — paid or unpaid, independent of the policy default
+  isPaidOverride?: boolean; // set when creating an extension — paid or unpaid, independent of the policy default
+  isStopRequest?: boolean; // true if this request is asking to end an already-approved leave early — goes through the same approval chain, just like an extension
   isExtension?: boolean; // true if this request is an extension of an already-approved leave
   originalRequestId?: string; // the LeaveRequest this extends, if isExtension is true
   isPaid?: boolean; // for extensions only — Manager/Admin can override; Employee-initiated defaults to the policy's isPaid

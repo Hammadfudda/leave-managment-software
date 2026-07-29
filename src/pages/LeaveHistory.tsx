@@ -6,24 +6,24 @@ import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import { formatDate } from '../utils/formatDate';
 import { CheckCircle2, XCircle, Circle } from 'lucide-react';
-import type { LeaveStatus } from '../types';
+import type { LeaveStatus, LeaveRequest } from '../types';
 
 export default function LeaveHistory() {
   const { user } = useAuth();
-  const { leaveRequests, getUserById, extendLeave } = useAppData();
+  const { leaveRequests, getUserById, extendLeave, requestStopLeave } = useAppData();
   const [filter, setFilter] = useState<LeaveStatus | 'all'>('all');
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [showExtendForm, setShowExtendForm] = useState(false);
-  const [extendEndDate, setExtendEndDate] = useState('');
-  const [extendReason, setExtendReason] = useState('');
+  const [actionForm, setActionForm] = useState<{ type: 'extend' | 'stop'; request: LeaveRequest } | null>(null);
+  const [formDate, setFormDate] = useState('');
+  const [formReason, setFormReason] = useState('');
 
   if (!user) return null;
   const myLeaves = leaveRequests.filter((l) => l.employeeId === user.id);
+  const todayStr = new Date().toISOString().split('T')[0];
   const filtered = filter === 'all' ? myLeaves : myLeaves.filter((l) => l.status === filter);
 
-  // Derived live from leaveRequests on every render — never a frozen local copy.
-  // This guarantees the modal always shows the request's real current status; if a
-  // cancel action doesn't actually go through for any reason, the UI won't lie about it.
+  // Derived live from leaveRequests on every render — never a frozen local copy —
+  // so the modal always reflects true current data.
   const detail = detailId ? leaveRequests.find((l) => l.id === detailId) || null : null;
 
   const filters: { value: LeaveStatus | 'all'; label: string }[] = [
@@ -33,17 +33,34 @@ export default function LeaveHistory() {
     { value: 'rejected', label: 'Rejected' },
   ];
 
-  const openExtendForm = () => {
-    setExtendEndDate('');
-    setExtendReason('');
-    setShowExtendForm(true);
+  const openExtend = (req: LeaveRequest) => {
+    setFormDate('');
+    setFormReason('');
+    setActionForm({ type: 'extend', request: req });
+  };
+
+  const openStop = (req: LeaveRequest) => {
+    setFormDate('');
+    setFormReason('');
+    setActionForm({ type: 'stop', request: req });
+  };
+
+  const closeActionForm = () => {
+    setActionForm(null);
+    setFormDate('');
+    setFormReason('');
   };
 
   const handleSubmitExtend = () => {
-    if (!detail || !user || !extendEndDate || !extendReason.trim()) return;
-    extendLeave(detail, user, extendEndDate, extendReason.trim(), true);
-    setShowExtendForm(false);
-    setDetailId(null);
+    if (!actionForm || !user || !formDate || !formReason.trim()) return;
+    extendLeave(actionForm.request, user, formDate, formReason.trim(), true);
+    closeActionForm();
+  };
+
+  const handleSubmitStop = () => {
+    if (!actionForm || !user || !formDate || !formReason.trim()) return;
+    requestStopLeave(actionForm.request, user, formDate, formReason.trim());
+    closeActionForm();
   };
 
   return (
@@ -54,17 +71,20 @@ export default function LeaveHistory() {
           <p className="mt-1 text-sm text-gray-500">Track all your leave requests.</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {filters.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setFilter(f.value)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                filter === f.value ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 ring-1 ring-inset ring-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+          {filters.map((f) => {
+            const count = f.value === 'all' ? myLeaves.length : myLeaves.filter((l) => l.status === f.value).length;
+            return (
+              <button
+                key={f.value}
+                onClick={() => setFilter(f.value)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                  filter === f.value ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 ring-1 ring-inset ring-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                {f.label} ({count})
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -89,7 +109,8 @@ export default function LeaveHistory() {
                 <tr key={l.id} className="hover:bg-gray-50/50 animate-fade-in">
                   <td className="px-5 py-3 capitalize text-gray-900">
                     {l.leaveType}
-                    {l.isExtension && <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 normal-case">Extended</span>}
+                    {l.isExtension && <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 normal-case">Extend</span>}
+                    {l.isStopRequest && <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 normal-case">Stop</span>}
                   </td>
                   <td className="px-5 py-3 text-gray-600">{formatDate(l.startDate)}</td>
                   <td className="px-5 py-3 text-gray-600">{formatDate(l.actualEndDate || l.endDate)}</td>
@@ -98,7 +119,15 @@ export default function LeaveHistory() {
                   </td>
                   <td className="px-5 py-3"><StatusBadge status={l.status} /></td>
                   <td className="px-5 py-3">
-                    <button onClick={() => setDetailId(l.id)} className="text-sm font-medium text-blue-600 hover:text-blue-700">View</button>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button onClick={() => setDetailId(l.id)} className="text-sm font-medium text-blue-600 hover:text-blue-700">View</button>
+                      {l.status === 'approved' && !l.isExtension && !l.isStopRequest && l.endDate >= todayStr && (
+                        <>
+                          <button onClick={() => openExtend(l)} className="text-sm font-medium text-indigo-600 hover:text-indigo-700">Extend</button>
+                          <button onClick={() => openStop(l)} className="text-sm font-medium text-amber-600 hover:text-amber-700">Stop</button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -107,13 +136,15 @@ export default function LeaveHistory() {
         </div>
       </div>
 
-      <Modal open={!!detail} onClose={() => { setDetailId(null); setShowExtendForm(false); }} title="Leave Request Details" size="md">
-        {detail && !showExtendForm && (
+      {/* Details modal — view only, plus the approval chain */}
+      <Modal open={!!detail && !actionForm} onClose={() => setDetailId(null)} title="Leave Request Details" size="md">
+        {detail && (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
               <div><p className="text-gray-500">Type</p><p className="font-medium capitalize text-gray-900">
                 {detail.leaveType}
-                {detail.isExtension && <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 normal-case">Extended</span>}
+                {detail.isExtension && <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 normal-case">Extend</span>}
+                {detail.isStopRequest && <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 normal-case">Stop</span>}
               </p></div>
               <div><p className="text-gray-500">Status</p><StatusBadge status={detail.status} /></div>
               <div><p className="text-gray-500">Start date</p><p className="font-medium text-gray-900">{formatDate(detail.startDate)}</p></div>
@@ -121,15 +152,10 @@ export default function LeaveHistory() {
               <div><p className="text-gray-500">Total days requested</p><p className="font-medium text-gray-900">{detail.totalDaysRequested}</p></div>
               <div><p className="text-gray-500">Days counted</p><p className="font-medium text-gray-900">{detail.daysUsedBeforeCancel ?? detail.totalWorkingDays}</p></div>
             </div>
-            {detail.status === 'cancelled' && detail.cancelledByName && (
-              <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                Cancelled by {detail.cancelledByName}. {detail.cancelledReason}
-              </div>
-            )}
+
             <div><p className="text-gray-500">Reason</p><p className="mt-1 text-gray-900">{detail.reason}</p></div>
 
-            {/* Who needs to approve this, and where each of them stands right now —
-                so the employee always knows exactly who's holding up their request. */}
+            {/* Who needs to approve this, and where each of them stands right now. */}
             {detail.requiredApproverIds && detail.requiredApproverIds.length > 0 && (
               <div>
                 <p className="text-gray-500 mb-2">Approvers</p>
@@ -168,44 +194,81 @@ export default function LeaveHistory() {
                 ))}
               </div>
             </div>
-
-            {detail.status === 'approved' && !detail.isExtension && (
-              <div className="flex flex-wrap justify-end gap-3 border-t border-gray-100 pt-3">
-                <Button onClick={openExtendForm}>Request Extension</Button>
-              </div>
-            )}
           </div>
         )}
+      </Modal>
 
-        {detail && showExtendForm && (
+      {/* Extend / Stop form modal — separate from the details view */}
+      <Modal
+        open={!!actionForm}
+        onClose={closeActionForm}
+        title={actionForm?.type === 'extend' ? 'Request Leave Extension' : 'Request to Stop Leave Early'}
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeActionForm}>Cancel</Button>
+            {actionForm?.type === 'extend' ? (
+              <Button onClick={handleSubmitExtend} disabled={!formDate || !formReason.trim()}>Submit Extension Request</Button>
+            ) : (
+              <Button onClick={handleSubmitStop} disabled={!formDate || !formReason.trim()}>Submit Stop Request</Button>
+            )}
+          </>
+        }
+      >
+        {actionForm?.type === 'extend' && (
           <div className="space-y-4 text-sm">
             <p className="text-gray-600">
-              Requesting an extension to your {detail.leaveType} leave, currently approved through <span className="font-medium">{formatDate(detail.endDate)}</span>.
+              Requesting an extension to your {actionForm.request.leaveType} leave, currently approved through <span className="font-medium">{formatDate(actionForm.request.endDate)}</span>.
             </p>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Extend until</label>
               <input
                 type="date"
-                value={extendEndDate}
-                onChange={(e) => setExtendEndDate(e.target.value)}
-                min={detail.endDate}
+                value={formDate}
+                onChange={(e) => setFormDate(e.target.value)}
+                min={actionForm.request.endDate}
                 className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Reason</label>
               <textarea
-                value={extendReason}
-                onChange={(e) => setExtendReason(e.target.value)}
+                value={formReason}
+                onChange={(e) => setFormReason(e.target.value)}
                 rows={3}
                 placeholder="Why do you need to extend this leave?"
                 className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 autoFocus
               />
             </div>
-            <div className="flex justify-end gap-3 border-t border-gray-100 pt-3">
-              <Button variant="secondary" onClick={() => setShowExtendForm(false)}>Back</Button>
-              <Button onClick={handleSubmitExtend} disabled={!extendEndDate || !extendReason.trim()}>Submit Extension Request</Button>
+          </div>
+        )}
+
+        {actionForm?.type === 'stop' && (
+          <div className="space-y-4 text-sm">
+            <p className="text-gray-600">
+              Your {actionForm.request.leaveType} leave was approved through <span className="font-medium">{formatDate(actionForm.request.endDate)}</span>. Pick the date you actually want to return.
+            </p>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Returning on</label>
+              <input
+                type="date"
+                value={formDate}
+                onChange={(e) => setFormDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                max={actionForm.request.endDate}
+                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+              <p className="mt-1 text-xs text-gray-400">Choose any date between today and your original end date ({formatDate(actionForm.request.endDate)}).</p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Reason</label>
+              <textarea
+                value={formReason}
+                onChange={(e) => setFormReason(e.target.value)}
+                rows={3}
+                placeholder="Why are you ending this leave early?"
+                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
             </div>
           </div>
         )}

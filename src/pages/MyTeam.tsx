@@ -3,8 +3,6 @@ import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import { Users, Briefcase, Building2, CheckCircle2, XCircle, Circle } from 'lucide-react';
 import Badge from '../components/ui/Badge';
-import Modal from '../components/ui/Modal';
-import Button from '../components/ui/Button';
 import { formatDate } from '../utils/formatDate';
 import type { LeaveRequest } from '../types';
 
@@ -25,7 +23,7 @@ function getCurrentTurnApproverIds(req: LeaveRequest): string[] {
 
 export default function MyTeam() {
   const { user } = useAuth();
-  const { users, leaveBalances, grades, departments, leaveRequests, getUserById, approveLeave, rejectLeave, cancelLeaveByAdmin, actOnBehalf, extendLeave } = useAppData();
+  const { users, leaveBalances, grades, departments, leaveRequests, getUserById, approveLeave, rejectLeave, actOnBehalf } = useAppData();
 
   if (!user) return null;
 
@@ -90,43 +88,6 @@ export default function MyTeam() {
   const handleActOnBehalf = (requestId: string, targetApproverId: string, action: 'approved' | 'rejected') => {
     if (!user) return;
     actOnBehalf(requestId, user, targetApproverId, action);
-  };
-
-  const [actionModal, setActionModal] = useState<{ type: 'stop' | 'extend'; request: LeaveRequest } | null>(null);
-  const [modalReason, setModalReason] = useState('');
-  const [extendEndDate, setExtendEndDate] = useState('');
-  const [extendIsPaid, setExtendIsPaid] = useState(true);
-
-  const openStopModal = (req: LeaveRequest) => {
-    setModalReason('');
-    setActionModal({ type: 'stop', request: req });
-  };
-
-  const openExtendModal = (req: LeaveRequest) => {
-    setModalReason('');
-    setExtendEndDate('');
-    setExtendIsPaid(true);
-    setActionModal({ type: 'extend', request: req });
-  };
-
-  const closeActionModal = () => {
-    setActionModal(null);
-    setModalReason('');
-    setExtendEndDate('');
-    setExtendIsPaid(true);
-  };
-
-  const confirmStop = () => {
-    if (!user || !actionModal || !modalReason.trim()) return;
-    const returnDate = new Date().toISOString().split('T')[0];
-    cancelLeaveByAdmin(actionModal.request.id, user, modalReason.trim(), returnDate);
-    closeActionModal();
-  };
-
-  const confirmExtend = () => {
-    if (!user || !actionModal || !modalReason.trim() || !extendEndDate) return;
-    extendLeave(actionModal.request, user, extendEndDate, modalReason.trim(), extendIsPaid);
-    closeActionModal();
   };
 
   return (
@@ -271,17 +232,20 @@ export default function MyTeam() {
                 <>
                   <div className="mb-3 flex flex-wrap items-center gap-2">
                     <div className="flex gap-1.5">
-                      {(['all', 'pending', 'approved', 'rejected'] as const).map((s) => (
-                        <button
-                          key={s}
-                          onClick={() => setRequestStatusFilter(s)}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                            requestStatusFilter === s ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 ring-1 ring-inset ring-gray-200 hover:bg-gray-50'
-                          }`}
-                        >
-                          {s}
-                        </button>
-                      ))}
+                      {(['all', 'pending', 'approved', 'rejected'] as const).map((s) => {
+                        const count = s === 'all' ? teamRequests.length : teamRequests.filter((r) => r.status === s).length;
+                        return (
+                          <button
+                            key={s}
+                            onClick={() => setRequestStatusFilter(s)}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+                              requestStatusFilter === s ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 ring-1 ring-inset ring-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            {s} ({count})
+                          </button>
+                        );
+                      })}
                     </div>
                     <input
                       value={requestSearchQuery}
@@ -312,7 +276,8 @@ export default function MyTeam() {
                             <div>
                               <p className="text-sm font-semibold text-gray-900">
                                 {employee?.fullName || 'Unknown'} — <span className="capitalize">{req.leaveType}</span> leave
-                                {req.isExtension && <span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 align-middle">Extended{req.isPaidOverride === false ? ' · Unpaid' : ''}</span>}
+                                {req.isExtension && <span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 align-middle">Extend{req.isPaidOverride === false ? ' · Unpaid' : ''}</span>}
+                                {req.isStopRequest && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 align-middle">Stop</span>}
                               </p>
                               <p className="text-xs text-gray-500">{formatDate(req.startDate)} to {formatDate(req.endDate)} · {req.totalWorkingDays} working day(s)</p>
                             </div>
@@ -388,18 +353,6 @@ export default function MyTeam() {
                               </button>
                             </div>
                           )}
-
-                          {isAdmin && req.status === 'approved' && !req.isExtension && (
-                            <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-50 pt-3">
-                              <button onClick={() => openStopModal(req)} className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700">Stop Leave</button>
-                              <button onClick={() => openExtendModal(req)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">Extend Leave</button>
-                            </div>
-                          )}
-                          {isAdmin && req.status === 'approved' && req.isExtension && (
-                            <div className="mt-3 border-t border-gray-50 pt-3">
-                              <button onClick={() => openStopModal(req)} className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700">Stop Leave</button>
-                            </div>
-                          )}
                         </div>
                       );
                     })}
@@ -411,76 +364,6 @@ export default function MyTeam() {
           )}
         </>
       )}
-
-      <Modal
-        open={!!actionModal}
-        onClose={closeActionModal}
-        title={actionModal?.type === 'stop' ? 'Stop Leave' : 'Extend Leave'}
-        footer={
-          <>
-            <Button variant="secondary" onClick={closeActionModal}>Cancel</Button>
-            {actionModal?.type === 'stop' ? (
-              <Button variant="danger" onClick={confirmStop} disabled={!modalReason.trim()}>Confirm Stop</Button>
-            ) : (
-              <Button onClick={confirmExtend} disabled={!modalReason.trim() || !extendEndDate}>Confirm Extension</Button>
-            )}
-          </>
-        }
-      >
-        {actionModal?.type === 'stop' ? (
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Stopping <span className="font-medium">{getUserById(actionModal.request.employeeId)?.fullName}</span>'s {actionModal.request.leaveType} leave, effective today.
-            </p>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Reason</label>
-              <textarea
-                value={modalReason}
-                onChange={(e) => setModalReason(e.target.value)}
-                rows={3}
-                placeholder="Why is this leave being stopped?"
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                autoFocus
-              />
-            </div>
-          </div>
-        ) : actionModal?.type === 'extend' ? (
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Extending <span className="font-medium">{getUserById(actionModal.request.employeeId)?.fullName}</span>'s {actionModal.request.leaveType} leave, currently approved through <span className="font-medium">{formatDate(actionModal.request.endDate)}</span>.
-            </p>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Extend until</label>
-              <input
-                type="date"
-                value={extendEndDate}
-                onChange={(e) => setExtendEndDate(e.target.value)}
-                min={actionModal.request.endDate}
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Reason</label>
-              <textarea
-                value={modalReason}
-                onChange={(e) => setModalReason(e.target.value)}
-                rows={3}
-                placeholder="Why is this leave being extended?"
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-            </div>
-            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={extendIsPaid}
-                onChange={(e) => setExtendIsPaid(e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              This extension is paid leave
-            </label>
-          </div>
-        ) : null}
-      </Modal>
     </div>
   );
 }
