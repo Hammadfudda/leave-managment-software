@@ -1,6 +1,6 @@
-  import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import type {
-  User, Grade, LeavePolicy, LeaveRequest, AuditLog, LeaveBalance, LeaveType, Role,
+  User, Grade, LeavePolicy, LeaveRequest, AuditLog, LeaveBalance, LeaveType,
 } from '../types';
 import { CORE_LEAVE_TYPES } from '../types';
 import {
@@ -279,9 +279,41 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  // Resolves the approval route without changing the existing normal chain.
+  // If finalApprovalMode is enabled, the employee's assigned active Manager is
+  // the one and only approver, so that Manager's decision is automatically final.
+  const resolvePolicyApproverIds = (
+    policy: LeavePolicy | undefined,
+    employeeId: string,
+  ): string[] => {
+    if (!policy) return [];
+
+    if (policy.finalApprovalMode) {
+      const employee = users.find((u) => u.id === employeeId);
+      if (!employee?.managerId) return [];
+
+      const manager = users.find((u) => u.id === employee.managerId);
+      if (!manager || manager.role !== 'manager' || manager.status !== 'active') {
+        return [];
+      }
+
+      return [manager.id];
+    }
+
+    return policy.approvalRouting?.approverIds || [];
+  };
+
   const submitLeaveRequest = (request: Omit<LeaveRequest, 'id' | 'createdAt' | 'status' | 'approvalHistory'>) => {
     const policy = leavePolicies.find((p) => p.leaveType === request.leaveType);
-    const isAdminOnly = policy?.adminOnlyApproval || false;
+    const requiredApproverIds = resolvePolicyApproverIds(policy, request.employeeId);
+
+    if (policy?.finalApprovalMode && requiredApproverIds.length === 0) {
+      console.error(
+        `Cannot submit ${request.leaveType} leave: ${request.employeeName} does not have an active assigned Manager.`
+      );
+      return;
+    }
+
     const newRequest: LeaveRequest = {
       ...request,
       id: `lr${Date.now()}`,
@@ -289,10 +321,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       status: 'pending',
       approvalHistory: [],
       totalWorkingDays: request.totalWorkingDays || request.totalDaysRequested,
-      requiredApproverIds: isAdminOnly ? [] : policy?.approvalRouting?.approverIds || [],
-      isAdminOnlyDecision: isAdminOnly,
+      requiredApproverIds,
       approvedByIds: [],
       rejectedByIds: [],
+      currentApproverRole: 'manager',
     };
 
     setLeaveRequests((prev) => [newRequest, ...prev]);
@@ -311,11 +343,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  // Manager/Admin-initiated — extends an already-approved leave. This creates a brand
-  // new LeaveRequest (tagged isExtension + originalRequestId) rather than mutating the
-  // original, so it flows through the exact same approval chain, balance deduction, and
-  // My Team / Approvals visibility rules as any normal request — no special-casing needed
-  // for "where does this show up for approval."
   const extendLeave = (
     originalRequest: LeaveRequest,
     initiator: User,
@@ -324,10 +351,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     isPaid: boolean
   ) => {
     const policy = leavePolicies.find((p) => p.leaveType === originalRequest.leaveType);
+    const requiredApproverIds = resolvePolicyApproverIds(policy, originalRequest.employeeId);
+
+    if (policy?.finalApprovalMode && requiredApproverIds.length === 0) {
+      console.error(
+        `Cannot extend leave: ${originalRequest.employeeName} does not have an active assigned Manager.`
+      );
+      return;
+    }
+
     const extensionStart = new Date(originalRequest.endDate);
     extensionStart.setDate(extensionStart.getDate() + 1);
     const startDateStr = extensionStart.toISOString().split('T')[0];
-
     const workingDays = calcWorkingDays(startDateStr, newEndDate);
 
     const newRequest: LeaveRequest = {
@@ -343,19 +378,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       totalWorkingDays: workingDays,
       reason,
       status: 'pending',
-      requiredApproverIds: policy?.adminOnlyApproval ? [] : policy?.approvalRouting?.approverIds || [],
-      isAdminOnlyDecision: policy?.adminOnlyApproval || false,
+      requiredApproverIds,
       approvedByIds: [],
       rejectedByIds: [],
       approvalHistory: [],
       isExtension: true,
       originalRequestId: originalRequest.id,
       isPaidOverride: isPaid,
-      currentApproverRole: policy?.requiresApprovalFrom === 'admin' ? 'admin' : 'manager',
+      currentApproverRole: policy?.finalApprovalMode
+        ? 'manager'
+        : policy?.requiresApprovalFrom === 'admin'
+          ? 'admin'
+          : 'manager',
     };
 
     setLeaveRequests((prev) => [newRequest, ...prev]);
-
     addAuditLog({
       actorId: initiator.id,
       actorName: initiator.fullName,
@@ -370,11 +407,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  // Employee-initiated only — asks to end an already-approved leave early (e.g. approved
-  // through 30 July, but they want to come back on 25 July instead). This is a REQUEST,
-  // not an immediate action: it goes through the exact same approval chain as the leave
-  // itself. Admin never initiates this on someone's behalf — Admin's only role here is
-  // approving/acting-on-behalf-of a required approver, same as any other request.
   const requestStopLeave = (
     originalRequest: LeaveRequest,
     employee: User,
@@ -382,6 +414,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     reason: string
   ) => {
     const policy = leavePolicies.find((p) => p.leaveType === originalRequest.leaveType);
+    const requiredApproverIds = resolvePolicyApproverIds(policy, originalRequest.employeeId);
+
+    if (policy?.finalApprovalMode && requiredApproverIds.length === 0) {
+      console.error(
+        `Cannot request stop leave: ${originalRequest.employeeName} does not have an active assigned Manager.`
+      );
+      return;
+    }
 
     const newRequest: LeaveRequest = {
       id: `lr${Date.now()}`,
@@ -391,19 +431,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       department: originalRequest.department,
       leaveType: originalRequest.leaveType,
       startDate: originalRequest.startDate,
-      endDate: newReturnDate, // the proposed earlier end date
+      endDate: newReturnDate,
       totalDaysRequested: 0,
       totalWorkingDays: 0,
       reason,
       status: 'pending',
-      requiredApproverIds: policy?.adminOnlyApproval ? [] : policy?.approvalRouting?.approverIds || [],
-      isAdminOnlyDecision: policy?.adminOnlyApproval || false,
+      requiredApproverIds,
       approvedByIds: [],
       rejectedByIds: [],
       approvalHistory: [],
       isStopRequest: true,
       originalRequestId: originalRequest.id,
-      currentApproverRole: policy?.requiresApprovalFrom === 'admin' ? 'admin' : 'manager',
+      currentApproverRole: policy?.finalApprovalMode
+        ? 'manager'
+        : policy?.requiresApprovalFrom === 'admin'
+          ? 'admin'
+          : 'manager',
     };
 
     setLeaveRequests((prev) => [newRequest, ...prev]);
@@ -430,7 +473,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   ) => {
     const request = leaveRequests.find((r) => r.id === requestId);
     if (!request || request.status !== 'approved') return;
-
     const daysUsed = calcWorkingDays(request.startDate, returnDate);
     const entry = {
       approverId: cancelledBy.id,
@@ -459,7 +501,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     );
 
     if (daysUsed > 0) {
-      updateBalanceUsed(request.employeeId, request.leaveType, daysUsed);
+      updateBalanceUsed(request.employeeId, request.leaveType as LeaveType, daysUsed);
     }
 
     addAuditLog({
@@ -476,16 +518,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  // Sequential approval status computation:
-  // requiredApproverIds[0] = gatekeeper (must approve first, reject = immediate stop)
-  // requiredApproverIds[1..] = parallel tier (all must approve after gatekeeper; any reject = conflict/pending)
   const computeLeaveStatus = (
     requiredApproverIds: string[],
     approvedByIds: string[],
     rejectedByIds: string[]
   ): LeaveRequest['status'] => {
     if (requiredApproverIds.length === 0) return 'approved';
-
     const gatekeeperId = requiredApproverIds[0];
     const restIds = requiredApproverIds.slice(1);
 
@@ -503,9 +541,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const approveLeave = (requestId: string, approver: User, comment?: string) => {
     const request = leaveRequests.find((r) => r.id === requestId);
     if (!request) return;
-    // Admin-only-decision requests (no approval chain at all) can only ever be
-    // decided by Admin — there's no gatekeeper/tier for anyone else to act on.
-    if (request.isAdminOnlyDecision && approver.role !== 'admin') return;
+
+    const required = request.requiredApproverIds || [];
+
+    // Nobody can directly approve a request unless they occupy a required slot.
+    // Admin can still use actOnBehalf for a specific required approver.
+    if (!required.includes(approver.id)) return;
+    if (request.employeeId === approver.id) return;
 
     const entry = {
       approverId: approver.id,
@@ -518,10 +560,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     const updatedApprovedByIds = Array.from(new Set([...(request.approvedByIds || []), approver.id]));
     const rejectedByIds = request.rejectedByIds || [];
-    const required = request.requiredApproverIds || [];
 
     const newStatus: LeaveRequest['status'] =
-      approver.role === 'admin' ? 'approved' : computeLeaveStatus(required, updatedApprovedByIds, rejectedByIds);
+      computeLeaveStatus(required, updatedApprovedByIds, rejectedByIds);
 
     setLeaveRequests((prev) =>
       prev.map((r) =>
@@ -537,7 +578,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (original) {
           const daysActuallyUsed = calcWorkingDays(original.startDate, request.endDate);
           const daysRestored = Math.max(0, original.totalWorkingDays - daysActuallyUsed);
-
           setLeaveRequests((prev) =>
             prev.map((r) =>
               r.id === original.id
@@ -545,7 +585,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
                 : r
             )
           );
-
           if (daysRestored > 0) {
             updateBalanceUsed(original.employeeId, original.leaveType as LeaveType, -daysRestored);
           }
@@ -572,7 +611,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const rejectLeave = (requestId: string, approver: User, comment?: string) => {
     const request = leaveRequests.find((r) => r.id === requestId);
     if (!request) return;
-    if (request.isAdminOnlyDecision && approver.role !== 'admin') return;
+
+    const required = request.requiredApproverIds || [];
+
+    if (!required.includes(approver.id)) return;
+    if (request.employeeId === approver.id) return;
 
     const entry = {
       approverId: approver.id,
@@ -585,10 +628,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     const updatedRejectedByIds = Array.from(new Set([...(request.rejectedByIds || []), approver.id]));
     const approvedByIds = request.approvedByIds || [];
-    const required = request.requiredApproverIds || [];
 
     const newStatus: LeaveRequest['status'] =
-      approver.role === 'admin' ? 'rejected' : computeLeaveStatus(required, approvedByIds, updatedRejectedByIds);
+      computeLeaveStatus(required, approvedByIds, updatedRejectedByIds);
 
     setLeaveRequests((prev) =>
       prev.map((r) =>
@@ -612,9 +654,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  // Admin acts as a substitute for whoever's current turn it is (e.g., Manager rejected
-  // by mistake and it's now resolved) — this fills that specific person's slot and lets
-  // the chain continue normally to the next required approver, rather than skipping everyone.
   const actOnBehalf = (
     requestId: string,
     admin: User,
@@ -624,6 +663,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   ) => {
     const request = leaveRequests.find((r) => r.id === requestId);
     if (!request) return;
+    if (admin.role !== 'admin') return;
+    if (request.employeeId === admin.id) return;
+
+    const required = request.requiredApproverIds || [];
+    if (!required.includes(targetApproverId)) return;
 
     const targetApprover = getUserById(targetApproverId);
     const entry = {
@@ -631,11 +675,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       approverName: targetApprover?.fullName || 'Unknown',
       approverRole: targetApprover?.role || 'manager',
       action,
-      comment: comment ? `${comment} (approved by Admin on behalf of ${targetApprover?.fullName})` : `Approved by Admin on behalf of ${targetApprover?.fullName}`,
+      comment: comment
+        ? `${comment} (${action} by Admin on behalf of ${targetApprover?.fullName})`
+        : `${action === 'approved' ? 'Approved' : 'Rejected'} by Admin on behalf of ${targetApprover?.fullName}`,
       actionDate: new Date().toISOString(),
     };
 
-    const required = request.requiredApproverIds || [];
     const updatedApprovedByIds = action === 'approved'
       ? Array.from(new Set([...(request.approvedByIds || []), targetApproverId]))
       : (request.approvedByIds || []);
@@ -659,7 +704,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (original) {
           const daysActuallyUsed = calcWorkingDays(original.startDate, request.endDate);
           const daysRestored = Math.max(0, original.totalWorkingDays - daysActuallyUsed);
-
           setLeaveRequests((prev) =>
             prev.map((r) =>
               r.id === original.id
@@ -667,7 +711,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
                 : r
             )
           );
-
           if (daysRestored > 0) {
             updateBalanceUsed(original.employeeId, original.leaveType as LeaveType, -daysRestored);
           }

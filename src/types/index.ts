@@ -30,7 +30,7 @@ export interface User {
   phone: string;
   status: 'active' | 'inactive';
   managerId?: string;
-  canApproveOtherDepartments?: boolean; // Manager/Admin ke liye — kya yeh apne department se bahar bhi approver ban sakta hai
+  canApproveOtherDepartments?: boolean;
   profilePhotoUrl?: string;
 }
 
@@ -48,16 +48,20 @@ export interface Grade {
 export interface LeavePolicy {
   id: string;
   leaveType: string;
-  role?: string; // Role applicable to this leave type (Requirement 1)
+  role?: string;
   requiresApprovalFrom: 'manager' | 'admin';
+
   approvalRouting?: {
     designation?: string;
     department?: string;
-    approverIds: string[]; // specific employee IDs required to approve this leave type — ignored when adminOnlyApproval is true
+    grade?: string;
+    approverIds: string[];
   };
+
   requiresDocumentUpload: boolean;
-  documentRequirement?: 'optional' | 'required' | 'not_required'; // Document attachment
-  adminOnlyApproval?: boolean; // when true, this leave type has NO approval chain — Admin decides directly, approverIds is ignored
+  documentRequirement?: 'optional' | 'required' | 'not_required';
+  adminOnlyApproval?: boolean;
+  finalApprovalMode?: boolean;
   minDaysNoticeRequired: number;
   isPaid: boolean;
 }
@@ -85,18 +89,16 @@ export interface LeaveRequest {
   status: LeaveStatus;
   currentApproverRole: 'manager' | 'admin';
   approvalHistory: ApprovalHistoryEntry[];
-  requiredApproverIds?: string[]; // copied from policy at submission time
-  approvedByIds?: string[]; // who has approved so far
-  rejectedByIds?: string[]; // who has rejected (non-gatekeeper stage — tracks conflicts)
-  excludedWeekendDates?: string[]; // dates dropped from the day count due to weekend
-  isExtension?: boolean; // true if this request extends an already-approved leave
-  originalRequestId?: string; // the LeaveRequest this one extends, if isExtension is true
-  isPaidOverride?: boolean; // set when creating an extension — paid or unpaid, independent of the policy default
-  isStopRequest?: boolean; // true if this request is asking to end an already-approved leave early — goes through the same approval chain, just like an extension
-  isAdminOnlyDecision?: boolean; // copied from policy.adminOnlyApproval at submission — stays 'pending' until any Admin directly decides, no chain
-  isExtension?: boolean; // true if this request is an extension of an already-approved leave
-  originalRequestId?: string; // the LeaveRequest this extends, if isExtension is true
-  isPaid?: boolean; // for extensions only — Manager/Admin can override; Employee-initiated defaults to the policy's isPaid
+  requiredApproverIds?: string[];
+  approvedByIds?: string[];
+  rejectedByIds?: string[];
+  excludedWeekendDates?: string[];
+  isExtension?: boolean;
+  originalRequestId?: string;
+  isPaidOverride?: boolean;
+  isStopRequest?: boolean;
+  isAdminOnlyDecision?: boolean;
+  isPaid?: boolean;
   cancelledBy?: string;
   cancelledByName?: string;
   cancelledReason?: string;
