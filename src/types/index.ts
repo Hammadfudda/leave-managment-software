@@ -53,10 +53,11 @@ export interface LeavePolicy {
   approvalRouting?: {
     designation?: string;
     department?: string;
-    approverIds: string[]; // specific employee IDs required to approve this leave type
+    approverIds: string[]; // specific employee IDs required to approve this leave type — ignored when adminOnlyApproval is true
   };
   requiresDocumentUpload: boolean;
-  documentRequirement?: 'optional' | 'required'; // Document attachment (Requirement 3)
+  documentRequirement?: 'optional' | 'required' | 'not_required'; // Document attachment
+  adminOnlyApproval?: boolean; // when true, this leave type has NO approval chain — Admin decides directly, approverIds is ignored
   minDaysNoticeRequired: number;
   isPaid: boolean;
 }
@@ -92,6 +93,7 @@ export interface LeaveRequest {
   originalRequestId?: string; // the LeaveRequest this one extends, if isExtension is true
   isPaidOverride?: boolean; // set when creating an extension — paid or unpaid, independent of the policy default
   isStopRequest?: boolean; // true if this request is asking to end an already-approved leave early — goes through the same approval chain, just like an extension
+  isAdminOnlyDecision?: boolean; // copied from policy.adminOnlyApproval at submission — stays 'pending' until any Admin directly decides, no chain
   isExtension?: boolean; // true if this request is an extension of an already-approved leave
   originalRequestId?: string; // the LeaveRequest this extends, if isExtension is true
   isPaid?: boolean; // for extensions only — Manager/Admin can override; Employee-initiated defaults to the policy's isPaid

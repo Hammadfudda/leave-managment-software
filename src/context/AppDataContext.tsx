@@ -281,6 +281,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const submitLeaveRequest = (request: Omit<LeaveRequest, 'id' | 'createdAt' | 'status' | 'approvalHistory'>) => {
     const policy = leavePolicies.find((p) => p.leaveType === request.leaveType);
+    const isAdminOnly = policy?.adminOnlyApproval || false;
     const newRequest: LeaveRequest = {
       ...request,
       id: `lr${Date.now()}`,
@@ -288,7 +289,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       status: 'pending',
       approvalHistory: [],
       totalWorkingDays: request.totalWorkingDays || request.totalDaysRequested,
-      requiredApproverIds: policy?.approvalRouting?.approverIds || [],
+      requiredApproverIds: isAdminOnly ? [] : policy?.approvalRouting?.approverIds || [],
+      isAdminOnlyDecision: isAdminOnly,
       approvedByIds: [],
       rejectedByIds: [],
     };
@@ -341,7 +343,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       totalWorkingDays: workingDays,
       reason,
       status: 'pending',
-      requiredApproverIds: policy?.approvalRouting?.approverIds || [],
+      requiredApproverIds: policy?.adminOnlyApproval ? [] : policy?.approvalRouting?.approverIds || [],
+      isAdminOnlyDecision: policy?.adminOnlyApproval || false,
       approvedByIds: [],
       rejectedByIds: [],
       approvalHistory: [],
@@ -393,7 +396,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       totalWorkingDays: 0,
       reason,
       status: 'pending',
-      requiredApproverIds: policy?.approvalRouting?.approverIds || [],
+      requiredApproverIds: policy?.adminOnlyApproval ? [] : policy?.approvalRouting?.approverIds || [],
+      isAdminOnlyDecision: policy?.adminOnlyApproval || false,
       approvedByIds: [],
       rejectedByIds: [],
       approvalHistory: [],
@@ -499,6 +503,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const approveLeave = (requestId: string, approver: User, comment?: string) => {
     const request = leaveRequests.find((r) => r.id === requestId);
     if (!request) return;
+    // Admin-only-decision requests (no approval chain at all) can only ever be
+    // decided by Admin — there's no gatekeeper/tier for anyone else to act on.
+    if (request.isAdminOnlyDecision && approver.role !== 'admin') return;
 
     const entry = {
       approverId: approver.id,
@@ -565,6 +572,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const rejectLeave = (requestId: string, approver: User, comment?: string) => {
     const request = leaveRequests.find((r) => r.id === requestId);
     if (!request) return;
+    if (request.isAdminOnlyDecision && approver.role !== 'admin') return;
 
     const entry = {
       approverId: approver.id,

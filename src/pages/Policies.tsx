@@ -22,6 +22,7 @@ export default function Policies() {
     designation: 'All Designations',
     department: 'All Departments',
     approverIds: [] as string[],
+    adminOnlyApproval: false,
     minDaysNoticeRequired: 3,
     documentRequirement: 'optional' as 'optional' | 'required' | 'not_required',
   });
@@ -45,6 +46,7 @@ export default function Policies() {
       designation: p.approvalRouting?.designation || 'All Designations',
       department: p.approvalRouting?.department || 'All Departments',
       approverIds: p.approvalRouting?.approverIds || [],
+      adminOnlyApproval: p.adminOnlyApproval || false,
       minDaysNoticeRequired: p.minDaysNoticeRequired,
       documentRequirement: p.documentRequirement || (p.requiresDocumentUpload ? 'required' : 'optional'),
     });
@@ -58,10 +60,13 @@ export default function Policies() {
       leaveType: leaveTypeKey,
       role: form.role,
       requiresApprovalFrom: 'manager',
+      adminOnlyApproval: form.adminOnlyApproval,
       approvalRouting: {
         designation: form.designation !== 'All Designations' ? form.designation : undefined,
         department: form.department !== 'All Departments' ? form.department : undefined,
-        approverIds: form.approverIds,
+        // When admin-only, there is no approver chain at all — force this empty
+        // regardless of whatever was picked before the toggle was switched on.
+        approverIds: form.adminOnlyApproval ? [] : form.approverIds,
       },
       requiresDocumentUpload: form.documentRequirement === 'required',
       documentRequirement: form.documentRequirement,
@@ -137,13 +142,19 @@ export default function Policies() {
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">Approval from</span>
                   <div className="flex gap-1 flex-wrap">
-                    {approversList.length === 0 && <span className="text-xs text-gray-400">Not set</span>}
-                    {approversList.map((id) => {
-                      const approver = users.find((u) => u.id === id);
-                      return (
-                        <Badge key={id} variant="blue">{approver?.fullName || 'Unknown'}</Badge>
-                      );
-                    })}
+                    {p.adminOnlyApproval ? (
+                      <Badge variant="orange">Admin Only</Badge>
+                    ) : (
+                      <>
+                        {approversList.length === 0 && <span className="text-xs text-gray-400">Not set</span>}
+                        {approversList.map((id) => {
+                          const approver = users.find((u) => u.id === id);
+                          return (
+                            <Badge key={id} variant="blue">{approver?.fullName || 'Unknown'}</Badge>
+                          );
+                        })}
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
@@ -242,6 +253,22 @@ export default function Policies() {
                 </div>
               </div>
             </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-800 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.adminOnlyApproval}
+                  onChange={(e) => setForm({ ...form, adminOnlyApproval: e.target.checked, approverIds: e.target.checked ? [] : form.approverIds })}
+                  className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                />
+                Admin decides directly — no approval chain
+              </label>
+              <p className="mt-1 text-xs text-gray-500">
+                When on, this leave type skips managers entirely. Every request just sits pending until any Admin approves or rejects it directly.
+              </p>
+            </div>
+
+            {!form.adminOnlyApproval && (
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-gray-700">Required Approvers</label>
 
@@ -288,6 +315,7 @@ export default function Policies() {
                 )}
               </div>
             </div>
+            )}
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Minimum Notice Days Required</label>
               <input
