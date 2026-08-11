@@ -8,20 +8,17 @@ import { Pencil, Plus, Lock, Trash2 } from 'lucide-react';
 import type { LeavePolicy } from '../types';
 
 /*
- * These fields are intentionally defined locally for now.
+ * Temporary extension for the new final-manager setting.
  *
- * This lets us update Policies.tsx without breaking the existing
- * LeavePolicy interface or any of the old approval-chain code.
+ * We keep this local for now so the existing LeavePolicy type
+ * and the rest of the project are not broken.
  *
- * In the next step these fields will be moved into src/types/index.ts
- * and AppDataContext will use them while submitting leave requests.
+ * Next step:
+ * add finalApprovalMode to the shared LeavePolicy type and wire
+ * AppDataContext so employee.managerId becomes the only approver.
  */
-type FinalApprovalTarget = 'employee_manager' | 'department';
-
 type ExtendedLeavePolicy = LeavePolicy & {
   finalApprovalMode?: boolean;
-  finalApprovalTarget?: FinalApprovalTarget;
-  finalApprovalDepartment?: string;
 };
 
 export default function Policies() {
@@ -53,11 +50,8 @@ export default function Policies() {
     department: 'All Departments',
     approverIds: [] as string[],
 
-    // New final approval routing
+    // New fixed final-manager mode
     finalApprovalMode: false,
-    finalApprovalTarget:
-      'employee_manager' as FinalApprovalTarget,
-    finalApprovalDepartment: '',
 
     documentRequirement: 'optional' as
       | 'optional'
@@ -66,23 +60,17 @@ export default function Policies() {
   });
 
   /*
-   * Existing approval-chain candidates.
-   *
-   * Nothing changed here.
-   *
-   * Manager/Admin filtering continues to work exactly
-   * like the currently pushed version.
+   * Existing normal approval-chain candidates.
+   * This logic stays unchanged.
    */
   const availableApprovers = useMemo(() => {
     return users
       .filter((u) => u.role !== 'employee')
-
       .filter(
         (u) =>
           form.designation === 'All Designations' ||
           u.designation === form.designation
       )
-
       .filter(
         (u) =>
           u.role === 'admin' ||
@@ -90,7 +78,6 @@ export default function Policies() {
           u.department === form.department ||
           u.canApproveOtherDepartments
       )
-
       .filter(
         (u) => !form.approverIds.includes(u.id)
       );
@@ -112,8 +99,6 @@ export default function Policies() {
       approverIds: [],
 
       finalApprovalMode: false,
-      finalApprovalTarget: 'employee_manager',
-      finalApprovalDepartment: '',
 
       documentRequirement: 'optional',
     });
@@ -125,11 +110,14 @@ export default function Policies() {
     setEditing(p);
 
     setForm({
-      leaveTypeName: p.leaveType.replace(/_/g, ' '),
+      leaveTypeName:
+        p.leaveType.replace(/_/g, ' '),
 
-      role: p.role || 'All Employees',
+      role:
+        p.role || 'All Employees',
 
-      isPaid: p.isPaid,
+      isPaid:
+        p.isPaid,
 
       designation:
         p.approvalRouting?.designation ||
@@ -144,13 +132,6 @@ export default function Policies() {
 
       finalApprovalMode:
         p.finalApprovalMode || false,
-
-      finalApprovalTarget:
-        p.finalApprovalTarget ||
-        'employee_manager',
-
-      finalApprovalDepartment:
-        p.finalApprovalDepartment || '',
 
       documentRequirement:
         p.documentRequirement ||
@@ -168,46 +149,23 @@ export default function Policies() {
       return;
     }
 
-    /*
-     * When Department is selected as the final route,
-     * Admin must choose a department.
-     */
-    if (
-      form.finalApprovalMode &&
-      form.finalApprovalTarget === 'department' &&
-      !form.finalApprovalDepartment
-    ) {
-      window.alert(
-        'Please select a department for final approval.'
-      );
-      return;
-    }
-
     const leaveTypeKey = form.leaveTypeName
       .trim()
       .toLowerCase()
       .replace(/\s+/g, '_');
 
     /*
-     * IMPORTANT:
+     * Current LeavePolicy type still contains
+     * minDaysNoticeRequired.
      *
-     * We preserve minDaysNoticeRequired internally
-     * because the current LeavePolicy TypeScript interface
-     * still requires it.
+     * We no longer show or edit it in the UI.
      *
-     * It is NOT displayed in this UI anymore.
-     *
-     * Existing policies keep their old value.
-     * New policies use 0.
+     * Existing policies keep their existing value.
+     * New policies get 0.
      */
     const preservedMinNotice =
       editing?.minDaysNoticeRequired ?? 0;
 
-    /*
-     * Preserve existing policy fields when editing.
-     * This helps avoid accidentally deleting fields that
-     * other parts of the project may already depend on.
-     */
     const policyPayload: ExtendedLeavePolicy = {
       ...(editing || {}),
 
@@ -215,29 +173,27 @@ export default function Policies() {
         ? editing.id
         : `lp${Date.now()}`,
 
-      leaveType: leaveTypeKey,
+      leaveType:
+        leaveTypeKey,
 
-      role: form.role,
+      role:
+        form.role,
 
-      requiresApprovalFrom: 'manager',
+      requiresApprovalFrom:
+        'manager',
 
       /*
-       * IMPORTANT:
+       * NORMAL MODE:
+       * Existing approval chain remains exactly the same.
        *
-       * Normal mode:
-       * Keep the current approval chain exactly as configured.
+       * FINAL MANAGER MODE:
+       * Fixed approvers are not stored here.
        *
-       * Final Approval mode:
-       * approverIds are intentionally empty at policy level.
+       * AppDataContext will dynamically use:
        *
-       * AppDataContext will later resolve the correct person
-       * dynamically:
+       * employee.managerId
        *
-       * Employee's Manager
-       *      -> employee.managerId
-       *
-       * Department
-       *      -> selected department's approval route
+       * as the one and only required approver.
        */
       approvalRouting: form.finalApprovalMode
         ? {
@@ -260,33 +216,12 @@ export default function Policies() {
               form.approverIds,
           },
 
-      /*
-       * This is NOT Admin-only approval.
-       *
-       * We explicitly disable the old Admin-only mode
-       * when saving through this new final-manager UI.
-       */
-      adminOnlyApproval: false,
-
-      /*
-       * New configuration.
-       */
       finalApprovalMode:
         form.finalApprovalMode,
 
-      finalApprovalTarget:
-        form.finalApprovalMode
-          ? form.finalApprovalTarget
-          : undefined,
-
-      finalApprovalDepartment:
-        form.finalApprovalMode &&
-        form.finalApprovalTarget === 'department'
-          ? form.finalApprovalDepartment
-          : undefined,
-
       requiresDocumentUpload:
-        form.documentRequirement === 'required',
+        form.documentRequirement ===
+        'required',
 
       documentRequirement:
         form.documentRequirement,
@@ -359,8 +294,7 @@ export default function Policies() {
             policy as ExtendedLeavePolicy;
 
           const approversList =
-            p.approvalRouting?.approverIds ||
-            [];
+            p.approvalRouting?.approverIds || [];
 
           return (
             <div
@@ -371,8 +305,7 @@ export default function Policies() {
               <div className="flex items-center justify-between gap-2 flex-wrap">
 
                 <h3 className="text-base font-semibold capitalize text-gray-900">
-                  {p.leaveType.replace(/_/g, ' ')}{' '}
-                  leave
+                  {p.leaveType.replace(/_/g, ' ')} leave
                 </h3>
 
                 {isAdmin && (
@@ -403,49 +336,37 @@ export default function Policies() {
                     {p.finalApprovalMode ? (
                       <>
                         <Badge variant="green">
-                          Final Decision
+                          Final Manager
                         </Badge>
 
-                        {p.finalApprovalTarget ===
-                        'department' ? (
-                          <Badge variant="blue">
-                            {p.finalApprovalDepartment ||
-                              'Department'}
-                          </Badge>
-                        ) : (
-                          <Badge variant="blue">
-                            Employee's Manager
-                          </Badge>
-                        )}
+                        <Badge variant="blue">
+                          Employee's Manager
+                        </Badge>
                       </>
                     ) : (
                       <>
-                        {approversList.length ===
-                          0 && (
+                        {approversList.length === 0 && (
                           <span className="text-xs text-gray-400">
                             Not set
                           </span>
                         )}
 
-                        {approversList.map(
-                          (id) => {
-                            const approver =
-                              users.find(
-                                (u) =>
-                                  u.id === id
-                              );
-
-                            return (
-                              <Badge
-                                key={id}
-                                variant="blue"
-                              >
-                                {approver?.fullName ||
-                                  'Unknown'}
-                              </Badge>
+                        {approversList.map((id) => {
+                          const approver =
+                            users.find(
+                              (u) => u.id === id
                             );
-                          }
-                        )}
+
+                          return (
+                            <Badge
+                              key={id}
+                              variant="blue"
+                            >
+                              {approver?.fullName ||
+                                'Unknown'}
+                            </Badge>
+                          );
+                        })}
                       </>
                     )}
 
@@ -461,8 +382,7 @@ export default function Policies() {
                   </span>
 
                   <span className="font-medium text-gray-900">
-                    {p.role ||
-                      'All Employees'}
+                    {p.role || 'All Employees'}
                   </span>
 
                 </div>
@@ -634,8 +554,7 @@ export default function Policies() {
                   setForm({
                     ...form,
                     isPaid:
-                      e.target.value ===
-                      'paid',
+                      e.target.value === 'paid',
                   })
                 }
                 className={inputCls}
@@ -653,7 +572,7 @@ export default function Policies() {
 
             </div>
 
-            {/* FINAL DECISION TOGGLE */}
+            {/* FINAL MANAGER TOGGLE */}
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
 
               <label className="flex cursor-pointer items-start gap-3">
@@ -663,39 +582,28 @@ export default function Policies() {
                   checked={
                     form.finalApprovalMode
                   }
-                  onChange={(e) => {
-                    const checked =
-                      e.target.checked;
-
+                  onChange={(e) =>
                     setForm({
                       ...form,
                       finalApprovalMode:
-                        checked,
-
-                      finalApprovalTarget:
-                        checked
-                          ? form.finalApprovalTarget
-                          : 'employee_manager',
-
-                      finalApprovalDepartment:
-                        checked
-                          ? form.finalApprovalDepartment
-                          : '',
-                    });
-                  }}
+                        e.target.checked,
+                    })
+                  }
                   className="mt-0.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                 />
 
                 <div>
 
                   <span className="block text-sm font-semibold text-gray-800">
-                    Manager makes the final decision
+                    Employee's Manager makes the final decision
                   </span>
 
                   <span className="mt-1 block text-xs leading-5 text-gray-500">
-                    Enable this when this leave
-                    should not go through the normal
-                    approval chain.
+                    Enable this when the employee's
+                    assigned Manager should make the
+                    final approve or reject decision.
+                    The request will not continue to
+                    another approver.
                   </span>
 
                 </div>
@@ -704,122 +612,25 @@ export default function Policies() {
 
             </div>
 
-            {/* FINAL APPROVAL SETTINGS */}
+            {/* FINAL MANAGER INFORMATION */}
             {form.finalApprovalMode && (
-              <div className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+              <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
 
-                <div>
+                <p className="text-sm font-medium text-blue-800">
+                  Employee's Assigned Manager
+                </p>
 
-                  <label className="mb-1.5 block text-sm font-semibold text-gray-700">
-                    Final Approval Goes To
-                  </label>
+                <p className="mt-1 text-xs leading-5 text-blue-700">
+                  The leave request will automatically
+                  go to the Manager assigned to that
+                  employee.
+                </p>
 
-                  <select
-                    value={
-                      form.finalApprovalTarget
-                    }
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-
-                        finalApprovalTarget:
-                          e.target
-                            .value as FinalApprovalTarget,
-
-                        finalApprovalDepartment:
-                          e.target.value ===
-                          'department'
-                            ? form.finalApprovalDepartment
-                            : '',
-                      })
-                    }
-                    className={inputCls}
-                  >
-
-                    <option value="employee_manager">
-                      Employee's Manager
-                    </option>
-
-                    <option value="department">
-                      Department
-                    </option>
-
-                  </select>
-
-                </div>
-
-                {/* EMPLOYEE MANAGER INFO */}
-                {form.finalApprovalTarget ===
-                  'employee_manager' && (
-                  <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5">
-
-                    <p className="text-xs leading-5 text-blue-700">
-                      The leave request will
-                      automatically go to the
-                      Manager assigned to that
-                      employee.
-                    </p>
-
-                    <p className="mt-1 text-xs leading-5 text-blue-600">
-                      Example: if Hammad reports to
-                      Manager A, Manager A's
-                      approve/reject decision will
-                      be final.
-                    </p>
-
-                  </div>
-                )}
-
-                {/* DEPARTMENT */}
-                {form.finalApprovalTarget ===
-                  'department' && (
-                  <div>
-
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                      Final Approval Department
-                    </label>
-
-                    <select
-                      value={
-                        form.finalApprovalDepartment
-                      }
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-
-                          finalApprovalDepartment:
-                            e.target.value,
-                        })
-                      }
-                      className={inputCls}
-                    >
-
-                      <option value="">
-                        Select Department
-                      </option>
-
-                      {departments.map(
-                        (department) => (
-                          <option
-                            key={department}
-                            value={department}
-                          >
-                            {department}
-                          </option>
-                        )
-                      )}
-
-                    </select>
-
-                    <p className="mt-1.5 text-xs leading-5 text-gray-500">
-                      Example: select Finance when
-                      this leave type must receive
-                      its final decision from the
-                      Finance department.
-                    </p>
-
-                  </div>
-                )}
+                <p className="mt-1 text-xs leading-5 text-blue-600">
+                  Example: if Hammad reports to Manager A,
+                  Manager A's approve or reject decision
+                  will be final.
+                </p>
 
               </div>
             )}
@@ -845,9 +656,7 @@ export default function Policies() {
                       </label>
 
                       <select
-                        value={
-                          form.designation
-                        }
+                        value={form.designation}
                         onChange={(e) =>
                           setForm({
                             ...form,
@@ -865,12 +674,8 @@ export default function Policies() {
                         {designations.map(
                           (designation) => (
                             <option
-                              key={
-                                designation
-                              }
-                              value={
-                                designation
-                              }
+                              key={designation}
+                              value={designation}
                             >
                               {designation}
                             </option>
@@ -889,9 +694,7 @@ export default function Policies() {
                       </label>
 
                       <select
-                        value={
-                          form.department
-                        }
+                        value={form.department}
                         onChange={(e) =>
                           setForm({
                             ...form,
@@ -909,12 +712,8 @@ export default function Policies() {
                         {departments.map(
                           (department) => (
                             <option
-                              key={
-                                department
-                              }
-                              value={
-                                department
-                              }
+                              key={department}
+                              value={department}
                             >
                               {department}
                             </option>
@@ -937,63 +736,50 @@ export default function Policies() {
                   </label>
 
                   {/* SELECTED APPROVERS */}
-                  {form.approverIds.length >
-                    0 && (
+                  {form.approverIds.length > 0 && (
                     <div className="mb-3 space-y-1.5">
 
-                      {form.approverIds.map(
-                        (id) => {
-                          const approver =
-                            users.find(
-                              (u) =>
-                                u.id === id
-                            );
-
-                          if (!approver) {
-                            return null;
-                          }
-
-                          return (
-                            <div
-                              key={id}
-                              className="flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-sm"
-                            >
-
-                              <span className="text-gray-800">
-                                {
-                                  approver.fullName
-                                }
-                              </span>
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setForm({
-                                    ...form,
-
-                                    approverIds:
-                                      form.approverIds.filter(
-                                        (
-                                          approverId
-                                        ) =>
-                                          approverId !==
-                                          id
-                                      ),
-                                  })
-                                }
-                                className="text-rose-500 hover:text-rose-700"
-                              >
-                                <Trash2
-                                  size={
-                                    14
-                                  }
-                                />
-                              </button>
-
-                            </div>
+                      {form.approverIds.map((id) => {
+                        const approver =
+                          users.find(
+                            (u) => u.id === id
                           );
+
+                        if (!approver) {
+                          return null;
                         }
-                      )}
+
+                        return (
+                          <div
+                            key={id}
+                            className="flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-sm"
+                          >
+
+                            <span className="text-gray-800">
+                              {approver.fullName}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setForm({
+                                  ...form,
+
+                                  approverIds:
+                                    form.approverIds.filter(
+                                      (approverId) =>
+                                        approverId !== id
+                                    ),
+                                })
+                              }
+                              className="text-rose-500 hover:text-rose-700"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+
+                          </div>
+                        );
+                      })}
 
                     </div>
                   )}
@@ -1042,11 +828,9 @@ export default function Policies() {
                       )
                     )}
 
-                    {availableApprovers.length ===
-                      0 && (
+                    {availableApprovers.length === 0 && (
                       <p className="py-2 text-center text-xs text-gray-400">
-                        No matching people for
-                        this filter.
+                        No matching people for this filter.
                       </p>
                     )}
 
@@ -1065,16 +849,13 @@ export default function Policies() {
               </label>
 
               <select
-                value={
-                  form.documentRequirement
-                }
+                value={form.documentRequirement}
                 onChange={(e) =>
                   setForm({
                     ...form,
 
                     documentRequirement:
-                      e.target
-                        .value as
+                      e.target.value as
                         | 'optional'
                         | 'required'
                         | 'not_required',
