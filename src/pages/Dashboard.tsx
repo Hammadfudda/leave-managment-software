@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -46,7 +47,31 @@ function StatCard({
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { leaveRequests, leaveBalances, users, auditLogs } = useAppData();
+  const {
+    leaveRequests,
+    leaveBalances,
+    users,
+    auditLogs,
+    refreshEmployees,
+    refreshLeaveRequests,
+  } = useAppData();
+
+  useEffect(() => {
+    if (!user) return;
+
+    const loadDashboard = async () => {
+      try {
+        await Promise.all([
+          refreshEmployees(),
+          refreshLeaveRequests(),
+        ]);
+      } catch (error) {
+        console.error('Dashboard data load failed:', error);
+      }
+    };
+
+    void loadDashboard();
+  }, [user?.id, refreshEmployees, refreshLeaveRequests]);
 
   if (!user) return null;
 
