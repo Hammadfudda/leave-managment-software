@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -56,6 +56,13 @@ export default function Dashboard() {
     refreshLeaveRequests,
   } = useAppData();
 
+  const [leaveSearch, setLeaveSearch] = useState('');
+  const [leaveDepartment, setLeaveDepartment] = useState('');
+  const [leaveTypeFilter, setLeaveTypeFilter] = useState('');
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
   useEffect(() => {
     if (!user) return;
 
@@ -78,18 +85,71 @@ export default function Dashboard() {
   const role: Role = user.role;
   const today = new Date().toISOString().split('T')[0];
 
+  const filteredLeaveRequests = useMemo(() => {
+    const q = leaveSearch.trim().toLowerCase();
+
+    return leaveRequests.filter((leave) => {
+      const employee = users.find((u) => u.id === leave.employeeId);
+
+      const matchesSearch =
+        !q ||
+        leave.employeeName.toLowerCase().includes(q) ||
+        (employee?.employeeId || '').toLowerCase().includes(q) ||
+        (leave.department || '').toLowerCase().includes(q) ||
+        leave.leaveType.toLowerCase().includes(q);
+
+      const matchesDepartment =
+        !leaveDepartment ||
+        leave.department === leaveDepartment;
+
+      const matchesType =
+        !leaveTypeFilter ||
+        leave.leaveType === leaveTypeFilter;
+
+      const matchesStatus =
+        !leaveStatusFilter ||
+        leave.status === leaveStatusFilter;
+
+      const matchesDateFrom =
+        !dateFrom ||
+        leave.endDate >= dateFrom;
+
+      const matchesDateTo =
+        !dateTo ||
+        leave.startDate <= dateTo;
+
+      return (
+        matchesSearch &&
+        matchesDepartment &&
+        matchesType &&
+        matchesStatus &&
+        matchesDateFrom &&
+        matchesDateTo
+      );
+    });
+  }, [
+    leaveRequests,
+    users,
+    leaveSearch,
+    leaveDepartment,
+    leaveTypeFilter,
+    leaveStatusFilter,
+    dateFrom,
+    dateTo,
+  ]);
+
   if (role === 'admin') {
     const activeEmployees = users.filter((u) => u.role === 'employee' && u.status === 'active');
     const activeManagers = users.filter((u) => u.role === 'manager' && u.status === 'active');
-    const pendingRequests = leaveRequests.filter((l) => l.status === 'pending');
-    const approvedRequests = leaveRequests.filter((l) => l.status === 'approved');
-    const rejectedRequests = leaveRequests.filter((l) => l.status === 'rejected');
+    const pendingRequests = filteredLeaveRequests.filter((l) => l.status === 'pending');
+    const approvedRequests = filteredLeaveRequests.filter((l) => l.status === 'approved');
+    const rejectedRequests = filteredLeaveRequests.filter((l) => l.status === 'rejected');
     const onLeaveToday = approvedRequests.filter((l) => l.startDate <= today && l.endDate >= today);
     const upcomingLeave = approvedRequests
       .filter((l) => l.startDate > today)
       .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 
-    const recentRequests = [...leaveRequests]
+    const recentRequests = [...filteredLeaveRequests]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 7);
 
@@ -176,9 +236,95 @@ export default function Dashboard() {
           <StatCard
             icon={Activity}
             label="Total Leave Requests"
-            value={leaveRequests.length}
+            value={filteredLeaveRequests.length}
             tone="bg-sky-50 text-sky-600"
           />
+        </div>
+
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={leaveSearch}
+              onChange={(e) => setLeaveSearch(e.target.value)}
+              placeholder="Search employee, ID, department or leave type"
+              className="min-w-[240px] flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+
+            <select
+              value={leaveDepartment}
+              onChange={(e) => setLeaveDepartment(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+            >
+              <option value="">All Departments</option>
+              {Array.from(
+                new Set(
+                  users
+                    .filter((u) => u.role !== 'admin' && u.department)
+                    .map((u) => u.department)
+                )
+              ).map((department) => (
+                <option key={department} value={department}>
+                  {department}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={leaveTypeFilter}
+              onChange={(e) => setLeaveTypeFilter(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+            >
+              <option value="">All Leave Types</option>
+              {Array.from(new Set(leaveRequests.map((l) => l.leaveType))).map((type) => (
+                <option key={type} value={type}>
+                  {type.replace(/_/g, ' ')}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={leaveStatusFilter}
+              onChange={(e) => setLeaveStatusFilter(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+            >
+              <option value="">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700"
+              title="From date"
+            />
+
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700"
+              title="To date"
+            />
+
+            <button
+              type="button"
+              onClick={() => {
+                setLeaveSearch('');
+                setLeaveDepartment('');
+                setLeaveTypeFilter('');
+                setLeaveStatusFilter('');
+                setDateFrom('');
+                setDateTo('');
+              }}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+            >
+              Clear Filters
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
@@ -189,7 +335,7 @@ export default function Dashboard() {
                 <p className="mt-1 text-xs text-gray-400">Latest requests across the company.</p>
               </div>
               <span className="rounded-lg bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-500">
-                {leaveRequests.length} total
+                {filteredLeaveRequests.length} total
               </span>
             </div>
 
