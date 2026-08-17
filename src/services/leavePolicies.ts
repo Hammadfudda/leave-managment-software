@@ -23,8 +23,6 @@ interface BackendLeavePolicy {
 
   isPaid?: boolean;
 
-  minDaysNoticeRequired?: number;
-
   documentRequirement?:
     | 'required'
     | 'optional'
@@ -35,9 +33,17 @@ interface BackendLeavePolicy {
   finalApprovalMode?: boolean;
 
   approvalRouting?: {
-    designation?: string | null;
-    department?: string | null;
-    grade?: string | null;
+    designation?:
+      string | null;
+
+    department?:
+      string | null;
+
+    /*
+     * Grade MongoDB ID
+     */
+    grade?:
+      string | null;
 
     approverIds?:
       BackendApprover[];
@@ -45,7 +51,8 @@ interface BackendLeavePolicy {
 }
 
 function getApproverId(
-  approver: BackendApprover
+  approver:
+    BackendApprover
 ): string {
   if (
     typeof approver ===
@@ -54,11 +61,15 @@ function getApproverId(
     return approver;
   }
 
-  return approver._id || '';
+  return (
+    approver._id ||
+    ''
+  );
 }
 
 export function mapLeavePolicy(
-  policy: BackendLeavePolicy
+  policy:
+    BackendLeavePolicy
 ): LeavePolicy {
   return {
     id:
@@ -78,24 +89,29 @@ export function mapLeavePolicy(
 
     approvalRouting: {
       designation:
-        policy.approvalRouting
+        policy
+          .approvalRouting
           ?.designation ||
         undefined,
 
       department:
-        policy.approvalRouting
+        policy
+          .approvalRouting
           ?.department ||
         undefined,
 
       grade:
-        policy.approvalRouting
+        policy
+          .approvalRouting
           ?.grade ||
         undefined,
 
       approverIds:
         (
-          policy.approvalRouting
-            ?.approverIds || []
+          policy
+            .approvalRouting
+            ?.approverIds ||
+          []
         )
           .map(
             getApproverId
@@ -121,8 +137,12 @@ export function mapLeavePolicy(
         policy.finalApprovalMode
       ),
 
+    /*
+     * Field retained only because
+     * current TypeScript type has it.
+     * UI/backend no longer use notice.
+     */
     minDaysNoticeRequired:
-      policy.minDaysNoticeRequired ??
       0,
 
     isPaid:
@@ -132,7 +152,8 @@ export function mapLeavePolicy(
 }
 
 function toBackendPayload(
-  policy: LeavePolicy
+  policy:
+    LeavePolicy
 ) {
   return {
     leaveType:
@@ -147,16 +168,17 @@ function toBackendPayload(
         policy.isPaid
       ),
 
+    /*
+     * Notice removed.
+     */
     minDaysNoticeRequired:
-      Number(
-        policy.minDaysNoticeRequired ||
-          0
-      ),
+      0,
 
     documentRequirement:
       policy.documentRequirement ||
       (
-        policy.requiresDocumentUpload
+        policy
+          .requiresDocumentUpload
           ? 'required'
           : 'optional'
       ),
@@ -173,22 +195,29 @@ function toBackendPayload(
 
     approvalRouting: {
       designation:
-        policy.approvalRouting
+        policy
+          .approvalRouting
           ?.designation ||
         null,
 
       department:
-        policy.approvalRouting
+        policy
+          .approvalRouting
           ?.department ||
         null,
 
+      /*
+       * Grade ID
+       */
       grade:
-        policy.approvalRouting
+        policy
+          .approvalRouting
           ?.grade ||
         null,
 
       approverIds:
-        policy.approvalRouting
+        policy
+          .approvalRouting
           ?.approverIds ||
         [],
     },
@@ -209,7 +238,8 @@ Promise<LeavePolicy[]> {
     );
 
   const rows =
-    response.data?.data ||
+    response.data
+      ?.data ||
     [];
 
   return rows.map(
@@ -218,7 +248,8 @@ Promise<LeavePolicy[]> {
 }
 
 export async function createLeavePolicy(
-  policy: LeavePolicy
+  policy:
+    LeavePolicy
 ): Promise<LeavePolicy> {
   const response =
     await api.post(
@@ -234,11 +265,13 @@ export async function createLeavePolicy(
 }
 
 export async function updateLeavePolicy(
-  policy: LeavePolicy
+  policy:
+    LeavePolicy
 ): Promise<LeavePolicy> {
   const response =
     await api.patch(
       `/leave-policies/${policy.id}`,
+
       toBackendPayload(
         policy
       )
@@ -246,5 +279,13 @@ export async function updateLeavePolicy(
 
   return mapLeavePolicy(
     response.data.data
+  );
+}
+
+export async function deleteLeavePolicy(
+  policyId: string
+): Promise<void> {
+  await api.delete(
+    `/leave-policies/${policyId}`
   );
 }
