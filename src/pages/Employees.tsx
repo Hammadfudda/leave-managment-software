@@ -1,63 +1,182 @@
-import { useState } from 'react';
-import { useAppData, getReportingChain } from '../context/AppDataContext';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from 'react';
+
+import {
+  Eye,
+  Filter,
+  Plus,
+  Search,
+  Trash2,
+  UserPlus,
+} from 'lucide-react';
+
+import {
+  getReportingChain,
+  useAppData,
+} from '../context/AppDataContext';
+
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
-import { UserPlus, Search, Eye, Filter, Plus } from 'lucide-react';
-import { formatDate } from '../utils/formatDate';
-import type { User, Role } from '../types';
+import Popup from '../components/ui/Popup';
+
+import {
+  exportEmployeesCsv,
+  importEmployeesCsv,
+} from '../services/employees';
+
+import {
+  getApiErrorMessage,
+} from '../services/api';
+
+import {
+  formatDate,
+} from '../utils/formatDate';
+
+import type {
+  Role,
+  User,
+} from '../types';
+
+type PopupType =
+  | 'success'
+  | 'error'
+  | 'warning'
+  | 'info';
+
+interface PopupState {
+  open: boolean;
+  type: PopupType;
+  title: string;
+  message: string;
+}
 
 const roleLabel: Record<Role, string> = {
-  admin: 'Admin', manager: 'Manager', employee: 'Employee',
+  admin: 'Admin',
+  manager: 'Manager',
+  employee: 'Employee',
 };
 
 const emptyForm = {
-  fullName: '', email: '', employeeId: '', cnic: '', phone: '',
-  role: 'employee' as Role, designation: '', grade: 'Grade C', department: '',
-  dateOfJoining: '', status: 'active' as 'active' | 'inactive', managerId: '', canApproveOtherDepartments: false,
+  fullName: '',
+  email: '',
+  employeeId: '',
+  cnic: '',
+  phone: '',
+  role: 'employee' as Role,
+  designation: '',
+  grade: '',
+  department: '',
+  dateOfJoining: '',
+  status: 'active' as 'active' | 'inactive',
+  managerId: '',
+  canApproveOtherDepartments: false,
 };
 
 export default function Employees() {
   const {
-    users, grades, designations, departments, addUser, updateUser,
-    addDesignation, addDepartment, getUserById,
+    users,
+    grades,
+    designations,
+    departments,
+    employeesLoading,
+    refreshEmployees,
+    refreshLookups,
+    addUser,
+    updateUser,
+    removeUser,
+    addDesignation,
+    addDepartment,
+    getUserById,
   } = useAppData();
 
   const [query, setQuery] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
+
   const [showAdd, setShowAdd] = useState(false);
-  const [importing, setImporting] = useState(false);
   const [viewUser, setViewUser] = useState<User | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<User | null>(null);
+
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
   const [form, setForm] = useState(emptyForm);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [addNewField, setAddNewField] = useState<'designation' | 'department' | null>(null);
+
+  const [errors, setErrors] =
+    useState<Record<string, string>>({});
+
+  const [addNewField, setAddNewField] =
+    useState<'designation' | 'department' | null>(null);
+
   const [newItemName, setNewItemName] = useState('');
 
-  const filtered = users.filter((u) => {
-    const matchesQuery =
-      u.fullName.toLowerCase().includes(query.toLowerCase()) ||
-      u.email.toLowerCase().includes(query.toLowerCase()) ||
-      u.employeeId.toLowerCase().includes(query.toLowerCase());
-    const matchesDept = deptFilter ? u.department === deptFilter : true;
-    return matchesQuery && matchesDept;
+  const [popup, setPopup] = useState<PopupState>({
+    open: false,
+    type: 'info',
+    title: '',
+    message: '',
   });
 
-  const validate = () => {
-    const e: Record<string, string> = {};
-    if (!form.fullName.trim()) e.fullName = 'Full name is required';
-    if (!form.email.trim()) e.email = 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email format';
-    if (!form.employeeId.trim()) e.employeeId = 'Employee ID is required';
-    if (!form.cnic.trim()) e.cnic = 'CNIC is required';
-    else if (!/^\d{5}-\d{7}-\d$/.test(form.cnic)) e.cnic = 'Format: 12345-1234567-1';
-    if (!form.phone.trim()) e.phone = 'Phone is required';
-    if (!form.designation) e.designation = 'Designation is required';
-    if (!form.department) e.department = 'Department is required';
-    if (!form.dateOfJoining) e.dateOfJoining = 'Date of joining is required';
-    setErrors(e);
-    return Object.keys(e).length === 0;
+  const showPopup = (
+    type: PopupType,
+    title: string,
+    message: string
+  ) => {
+    setPopup({
+      open: true,
+      type,
+      title,
+      message,
+    });
   };
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        await Promise.all([
+          refreshEmployees(),
+          refreshLookups(),
+        ]);
+      } catch (error) {
+        showPopup(
+          'error',
+          'Unable to Load Data',
+          getApiErrorMessage(
+            error,
+            'Employee data could not be loaded.'
+          )
+        );
+      }
+    };
+
+    void load();
+  }, [refreshEmployees, refreshLookups]);
+
+  const filtered = useMemo(() => {
+    const search = query.trim().toLowerCase();
+
+    return users.filter((user) => {
+      const matchesSearch =
+        !search ||
+        user.fullName.toLowerCase().includes(search) ||
+        user.email.toLowerCase().includes(search) ||
+        user.employeeId.toLowerCase().includes(search);
+
+      const matchesDepartment =
+        !deptFilter ||
+        user.department === deptFilter;
+
+      return matchesSearch && matchesDepartment;
+    });
+  }, [users, query, deptFilter]);
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -65,366 +184,985 @@ export default function Employees() {
     setEditingUser(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const validate = () => {
+    const next: Record<string, string> = {};
+
+    if (!form.fullName.trim()) {
+      next.fullName = 'Full name is required';
+    }
+
+    if (!form.email.trim()) {
+      next.email = 'Email is required';
+    }
+
+    if (!form.employeeId.trim()) {
+      next.employeeId = 'Employee ID is required';
+    }
+
+    if (!form.cnic.trim()) {
+      next.cnic = 'CNIC is required';
+    } else if (
+      !/^\d{5}-\d{7}-\d$/.test(form.cnic)
+    ) {
+      next.cnic = 'Format: 12345-1234567-1';
+    }
+
+    if (!form.phone.trim()) {
+      next.phone = 'Phone is required';
+    }
+
+    if (!form.designation) {
+      next.designation = 'Designation is required';
+    }
+
+    if (!form.grade) {
+      next.grade = 'Grade is required';
+    }
+
+    if (!form.department) {
+      next.department = 'Department is required';
+    }
+
+    if (!form.dateOfJoining) {
+      next.dateOfJoining = 'Date of joining is required';
+    }
+
+    setErrors(next);
+
+    if (Object.keys(next).length > 0) {
+      showPopup(
+        'warning',
+        'Missing Information',
+        'Please complete all required fields correctly.'
+      );
+
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSubmit = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
     if (!validate()) return;
 
-    const payload: User = editingUser
-      ? { ...editingUser, fullName: form.fullName.trim(), email: form.email.trim(), employeeId: form.employeeId.trim(), cnic: form.cnic.trim(), phone: form.phone.trim(), role: form.role, designation: form.designation, grade: form.grade, department: form.department, dateOfJoining: form.dateOfJoining, status: form.status as User['status'], managerId: form.managerId || undefined, canApproveOtherDepartments: form.canApproveOtherDepartments }
-      : {
-          id: `u${Date.now()}`,
-          fullName: form.fullName.trim(),
-          email: form.email.trim(),
-          employeeId: form.employeeId.trim(),
-          cnic: form.cnic.trim(),
-          phone: form.phone.trim(),
-          role: form.role,
-          designation: form.designation,
-          grade: form.grade,
-          department: form.department,
-          dateOfJoining: form.dateOfJoining,
-          status: form.status as User['status'],
-          managerId: form.managerId || undefined,
-          canApproveOtherDepartments: form.canApproveOtherDepartments,
-        };
+    setSaving(true);
 
-    if (editingUser) updateUser(payload);
-    else addUser(payload);
-    setShowAdd(false);
-    resetForm();
-  };
+    try {
+      const payload: User = {
+        ...(editingUser || {
+          id: '',
+        }),
 
-  const handleAddNewItem = () => {
-    if (!newItemName.trim() || !addNewField) return;
-    if (addNewField === 'designation') {
-      addDesignation(newItemName.trim());
-      setForm({ ...form, designation: newItemName.trim() });
-    } else {
-      addDepartment(newItemName.trim());
-      setForm({ ...form, department: newItemName.trim() });
+        fullName: form.fullName.trim(),
+        email: form.email.trim().toLowerCase(),
+        employeeId: form.employeeId.trim(),
+        cnic: form.cnic.trim(),
+        phone: form.phone.trim(),
+
+        role: form.role,
+
+        designation: form.designation,
+        grade: form.grade,
+        department: form.department,
+
+        dateOfJoining: form.dateOfJoining,
+
+        status: form.status,
+
+        managerId:
+          form.managerId || undefined,
+
+        canApproveOtherDepartments:
+          form.canApproveOtherDepartments,
+      } as User;
+
+      if (editingUser) {
+        await updateUser(payload);
+
+        showPopup(
+          'success',
+          'Employee Updated',
+          `${payload.fullName} has been updated successfully.`
+        );
+      } else {
+        await addUser(payload);
+
+        showPopup(
+          'success',
+          'Employee Created',
+          `${payload.fullName} has been created successfully.`
+        );
+      }
+
+      setShowAdd(false);
+      resetForm();
+
+      await refreshEmployees();
+    } catch (error) {
+      showPopup(
+        'error',
+        editingUser ? 'Update Failed' : 'Create Failed',
+        getApiErrorMessage(
+          error,
+          'Unable to save employee.'
+        )
+      );
+    } finally {
+      setSaving(false);
     }
-    setAddNewField(null);
-    setNewItemName('');
   };
 
-  const handleExport = () => {
-    const header = ['fullName', 'email', 'employeeId', 'cnic', 'phone', 'role', 'designation', 'grade', 'department', 'dateOfJoining', 'status'];
-    const rows = users.map((u) => [u.fullName, u.email, u.employeeId, u.cnic, u.phone, u.role, u.designation, u.grade, u.department, u.dateOfJoining, u.status]);
-    const csv = [header, ...rows].map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'employees.csv';
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleEdit = (user: User) => {
+    setEditingUser(user);
 
-  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setImporting(true);
-    const text = await file.text();
-    const lines = text.trim().split(/\r?\n/).slice(1);
-    lines.forEach((line) => {
-      const [fullName, email, employeeId, cnic, phone, role, designation, grade, department, dateOfJoining, status] = line.split(',').map((value) => value.replace(/^"|"$/g, ''));
-      if (!fullName || !email || !employeeId) return;
-      addUser({ id: `u${Date.now()}-${Math.random()}`, fullName, email, employeeId, cnic, phone, role: role as User['role'], designation, grade, department, dateOfJoining, status: status as User['status'], managerId: undefined, canApproveOtherDepartments: false });
+    setForm({
+      fullName: user.fullName,
+      email: user.email,
+      employeeId: user.employeeId,
+      cnic: user.cnic,
+      phone: user.phone || '',
+      role: user.role,
+      designation: user.designation,
+      grade: user.grade,
+      department: user.department,
+      dateOfJoining: user.dateOfJoining,
+      status: user.status,
+      managerId: user.managerId || '',
+      canApproveOtherDepartments:
+        user.canApproveOtherDepartments || false,
     });
-    setImporting(false);
-    event.target.value = '';
+
+    setShowAdd(true);
   };
 
-  const inputCls = 'w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20';
-  const errorCls = 'mt-1 text-xs text-rose-600';
+  const handleRemove = async () => {
+    if (!removeTarget) return;
+
+    setDeleting(true);
+
+    try {
+      await removeUser(removeTarget.id);
+
+      showPopup(
+        'success',
+        'Employee Removed',
+        `${removeTarget.fullName} has been removed successfully.`
+      );
+
+      setRemoveTarget(null);
+
+      await refreshEmployees();
+    } catch (error) {
+      showPopup(
+        'error',
+        'Remove Failed',
+        getApiErrorMessage(
+          error,
+          'Unable to remove employee.'
+        )
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleAddNewItem = async () => {
+    const name = newItemName.trim();
+
+    if (!name || !addNewField) {
+      showPopup(
+        'warning',
+        'Name Required',
+        'Please enter a name.'
+      );
+      return;
+    }
+
+    try {
+      if (addNewField === 'designation') {
+        await addDesignation(name);
+
+        setForm((previous) => ({
+          ...previous,
+          designation: name,
+        }));
+      } else {
+        await addDepartment(name);
+
+        setForm((previous) => ({
+          ...previous,
+          department: name,
+        }));
+      }
+
+      setAddNewField(null);
+      setNewItemName('');
+
+      showPopup(
+        'success',
+        'Added Successfully',
+        `${name} has been added.`
+      );
+    } catch (error) {
+      showPopup(
+        'error',
+        'Unable to Add',
+        getApiErrorMessage(error)
+      );
+    }
+  };
+
+  const handleImport = async (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    setImporting(true);
+
+    try {
+      await importEmployeesCsv(file);
+      await refreshEmployees();
+
+      showPopup(
+        'success',
+        'Import Complete',
+        'Employees imported successfully.'
+      );
+    } catch (error) {
+      showPopup(
+        'error',
+        'Import Failed',
+        getApiErrorMessage(error)
+      );
+    } finally {
+      setImporting(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+
+    try {
+      await exportEmployeesCsv();
+
+      showPopup(
+        'success',
+        'Export Complete',
+        'Employee CSV exported successfully.'
+      );
+    } catch (error) {
+      showPopup(
+        'error',
+        'Export Failed',
+        getApiErrorMessage(error)
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const inputCls =
+    'w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20';
 
   return (
     <div className="space-y-6">
+      <Popup
+        open={popup.open}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+        onClose={() =>
+          setPopup((previous) => ({
+            ...previous,
+            open: false,
+          }))
+        }
+      />
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Employees</h1>
-          <p className="mt-1 text-sm text-gray-500">Manage all employee records and create new accounts.</p>
+          <h1 className="text-2xl font-semibold text-gray-900">
+            Employees
+          </h1>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Manage employee records and organization accounts.
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button onClick={handleExport} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">Export CSV</button>
-          <label className="cursor-pointer rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
-            {importing ? 'Importing…' : 'Import CSV'}
-            <input type="file" accept=".csv" className="hidden" onChange={handleImport} />
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void handleExport()}
+            disabled={exporting}
+            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700"
+          >
+            {exporting ? 'Exporting...' : 'Export CSV'}
+          </button>
+
+          <label className="cursor-pointer rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700">
+            {importing ? 'Importing...' : 'Import CSV'}
+
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              disabled={importing}
+              onChange={handleImport}
+            />
           </label>
-          <Button onClick={() => { resetForm(); setShowAdd(true); }}><UserPlus size={16} /> Create Employee</Button>
+
+          <Button
+            onClick={() => {
+              resetForm();
+
+              setForm({
+                ...emptyForm,
+                grade: grades[0]?.name || '',
+              });
+
+              setShowAdd(true);
+            }}
+          >
+            <UserPlus size={16} />
+            Create Employee
+          </Button>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap gap-3">
         <div className="relative max-w-sm flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+          />
+
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name, email, or employee ID"
-            className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            placeholder="Search employees"
+            className={`${inputCls} pl-9`}
           />
         </div>
-        <div className="relative flex items-center gap-2">
-          <Filter size={15} className="text-gray-400" />
+
+        <div className="flex items-center gap-2">
+          <Filter size={15} />
+
           <select
             value={deptFilter}
             onChange={(e) => setDeptFilter(e.target.value)}
-            className="rounded-lg border border-gray-200 bg-white py-2 pl-3 pr-8 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            className={inputCls}
           >
-            <option value="">All Departments</option>
-            {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+            <option value="">
+              All Departments
+            </option>
+
+            {departments.map((department) => (
+              <option
+                key={department}
+                value={department}
+              >
+                {department}
+              </option>
+            ))}
           </select>
         </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50/60 text-left text-xs uppercase tracking-wide text-gray-400">
-              <tr>
-                <th className="px-5 py-3 font-medium">Emp ID</th>
-                <th className="px-5 py-3 font-medium">Name</th>
-                <th className="px-5 py-3 font-medium">Designation</th>
-                <th className="px-5 py-3 font-medium">Grade</th>
-                <th className="px-5 py-3 font-medium">Dept</th>
-                <th className="px-5 py-3 font-medium">Role</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3 font-medium">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map((u) => (
-                <tr key={u.id} className="hover:bg-gray-50/50 animate-fade-in">
-                  <td className="px-5 py-3 font-mono text-xs text-gray-500">{u.employeeId}</td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">{u.fullName.charAt(0)}</div>
-                      <div>
-                        <p className="font-medium text-gray-900">{u.fullName}</p>
-                        <p className="text-xs text-gray-500">{u.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3 text-gray-600">{u.designation}</td>
-                  <td className="px-5 py-3"><Badge variant="teal">{u.grade}</Badge></td>
-                  <td className="px-5 py-3 text-gray-600">{u.department}</td>
-                  <td className="px-5 py-3 text-gray-600">{roleLabel[u.role]}</td>
-                  <td className="px-5 py-3">
-                    {u.status === 'active' ? <Badge variant="green">Active</Badge> : <Badge variant="gray">Inactive</Badge>}
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex gap-3">
-                      <button onClick={() => setViewUser(u)} className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700">
-                        <Eye size={14} /> View
-                      </button>
-                      <button onClick={() => { setEditingUser(u); setForm({ fullName: u.fullName, email: u.email, employeeId: u.employeeId, cnic: u.cnic, phone: u.phone, role: u.role, designation: u.designation, grade: u.grade, department: u.department, dateOfJoining: u.dateOfJoining, status: u.status, managerId: u.managerId || '', canApproveOtherDepartments: u.canApproveOtherDepartments || false }); setShowAdd(true); }} className="text-sm font-medium text-amber-600 hover:text-amber-700">
-                        Edit
-                      </button>
-                    </div>
-                  </td>
+        {employeesLoading ? (
+          <div className="p-10 text-center text-sm text-gray-500">
+            Loading employees...
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left text-xs uppercase text-gray-400">
+                <tr>
+                  <th className="px-5 py-3">Emp ID</th>
+                  <th className="px-5 py-3">Name</th>
+                  <th className="px-5 py-3">Designation</th>
+                  <th className="px-5 py-3">Grade</th>
+                  <th className="px-5 py-3">Department</th>
+                  <th className="px-5 py-3">Role</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+
+              <tbody className="divide-y divide-gray-50">
+                {filtered.map((user) => (
+                  <tr key={user.id}>
+                    <td className="px-5 py-3 font-mono">
+                      {user.employeeId}
+                    </td>
+
+                    <td className="px-5 py-3">
+                      <p className="font-medium text-gray-900">
+                        {user.fullName}
+                      </p>
+
+                      <p className="text-xs text-gray-500">
+                        {user.email}
+                      </p>
+                    </td>
+
+                    <td className="px-5 py-3">
+                      {user.designation}
+                    </td>
+
+                    <td className="px-5 py-3">
+                      <Badge variant="teal">
+                        {user.grade || '—'}
+                      </Badge>
+                    </td>
+
+                    <td className="px-5 py-3">
+                      {user.department}
+                    </td>
+
+                    <td className="px-5 py-3">
+                      {roleLabel[user.role]}
+                    </td>
+
+                    <td className="px-5 py-3">
+                      <Badge
+                        variant={
+                          user.status === 'active'
+                            ? 'green'
+                            : 'gray'
+                        }
+                      >
+                        {user.status === 'active'
+                          ? 'Active'
+                          : 'Inactive'}
+                      </Badge>
+                    </td>
+
+                    <td className="px-5 py-3">
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setViewUser(user)}
+                          className="flex items-center gap-1 text-blue-600"
+                        >
+                          <Eye size={14} />
+                          View
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(user)}
+                          className="text-amber-600"
+                        >
+                          Edit
+                        </button>
+
+                        {user.role !== 'admin' && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRemoveTarget(user)
+                            }
+                            className="flex items-center gap-1 text-rose-600"
+                          >
+                            <Trash2 size={14} />
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+
+                {filtered.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={8}
+                      className="px-5 py-10 text-center text-gray-400"
+                    >
+                      No employees found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <Modal
         open={showAdd}
-        onClose={() => { setShowAdd(false); setErrors({}); setAddNewField(null); resetForm(); }}
-        title={editingUser ? 'Edit Employee' : 'Create Employee'}
+        onClose={() => {
+          if (!saving) {
+            setShowAdd(false);
+            resetForm();
+          }
+        }}
+        title={
+          editingUser
+            ? 'Edit Employee'
+            : 'Create Employee'
+        }
         size="lg"
         footer={
           <>
-            <Button variant="secondary" onClick={() => { setShowAdd(false); setErrors({}); resetForm(); }}>Cancel</Button>
-            <Button type="submit" form="create-emp-form">{editingUser ? 'Save Changes' : 'Create Employee'}</Button>
+            <Button
+              variant="secondary"
+              disabled={saving}
+              onClick={() => {
+                setShowAdd(false);
+                resetForm();
+              }}
+            >
+              Cancel
+            </Button>
+
+            <Button
+              type="submit"
+              form="employee-form"
+              disabled={saving}
+            >
+              {saving
+                ? 'Saving...'
+                : editingUser
+                  ? 'Save Changes'
+                  : 'Create Employee'}
+            </Button>
           </>
         }
       >
-        <form id="create-emp-form" onSubmit={handleSubmit} className="space-y-5">
-          <div className="rounded-lg bg-blue-50/60 px-4 py-3 text-xs text-blue-700">
-            Fill in all employee details. Fields marked with <span className="font-semibold">*</span> are required.
-          </div>
+        <form
+          id="employee-form"
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+        >
+          <FormField
+            label="Full Name"
+            error={errors.fullName}
+          >
+            <input
+              value={form.fullName}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  fullName: e.target.value,
+                })
+              }
+              className={inputCls}
+            />
+          </FormField>
 
-          <div>
-            <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Personal Information</h4>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Full name <span className="text-rose-500">*</span></label>
-                <input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} placeholder="e.g. John Doe" className={inputCls} />
-                {errors.fullName && <p className={errorCls}>{errors.fullName}</p>}
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">CNIC <span className="text-rose-500">*</span></label>
-                <input value={form.cnic} onChange={(e) => setForm({ ...form, cnic: e.target.value })} placeholder="12345-1234567-1" className={`${inputCls} font-mono`} />
-                {errors.cnic && <p className={errorCls}>{errors.cnic}</p>}
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Phone <span className="text-rose-500">*</span></label>
-                <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+92-3xx-xxxxxxx" className={inputCls} />
-                {errors.phone && <p className={errorCls}>{errors.phone}</p>}
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Email <span className="text-rose-500">*</span></label>
-                <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="name@nutrilov.com" className={inputCls} />
-                {errors.email && <p className={errorCls}>{errors.email}</p>}
-              </div>
-            </div>
-          </div>
+          <FormField
+            label="Email"
+            error={errors.email}
+          >
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  email: e.target.value,
+                })
+              }
+              className={inputCls}
+            />
+          </FormField>
 
-          <div>
-            <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Employment Information</h4>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Employee ID <span className="text-rose-500">*</span></label>
-                <input value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} placeholder="e.g. NDD-009" className={`${inputCls} font-mono`} />
-                {errors.employeeId && <p className={errorCls}>{errors.employeeId}</p>}
-              </div>
-              <div>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">Designation <span className="text-rose-500">*</span></label>
-                  <button type="button" onClick={() => setAddNewField('designation')} className="inline-flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-700"><Plus size={12} /> Add new</button>
-                </div>
-                <select value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} className={inputCls}>
-                  <option value="">Select designation</option>
-                  {designations.map((d) => <option key={d} value={d}>{d}</option>)}
-                </select>
-                {errors.designation && <p className={errorCls}>{errors.designation}</p>}
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Grade</label>
-                <select value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })} className={inputCls}>
-                  {grades.map((g) => <option key={g.id} value={g.name}>{g.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">Department <span className="text-rose-500">*</span></label>
-                  <button type="button" onClick={() => setAddNewField('department')} className="inline-flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-700"><Plus size={12} /> Add new</button>
-                </div>
-                <select value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} className={inputCls}>
-                  <option value="">Select department</option>
-                  {departments.map((d) => <option key={d} value={d}>{d}</option>)}
-                </select>
-                {errors.department && <p className={errorCls}>{errors.department}</p>}
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Portal Access</label>
-                <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })} className={inputCls}>
-                  <option value="employee">Employee</option>
-                  <option value="manager">Manager</option>
-                </select>
-                <p className="mt-1 text-xs text-gray-400">Manager access shows the approvals dashboard and team leave calendar.</p>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Date of joining <span className="text-rose-500">*</span></label>
-                <input type="date" value={form.dateOfJoining} onChange={(e) => setForm({ ...form, dateOfJoining: e.target.value })} className={inputCls} />
-                {errors.dateOfJoining && <p className={errorCls}>{errors.dateOfJoining}</p>}
-              </div>
-              {editingUser && (
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Status</label>
-                  <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as 'active' | 'inactive' })} className={inputCls}>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </div>
-              )}
-              {form.role !== 'admin' && (
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Manager</label>
-                  <select value={form.managerId} onChange={(e) => setForm({ ...form, managerId: e.target.value })} className={inputCls}>
-                    <option value="">No manager</option>
-                    {users.filter((u) => u.role === 'manager' || u.role === 'admin').map((u) => (
-                      <option key={u.id} value={u.id}>{u.fullName} — {u.designation}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {form.role === 'manager' && (
-                <div className="sm:col-span-2">
-                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.canApproveOtherDepartments || false}
-                      onChange={(e) => setForm({ ...form, canApproveOtherDepartments: e.target.checked })}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    Can approve leaves from other departments too
-                  </label>
-                  <p className="mt-1 text-xs text-gray-400">
-                    If off, this manager will only appear as an eligible approver when setting up Leave Policies for their own department ({form.department || 'select a department first'}).
-                  </p>
-                </div>
-              )}
+          <FormField
+            label="CNIC"
+            error={errors.cnic}
+          >
+            <input
+              value={form.cnic}
+              disabled={Boolean(editingUser)}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  cnic: e.target.value,
+                })
+              }
+              placeholder="12345-1234567-1"
+              className={inputCls}
+            />
+          </FormField>
+
+          <FormField
+            label="Phone"
+            error={errors.phone}
+          >
+            <input
+              value={form.phone}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  phone: e.target.value,
+                })
+              }
+              className={inputCls}
+            />
+          </FormField>
+
+          <FormField
+            label="Employee ID"
+            error={errors.employeeId}
+          >
+            <input
+              value={form.employeeId}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  employeeId: e.target.value,
+                })
+              }
+              className={inputCls}
+            />
+          </FormField>
+
+          <FormField
+            label="Role"
+          >
+            <select
+              value={form.role}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  role: e.target.value as Role,
+                })
+              }
+              className={inputCls}
+            >
+              <option value="employee">
+                Employee
+              </option>
+
+              <option value="manager">
+                Manager
+              </option>
+            </select>
+          </FormField>
+
+          <FormField
+            label="Designation"
+            error={errors.designation}
+          >
+            <div className="flex gap-2">
+              <select
+                value={form.designation}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    designation: e.target.value,
+                  })
+                }
+                className={inputCls}
+              >
+                <option value="">
+                  Select
+                </option>
+
+                {designations.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setAddNewField('designation')
+                }
+              >
+                <Plus size={18} />
+              </button>
             </div>
-          </div>
+          </FormField>
+
+          <FormField
+            label="Grade"
+            error={errors.grade}
+          >
+            <select
+              value={form.grade}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  grade: e.target.value,
+                })
+              }
+              className={inputCls}
+            >
+              <option value="">
+                Select
+              </option>
+
+              {grades.map((grade) => (
+                <option
+                  key={grade.id}
+                  value={grade.name}
+                >
+                  {grade.name}
+                </option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField
+            label="Department"
+            error={errors.department}
+          >
+            <div className="flex gap-2">
+              <select
+                value={form.department}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    department: e.target.value,
+                  })
+                }
+                className={inputCls}
+              >
+                <option value="">
+                  Select
+                </option>
+
+                {departments.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setAddNewField('department')
+                }
+              >
+                <Plus size={18} />
+              </button>
+            </div>
+          </FormField>
+
+          <FormField
+            label="Date of Joining"
+            error={errors.dateOfJoining}
+          >
+            <input
+              type="date"
+              value={form.dateOfJoining}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  dateOfJoining: e.target.value,
+                })
+              }
+              className={inputCls}
+            />
+          </FormField>
+
+          <FormField label="Manager">
+            <select
+              value={form.managerId}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  managerId: e.target.value,
+                })
+              }
+              className={inputCls}
+            >
+              <option value="">
+                No Manager
+              </option>
+
+              {users
+                .filter(
+                  (user) =>
+                    user.role === 'manager' &&
+                    user.id !== editingUser?.id
+                )
+                .map((manager) => (
+                  <option
+                    key={manager.id}
+                    value={manager.id}
+                  >
+                    {manager.fullName}
+                  </option>
+                ))}
+            </select>
+          </FormField>
         </form>
       </Modal>
 
       <Modal
-        open={!!addNewField}
-        onClose={() => { setAddNewField(null); setNewItemName(''); }}
-        title={addNewField === 'designation' ? 'Add Designation' : 'Add Department'}
+        open={Boolean(addNewField)}
+        onClose={() => {
+          setAddNewField(null);
+          setNewItemName('');
+        }}
+        title={
+          addNewField === 'designation'
+            ? 'Add Designation'
+            : 'Add Department'
+        }
         footer={
           <>
-            <Button variant="secondary" onClick={() => { setAddNewField(null); setNewItemName(''); }}>Cancel</Button>
-            <Button onClick={handleAddNewItem}>Add</Button>
+            <Button
+              variant="secondary"
+              onClick={() => setAddNewField(null)}
+            >
+              Cancel
+            </Button>
+
+            <Button
+              onClick={() => void handleAddNewItem()}
+            >
+              Add
+            </Button>
           </>
         }
       >
         <input
           value={newItemName}
-          onChange={(e) => setNewItemName(e.target.value)}
-          placeholder={addNewField === 'designation' ? 'e.g. Data Scientist' : 'e.g. Research'}
+          onChange={(e) =>
+            setNewItemName(e.target.value)
+          }
           className={inputCls}
           autoFocus
         />
       </Modal>
 
-      <Modal open={!!viewUser} onClose={() => setViewUser(null)} title="Employee Details" size="lg">
-        {viewUser && (() => {
-          const { manager } = getReportingChain(viewUser, getUserById);
-          return (
-            <div className="space-y-5">
-              <div className="flex items-center gap-4 rounded-xl bg-gradient-to-r from-blue-50 to-slate-50 p-5">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-xl font-semibold text-white">
-                  {viewUser.fullName.charAt(0)}
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">{viewUser.fullName}</h3>
-                  <p className="text-sm text-gray-600">{viewUser.designation}</p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <Badge variant="teal">{viewUser.grade}</Badge>
-                    {viewUser.status === 'active' ? <Badge variant="green">Active</Badge> : <Badge variant="gray">Inactive</Badge>}
-                  </div>
-                </div>
-              </div>
+      <Modal
+        open={Boolean(viewUser)}
+        onClose={() => setViewUser(null)}
+        title="Employee Details"
+      >
+        {viewUser &&
+          (() => {
+            const { manager } =
+              getReportingChain(
+                viewUser,
+                getUserById
+              );
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <DetailField label="Employee ID" value={viewUser.employeeId} mono />
-                <DetailField label="Email" value={viewUser.email} />
-                <DetailField label="CNIC" value={viewUser.cnic} mono />
-                <DetailField label="Phone" value={viewUser.phone} />
-                <DetailField label="Department" value={viewUser.department} />
-                <DetailField label="Role" value={roleLabel[viewUser.role]} />
-                <DetailField label="Date of Joining" value={formatDate(viewUser.dateOfJoining)} />
-                <DetailField label="Manager" value={manager?.fullName || '—'} />
+            return (
+              <div className="space-y-3 text-sm">
+                <Detail label="Name" value={viewUser.fullName} />
+                <Detail label="Email" value={viewUser.email} />
+                <Detail label="Employee ID" value={viewUser.employeeId} />
+                <Detail label="CNIC" value={viewUser.cnic} />
+                <Detail label="Phone" value={viewUser.phone || '—'} />
+                <Detail label="Designation" value={viewUser.designation} />
+                <Detail label="Grade" value={viewUser.grade || '—'} />
+                <Detail label="Department" value={viewUser.department} />
+                <Detail label="Role" value={roleLabel[viewUser.role]} />
+                <Detail
+                  label="Joining Date"
+                  value={formatDate(viewUser.dateOfJoining)}
+                />
+                <Detail
+                  label="Manager"
+                  value={manager?.fullName || '—'}
+                />
               </div>
-            </div>
-          );
-        })()}
+            );
+          })()}
+      </Modal>
+
+      <Modal
+        open={Boolean(removeTarget)}
+        onClose={() => {
+          if (!deleting) {
+            setRemoveTarget(null);
+          }
+        }}
+        title="Remove Employee"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              disabled={deleting}
+              onClick={() => setRemoveTarget(null)}
+            >
+              Cancel
+            </Button>
+
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={() => void handleRemove()}
+              className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white"
+            >
+              {deleting
+                ? 'Removing...'
+                : 'Remove Employee'}
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-gray-600">
+          Are you sure you want to remove{' '}
+          <strong>{removeTarget?.fullName}</strong>?
+          This uses soft delete, so the employee can be
+          restored during the backend restore period.
+        </p>
       </Modal>
     </div>
   );
 }
 
-function DetailField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function FormField({
+  label,
+  error,
+  children,
+}: {
+  label: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="rounded-lg border border-gray-100 bg-gray-50/50 px-4 py-3">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={`mt-0.5 text-sm font-medium text-gray-900 ${mono ? 'font-mono' : ''}`}>{value}</p>
+    <div>
+      <label className="mb-1.5 block text-sm font-medium text-gray-700">
+        {label}
+      </label>
+
+      {children}
+
+      {error && (
+        <p className="mt-1 text-xs text-rose-600">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Detail({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-lg bg-gray-50 px-4 py-3">
+      <p className="text-xs text-gray-500">
+        {label}
+      </p>
+
+      <p className="font-medium text-gray-900">
+        {value}
+      </p>
     </div>
   );
 }
