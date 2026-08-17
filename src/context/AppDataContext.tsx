@@ -19,10 +19,7 @@
   import { CORE_LEAVE_TYPES } from '../types';
 
   import {
-    mockGrades,
     mockLeavePolicies,
-    initialDesignations,
-    initialDepartments,
   } from '../data/mockData';
 
   import { calcWorkingDays } from '../utils/formatDate';
@@ -243,59 +240,36 @@
     children: ReactNode;
   }) {
     /*
-    * Existing mock values are temporarily
-    * retained so unfinished pages do not
-    * break during API migration.
-    *
-    * Employees page will call
-    * refreshEmployees() and replace users
-    * with real MongoDB data.
-    */
+     * Real client data starts empty and is populated from backend APIs.
+     * mockData.ts remains in the project for the future dedicated Demo Mode,
+     * but it is not used as the real client's master-data source.
+     */
 
     const [users, setUsers] =
       useState<User[]>([]);
 
     const [grades, setGrades] =
-      useState<Grade[]>(() => [
-        ...mockGrades,
-      ]);
+      useState<Grade[]>([]);
 
     const [
       designations,
       setDesignations,
-    ] = useState<string[]>(
-      () => [...initialDesignations]
-    );
+    ] = useState<string[]>([]);
 
     const [
       departments,
       setDepartments,
-    ] = useState<string[]>(
-      () => [...initialDepartments]
-    );
+    ] = useState<string[]>([]);
 
     const [roles, setRoles] =
-      useState<string[]>([
-        'Employee',
-        'Manager',
-        'Admin',
-      ]);
+      useState<string[]>([]);
 
     const [
       departmentSaturdayOff,
       setDepartmentSaturdayOff,
     ] = useState<
       Record<string, boolean>
-    >(() =>
-      Object.fromEntries(
-        initialDepartments.map(
-          (department) => [
-            department,
-            true,
-          ]
-        )
-      )
-    );
+    >({});
 
     const [
       leavePolicies,
