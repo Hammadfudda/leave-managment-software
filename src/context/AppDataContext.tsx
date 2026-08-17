@@ -18,10 +18,6 @@
 
   import { CORE_LEAVE_TYPES } from '../types';
 
-  import {
-    mockLeavePolicies,
-  } from '../data/mockData';
-
   import { calcWorkingDays } from '../utils/formatDate';
 
   import api, {
@@ -41,6 +37,12 @@
   import {
     getLeaveRequests as apiGetLeaveRequests,
   } from '../services/leaveRequests';
+
+  import {
+    getLeavePolicies as apiGetLeavePolicies,
+    createLeavePolicy as apiCreateLeavePolicy,
+    updateLeavePolicy as apiUpdateLeavePolicy,
+  } from '../services/leavePolicies';
 
   /* =========================================================
     TYPES
@@ -70,6 +72,7 @@
     refreshEmployees: () => Promise<void>;
     refreshLookups: () => Promise<void>;
     refreshLeaveRequests: () => Promise<void>;
+    refreshLeavePolicies: () => Promise<void>;
 
     addUser: (
       user: User
@@ -144,11 +147,11 @@
 
     addLeavePolicy: (
       policy: LeavePolicy
-    ) => void;
+    ) => Promise<LeavePolicy | undefined>;
 
     updateLeavePolicy: (
       policy: LeavePolicy
-    ) => void;
+    ) => Promise<LeavePolicy | undefined>;
 
     getUserById: (
       id: string
@@ -274,9 +277,7 @@
     const [
       leavePolicies,
       setLeavePolicies,
-    ] = useState<LeavePolicy[]>(
-      () => [...mockLeavePolicies]
-    );
+    ] = useState<LeavePolicy[]>([]);
 
     const [
       leaveRequests,
@@ -349,6 +350,30 @@
             getApiErrorMessage(
               error,
               'Unable to load leave requests.'
+            )
+          );
+
+          throw error;
+        }
+      }, []);
+
+    /* =========================================================
+      LEAVE POLICY API
+    ========================================================= */
+
+    const refreshLeavePolicies =
+      useCallback(async () => {
+        try {
+          const policies =
+            await apiGetLeavePolicies();
+
+          setLeavePolicies(policies);
+        } catch (error) {
+          console.error(
+            'Unable to load leave policies:',
+            getApiErrorMessage(
+              error,
+              'Unable to load leave policies.'
             )
           );
 
@@ -1330,66 +1355,75 @@
     };
 
     /* =========================================================
-      LEAVE POLICY
-      Temporary local state.
-      API integration comes next.
+      LEAVE POLICY API CRUD
     ========================================================= */
 
-    const addLeavePolicy = (
+    const addLeavePolicy = async (
       policy: LeavePolicy
-    ) => {
-      setLeavePolicies(
-        (previous) => [
-          ...previous,
-          policy,
-        ]
-      );
+    ): Promise<LeavePolicy | undefined> => {
+      try {
+        const created =
+          await apiCreateLeavePolicy(
+            policy
+          );
 
-      addAuditLog({
-        actorId: 'u1',
-        actorName: 'Admin',
-        action:
-          'CREATE_LEAVE_POLICY',
-        targetType:
-          'LeavePolicy',
-        targetId: policy.id,
+        setLeavePolicies(
+          (previous) => [
+            ...previous.filter(
+              (item) =>
+                item.id !==
+                created.id
+            ),
+            created,
+          ]
+        );
 
-        details:
-          `Created ${policy.leaveType} leave policy`,
+        return created;
+      } catch (error) {
+        console.error(
+          'Unable to create leave policy:',
+          getApiErrorMessage(
+            error,
+            'Unable to create leave policy.'
+          )
+        );
 
-        leaveType:
-          policy.leaveType,
-      });
+        throw error;
+      }
     };
 
-    const updateLeavePolicy = (
+    const updateLeavePolicy = async (
       policy: LeavePolicy
-    ) => {
-      setLeavePolicies(
-        (previous) =>
-          previous.map(
-            (item) =>
-              item.id === policy.id
-                ? policy
-                : item
+    ): Promise<LeavePolicy | undefined> => {
+      try {
+        const updated =
+          await apiUpdateLeavePolicy(
+            policy
+          );
+
+        setLeavePolicies(
+          (previous) =>
+            previous.map(
+              (item) =>
+                item.id ===
+                updated.id
+                  ? updated
+                  : item
+            )
+        );
+
+        return updated;
+      } catch (error) {
+        console.error(
+          'Unable to update leave policy:',
+          getApiErrorMessage(
+            error,
+            'Unable to update leave policy.'
           )
-      );
+        );
 
-      addAuditLog({
-        actorId: 'u1',
-        actorName: 'Admin',
-        action:
-          'EDIT_LEAVE_POLICY',
-        targetType:
-          'LeavePolicy',
-        targetId: policy.id,
-
-        details:
-          `Updated ${policy.leaveType} leave policy`,
-
-        leaveType:
-          policy.leaveType,
-      });
+        throw error;
+      }
     };
 
     /* =========================================================
@@ -2506,6 +2540,8 @@
           refreshLookups,
 
           refreshLeaveRequests,
+
+          refreshLeavePolicies,
 
           addUser:
 
