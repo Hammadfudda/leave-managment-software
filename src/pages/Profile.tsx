@@ -25,7 +25,7 @@ const { manager } = getReportingChain(user, getUserById);
     { icon: BadgeCheck, label: 'Grade', value: user.grade },
     { icon: Building2, label: 'Department', value: user.department },
     { icon: CalendarDays, label: 'Date of Joining', value: formatDate(user.dateOfJoining) },
-    { icon: UserCircle, label: 'Manager', value: manager?.fullName || '— (Top level)' },
+    { icon: UserCircle, label: 'Manager', value: manager?.fullName || '—' },,
   ];
 
   return (
