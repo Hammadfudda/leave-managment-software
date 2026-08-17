@@ -1,7 +1,18 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+
 import { AppDataProvider } from "./context/AppDataContext";
-import { AuthProvider, useAuth } from "./context/AuthContext";
+import {
+  AuthProvider,
+  useAuth,
+} from "./context/AuthContext";
+
 import Layout from "./components/Layout";
+
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ApplyLeave from "./pages/ApplyLeave";
@@ -16,6 +27,7 @@ import AuditLogs from "./pages/AuditLogs";
 import Profile from "./pages/Profile";
 import MasterData from "./pages/MasterData";
 import MyTeam from "./pages/MyTeam";
+
 import type { Role } from "./types";
 
 function Protected({
@@ -25,10 +37,63 @@ function Protected({
   children: React.ReactNode;
   roles?: Role[];
 }) {
-  const { user } = useAuth();
-  if (!user) return <Navigate to="/" replace />;
-  if (roles && !roles.includes(user.role))
-    return <Navigate to="/dashboard" replace />;
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <p className="text-sm text-gray-500">
+          Loading...
+        </p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (
+    roles &&
+    !roles.includes(user.role)
+  ) {
+    return (
+      <Navigate
+        to="/dashboard"
+        replace
+      />
+    );
+  }
+
+  return <>{children}</>;
+}
+
+function PublicOnly({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <p className="text-sm text-gray-500">
+          Loading...
+        </p>
+      </div>
+    );
+  }
+
+  if (user) {
+    return (
+      <Navigate
+        to="/dashboard"
+        replace
+      />
+    );
+  }
+
   return <>{children}</>;
 }
 
@@ -38,7 +103,18 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Login />} />
+
+            {/* LOGIN */}
+            <Route
+              path="/"
+              element={
+                <PublicOnly>
+                  <Login />
+                </PublicOnly>
+              }
+            />
+
+            {/* AUTHENTICATED AREA */}
             <Route
               element={
                 <Protected>
@@ -46,84 +122,173 @@ export default function App() {
                 </Protected>
               }
             >
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/profile" element={<Profile />} />
+              <Route
+                path="/dashboard"
+                element={<Dashboard />}
+              />
+
+              {/* ADMIN DOES NOT HAVE EMPLOYEE PROFILE */}
+              <Route
+                path="/profile"
+                element={
+                  <Protected
+                    roles={[
+                      "manager",
+                      "employee",
+                    ]}
+                  >
+                    <Profile />
+                  </Protected>
+                }
+              />
+
               <Route
                 path="/leave/apply"
                 element={
-                  <Protected roles={["manager", "employee"]}>
+                  <Protected
+                    roles={[
+                      "manager",
+                      "employee",
+                    ]}
+                  >
                     <ApplyLeave />
                   </Protected>
                 }
               />
+
               <Route
                 path="/leave/history"
                 element={
-                  <Protected roles={["manager", "employee"]}>
+                  <Protected
+                    roles={[
+                      "manager",
+                      "employee",
+                    ]}
+                  >
                     <LeaveHistory />
                   </Protected>
                 }
               />
+
               <Route
                 path="/approvals"
                 element={
-                  <Protected roles={["manager"]}>
+                  <Protected
+                    roles={["manager"]}
+                  >
                     <Approvals />
                   </Protected>
                 }
               />
-              <Route path="/calendar" element={<LeaveCalendar />} />
-              <Route path="/notifications" element={<Notifications />} />
+
+              <Route
+                path="/calendar"
+                element={
+                  <Protected
+                    roles={[
+                      "admin",
+                      "manager",
+                    ]}
+                  >
+                    <LeaveCalendar />
+                  </Protected>
+                }
+              />
+
+              <Route
+                path="/notifications"
+                element={
+                  <Protected
+                    roles={[
+                      "admin",
+                      "manager",
+                      "employee",
+                    ]}
+                  >
+                    <Notifications />
+                  </Protected>
+                }
+              />
+
               <Route
                 path="/employees"
                 element={
-                  <Protected roles={["admin"]}>
+                  <Protected
+                    roles={["admin"]}
+                  >
                     <Employees />
                   </Protected>
                 }
               />
+
               <Route
                 path="/grades"
                 element={
-                  <Protected roles={["admin"]}>
+                  <Protected
+                    roles={["admin"]}
+                  >
                     <Grades />
                   </Protected>
                 }
               />
+
               <Route
                 path="/my-team"
                 element={
-                  <Protected roles={["manager", "admin"]}>
+                  <Protected
+                    roles={[
+                      "manager",
+                      "admin",
+                    ]}
+                  >
                     <MyTeam />
                   </Protected>
                 }
               />
+
               <Route
                 path="/policies"
                 element={
-                  <Protected roles={["admin"]}>
+                  <Protected
+                    roles={["admin"]}
+                  >
                     <Policies />
                   </Protected>
                 }
               />
+
               <Route
                 path="/create"
                 element={
-                  <Protected roles={["admin"]}>
+                  <Protected
+                    roles={["admin"]}
+                  >
                     <MasterData />
                   </Protected>
                 }
               />
+
               <Route
                 path="/audit"
                 element={
-                  <Protected roles={["admin"]}>
+                  <Protected
+                    roles={["admin"]}
+                  >
                     <AuditLogs />
                   </Protected>
                 }
               />
             </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
+
+            <Route
+              path="*"
+              element={
+                <Navigate
+                  to="/dashboard"
+                  replace
+                />
+              }
+            />
           </Routes>
         </BrowserRouter>
       </AuthProvider>
