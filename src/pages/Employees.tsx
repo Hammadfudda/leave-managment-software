@@ -980,46 +980,50 @@ export default function Employees() {
               </select>
             </FormField>
 
-            <FormField
-              label="Department"
-              error={errors.department}
-            >
-              <select
-                value={form.department}
-                onChange={(event) => {
-                  const newDepartment =
-                    event.target.value;
+        <FormField
+  label="Department"
+  error={errors.department}
+>
+  <div className="flex gap-2">
+    <select
+      value={form.department}
+      onChange={(event) => {
+        const newDepartment =
+          event.target.value;
 
-                  setForm((previous) => ({
-                    ...previous,
-                    department: newDepartment,
+        setForm((previous) => ({
+          ...previous,
+          department: newDepartment,
+          managerId: '',
+        }));
+      }}
+      className={inputCls}
+    >
+      <option value="">
+        Select department
+      </option>
 
-                    // Department change hua to
-                    // purana manager remove.
-                    managerId: '',
-                  }));
-                }}
-                className={inputCls}
-              >
-                <option value="">Select department</option>
-                {departments.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
+      {departments.map((name) => (
+        <option
+          key={name}
+          value={name}
+        >
+          {name}
+        </option>
+      ))}
+    </select>
 
-              <button
-                type="button"
-                onClick={() =>
-                  setAddNewField('department')
-                }
-                className="rounded-lg border border-gray-200 px-3 text-blue-600 hover:bg-blue-50"
-              >
-                <Plus size={17} />
-              </button>
-          </div>
-        </FormField>
+    <button
+      type="button"
+      onClick={() =>
+        setAddNewField('department')
+      }
+      className="rounded-lg border border-gray-200 px-3 text-blue-600 hover:bg-blue-50"
+    >
+      <Plus size={17} />
+    </button>
+  </div>
+</FormField>
 
         <FormField
           label="Date of Joining"
