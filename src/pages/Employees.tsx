@@ -984,130 +984,154 @@ export default function Employees() {
               label="Department"
               error={errors.department}
             >
-              <div className="flex gap-2">
-                <select
-                  value={form.department}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      department: event.target.value,
-                    })
-                  }
-                  className={inputCls}
-                >
-                  <option value="">Select department</option>
-                  {departments.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setAddNewField('department')
-                  }
-                  className="rounded-lg border border-gray-200 px-3 text-blue-600 hover:bg-blue-50"
-                >
-                  <Plus size={17} />
-                </button>
-              </div>
-            </FormField>
-
-            <FormField
-              label="Date of Joining"
-              error={errors.dateOfJoining}
-            >
-              <input
-                type="date"
-                value={form.dateOfJoining}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    dateOfJoining: event.target.value,
-                  })
-                }
-                className={inputCls}
-              />
-            </FormField>
-
-            {editingUser && (
-              <FormField label="Status">
-                <select
-                  value={form.status}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      status:
-                        event.target.value as
-                          | 'active'
-                          | 'inactive',
-                    })
-                  }
-                  className={inputCls}
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </FormField>
-            )}
-
-            <FormField label="Manager">
               <select
-                value={form.managerId}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    managerId: event.target.value,
-                  })
-                }
+                value={form.department}
+                onChange={(event) => {
+                  const newDepartment =
+                    event.target.value;
+
+                  setForm((previous) => ({
+                    ...previous,
+                    department: newDepartment,
+
+                    // Department change hua to
+                    // purana manager remove.
+                    managerId: '',
+                  }));
+                }}
                 className={inputCls}
               >
-                <option value="">No Manager</option>
-
-                {users
-                  .filter(
-                    (user) =>
-                      user.role === 'manager' &&
-                      user.status === 'active' &&
-                      user.id !== editingUser?.id
-                  )
-                  .map((manager) => (
-                    <option
-                      key={manager.id}
-                      value={manager.id}
-                    >
-                      {manager.fullName} — {manager.designation}
-                    </option>
-                  ))}
+                <option value="">Select department</option>
+                {departments.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
               </select>
-            </FormField>
 
-            {form.role === 'manager' && (
-              <div className="sm:col-span-2">
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={
-                      form.canApproveOtherDepartments
-                    }
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        canApproveOtherDepartments:
-                          event.target.checked,
-                      })
-                    }
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  Can approve leaves from other departments too
-                </label>
-              </div>
-            )}
+              <button
+                type="button"
+                onClick={() =>
+                  setAddNewField('department')
+                }
+                className="rounded-lg border border-gray-200 px-3 text-blue-600 hover:bg-blue-50"
+              >
+                <Plus size={17} />
+              </button>
           </div>
-        </form>
-      </Modal>
+        </FormField>
+
+        <FormField
+          label="Date of Joining"
+          error={errors.dateOfJoining}
+        >
+          <input
+            type="date"
+            value={form.dateOfJoining}
+            onChange={(event) =>
+              setForm({
+                ...form,
+                dateOfJoining: event.target.value,
+              })
+            }
+            className={inputCls}
+          />
+        </FormField>
+
+        {editingUser && (
+          <FormField label="Status">
+            <select
+              value={form.status}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  status:
+                    event.target.value as
+                    | 'active'
+                    | 'inactive',
+                })
+              }
+              className={inputCls}
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </FormField>
+        )}
+        <FormField label="Manager">
+          <select
+            value={form.managerId}
+            onChange={(event) =>
+              setForm({
+                ...form,
+                managerId: event.target.value,
+              })
+            }
+            disabled={!form.department}
+            className={`${inputCls} disabled:cursor-not-allowed disabled:bg-gray-100`}
+          >
+            <option value="">
+              {form.department
+                ? 'No Manager'
+                : 'Select department first'}
+            </option>
+
+            {users
+              .filter(
+                (candidate) =>
+                  candidate.role === 'manager' &&
+                  candidate.status === 'active' &&
+                  candidate.department === form.department &&
+                  candidate.id !== editingUser?.id
+              )
+              .map((manager) => (
+                <option
+                  key={manager.id}
+                  value={manager.id}
+                >
+                  {manager.fullName} — {manager.designation}
+                </option>
+              ))}
+          </select>
+
+          {form.department &&
+            users.filter(
+              (candidate) =>
+                candidate.role === 'manager' &&
+                candidate.status === 'active' &&
+                candidate.department === form.department &&
+                candidate.id !== editingUser?.id
+            ).length === 0 && (
+              <p className="mt-1 text-xs text-gray-400">
+                No active manager is available in this department.
+              </p>
+            )}
+        </FormField>
+
+        {form.role === 'manager' && (
+          <div className="sm:col-span-2">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={
+                  form.canApproveOtherDepartments
+                }
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    canApproveOtherDepartments:
+                      event.target.checked,
+                  })
+                }
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              Can approve leaves from other departments too
+            </label>
+          </div>
+        )}
+    </div>
+        </form >
+      </Modal >
 
       <Modal
         open={Boolean(addNewField)}
@@ -1278,7 +1302,7 @@ export default function Employees() {
           {message.message}
         </div>
       </Modal>
-    </div>
+    </div >
   );
 }
 
