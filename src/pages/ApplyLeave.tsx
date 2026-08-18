@@ -4,43 +4,60 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
-} from "react";
+} from 'react';
 
-import { useNavigate } from "react-router-dom";
-import { CalendarDays, Upload } from "lucide-react";
+import { useNavigate } from 'react-router-dom';
+import {
+  CalendarDays,
+  Upload,
+} from 'lucide-react';
 
-import { useAuth } from "../context/AuthContext";
-import Button from "../components/ui/Button";
-import Modal from "../components/ui/Modal";
+import { useAuth } from '../context/AuthContext';
+import Button from '../components/ui/Button';
+import Modal from '../components/ui/Modal';
 
-import api, { getApiErrorMessage } from "../services/api";
+import api, {
+  getApiErrorMessage,
+} from '../services/api';
 
-import { createLeaveRequest } from "../services/leaveRequests";
+import {
+  createLeaveRequest,
+} from '../services/leaveRequests';
 
 import {
   calcWorkingDays,
   formatDate,
   getExcludedWeekendDates,
-} from "../utils/formatDate";
+} from '../utils/formatDate';
 
-import type { LeaveBalance, LeaveType } from "../types";
+import type {
+  LeaveBalance,
+  LeaveType,
+} from '../types';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 const ALLOWED_TYPES = new Set([
-  "application/pdf",
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
+  'application/pdf',
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
 ]);
 
 interface PolicyInfo {
   _id: string;
   leaveType: string;
 
-  applicableRole?: "All Employees" | "employee" | "manager" | "admin";
+  applicableRole?:
+    | 'All Employees'
+    | 'employee'
+    | 'manager'
+    | 'admin';
 
-  documentRequirement?: "required" | "optional" | "not_required";
+  documentRequirement?:
+    | 'required'
+    | 'optional'
+    | 'not_required';
 
   approvalRouting?: {
     grade?: string | null;
@@ -52,36 +69,93 @@ interface PolicyInfo {
   adminOnlyApproval?: boolean;
 }
 
+function normalizeBalances(data: unknown): LeaveBalance[] {
+  if (Array.isArray(data)) {
+    return data as LeaveBalance[];
+  }
+
+  if (!data || typeof data !== 'object') {
+    return [];
+  }
+
+  return Object.entries(
+    data as Record<string, any>
+  ).map(([leaveType, value]) => ({
+    leaveType: leaveType as LeaveType,
+    quota: Number(value?.quota ?? 0),
+    used: Number(value?.used ?? 0),
+    remaining: Number(value?.remaining ?? 0),
+  }));
+}
+
 export default function ApplyLeave() {
   const { user } = useAuth();
-
   const navigate = useNavigate();
 
-  const [leaveType, setLeaveType] = useState<LeaveType | "">("");
+  const [
+    leaveType,
+    setLeaveType,
+  ] = useState<LeaveType | ''>('');
 
-  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [
+    leaveTypes,
+    setLeaveTypes,
+  ] = useState<LeaveType[]>([]);
 
-  const [policies, setPolicies] = useState<PolicyInfo[]>([]);
+  const [
+    policies,
+    setPolicies,
+  ] = useState<PolicyInfo[]>([]);
 
-  const [balances, setBalances] = useState<LeaveBalance[]>([]);
+  const [
+    balances,
+    setBalances,
+  ] = useState<LeaveBalance[]>([]);
 
-  const [saturdayOff, setSaturdayOff] = useState(true);
+  const [
+    saturdayOff,
+    setSaturdayOff,
+  ] = useState(true);
 
-  const [startDate, setStartDate] = useState("");
+  const [
+    startDate,
+    setStartDate,
+  ] = useState('');
 
-  const [endDate, setEndDate] = useState("");
+  const [
+    endDate,
+    setEndDate,
+  ] = useState('');
 
-  const [reason, setReason] = useState("");
+  const [
+    reason,
+    setReason,
+  ] = useState('');
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [
+    selectedFile,
+    setSelectedFile,
+  ] = useState<File | null>(null);
 
-  const [loading, setLoading] = useState(false);
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
 
-  const [loadingData, setLoadingData] = useState(true);
+  const [
+    loadingData,
+    setLoadingData,
+  ] = useState(true);
 
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState<string | null>(null);
 
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [
+    successMessage,
+    setSuccessMessage,
+  ] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -99,56 +173,89 @@ export default function ApplyLeave() {
           policyResponse,
           departmentResponse,
         ] = await Promise.all([
-          api.get("/leave-requests/available-types"),
+          api.get(
+            '/leave-requests/available-types'
+          ),
 
-          api.get(`/leave-requests/balance/${user.id}`),
+          api.get(
+            `/leave-requests/balance/${user.id}`
+          ),
 
-          api.get("/leave-policies", {
-            params: {
-              page: 1,
-              limit: 500,
-            },
-          }),
+          api.get(
+            '/leave-requests/available-policies'
+          ),
 
-          api.get("/departments"),
+          api.get(
+            '/departments'
+          ),
         ]);
 
-        const availableTypes = (typeResponse.data?.data || []) as LeaveType[];
+        const availableTypes =
+          (
+            typeResponse.data?.data || []
+          ) as LeaveType[];
 
-        setLeaveTypes(availableTypes);
-
-        if (availableTypes.length > 0) {
-          setLeaveType((current) =>
-            current && availableTypes.includes(current as LeaveType)
-              ? current
-              : availableTypes[0],
-          );
-        }
-
-        const balanceData = balanceResponse.data?.data || {};
-
-        const normalizedBalances: LeaveBalance[] = Object.entries(
-          balanceData,
-        ).map(([leaveType, value]: [string, any]) => ({
-          leaveType: leaveType as LeaveType,
-          quota: value?.quota ?? 0,
-          used: value?.used ?? 0,
-          remaining: value?.remaining ?? 0,
-        }));
-
-        setBalances(normalizedBalances);
-        setPolicies(policyResponse.data?.data || []);
-
-        const departments = departmentResponse.data?.data || [];
-
-        const department = departments.find(
-          (item: any) => item.name === user.department,
+        setLeaveTypes(
+          availableTypes
         );
 
-        setSaturdayOff(department?.saturdayOff ?? true);
+        if (
+          availableTypes.length > 0
+        ) {
+          setLeaveType(
+            (current) =>
+              current &&
+              availableTypes.includes(
+                current as LeaveType
+              )
+                ? current
+                : availableTypes[0]
+          );
+        } else {
+          setLeaveType('');
+        }
+
+        /*
+         * Backend may return balances as:
+         *
+         * {
+         *   annual: { quota, used, remaining },
+         *   sick:   { quota, used, remaining },
+         *   casual: { quota, used, remaining }
+         * }
+         *
+         * or as an array.
+         *
+         * Normalize both forms so the UI always receives LeaveBalance[].
+         */
+        setBalances(
+          normalizeBalances(
+            balanceResponse.data?.data
+          )
+        );
+
+        setPolicies(
+          policyResponse.data?.data || []
+        );
+
+        const departments =
+          departmentResponse.data?.data || [];
+
+        const department =
+          departments.find(
+            (item: any) =>
+              item.name === user.department
+          );
+
+        setSaturdayOff(
+          department?.saturdayOff ?? true
+        );
       } catch (error) {
         setErrorMessage(
-          getApiErrorMessage(error, "Unable to load leave information."),
+          getApiErrorMessage(
+            error,
+            'Unable to load leave information.'
+          )
         );
       } finally {
         setLoadingData(false);
@@ -158,59 +265,82 @@ export default function ApplyLeave() {
     void loadData();
   }, [user]);
 
-  if (!user) {
-    return null;
-  }
+  const policy =
+    policies.find(
+      (item) =>
+        item.leaveType === leaveType
+    );
 
-  const policy = policies.find((item) => item.leaveType === leaveType);
+  const isDocRequired =
+    policy?.documentRequirement ===
+    'required';
 
-  const isDocRequired = policy?.documentRequirement === "required";
-
-  const isDocNotRequired = policy?.documentRequirement === "not_required";
+  const isDocNotRequired =
+    policy?.documentRequirement ===
+    'not_required';
 
   const calcDays = () => {
     if (!startDate || !endDate) {
       return 0;
     }
 
-    return calcWorkingDays(startDate, endDate, saturdayOff);
+    return calcWorkingDays(
+      startDate,
+      endDate,
+      saturdayOff
+    );
   };
 
   const excludedDates =
     startDate && endDate
-      ? getExcludedWeekendDates(startDate, endDate, saturdayOff)
+      ? getExcludedWeekendDates(
+          startDate,
+          endDate,
+          saturdayOff
+        )
       : [];
 
-  const relevantBalances = useMemo(
-    () => balances.filter((balance) => leaveTypes.includes(balance.leaveType)),
-    [balances, leaveTypes],
-  );
+  const relevantBalances =
+    useMemo(
+      () =>
+        balances.filter(
+          (balance) =>
+            leaveTypes.includes(
+              balance.leaveType
+            )
+        ),
+      [balances, leaveTypes]
+    );
 
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleFileChange = (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file =
+      event.target.files?.[0];
 
     if (!file) {
       setSelectedFile(null);
-
       return;
     }
 
     if (!ALLOWED_TYPES.has(file.type)) {
-      event.target.value = "";
-
+      event.target.value = '';
       setSelectedFile(null);
 
-      setErrorMessage("Only PDF, JPG, JPEG and PNG files are allowed.");
+      setErrorMessage(
+        'Only PDF, JPG, JPEG and PNG files are allowed.'
+      );
 
       return;
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      event.target.value = "";
-
+      event.target.value = '';
       setSelectedFile(null);
 
-      setErrorMessage("Attachment must be 5 MB or smaller.");
+      setErrorMessage(
+        'Attachment must be 5 MB or smaller.'
+      );
 
       return;
     }
@@ -218,36 +348,46 @@ export default function ApplyLeave() {
     setSelectedFile(file);
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
 
     if (!leaveType) {
-      setErrorMessage("Please select a leave type.");
-
+      setErrorMessage(
+        'Please select a leave type.'
+      );
       return;
     }
 
     if (!startDate || !endDate) {
-      setErrorMessage("Please select start and end dates.");
-
+      setErrorMessage(
+        'Please select start and end dates.'
+      );
       return;
     }
 
     if (!reason.trim()) {
-      setErrorMessage("Please enter the reason for leave.");
-
+      setErrorMessage(
+        'Please enter the reason for leave.'
+      );
       return;
     }
 
     if (calcDays() <= 0) {
-      setErrorMessage("The selected range contains no working days.");
-
+      setErrorMessage(
+        'The selected range contains no working days.'
+      );
       return;
     }
 
-    if (isDocRequired && !selectedFile) {
-      setErrorMessage("A supporting document is required for this leave type.");
-
+    if (
+      isDocRequired &&
+      !selectedFile
+    ) {
+      setErrorMessage(
+        'A supporting document is required for this leave type.'
+      );
       return;
     }
 
@@ -263,10 +403,15 @@ export default function ApplyLeave() {
         attachment: selectedFile,
       });
 
-      setSuccessMessage("Leave request submitted successfully.");
+      setSuccessMessage(
+        'Leave request submitted successfully.'
+      );
     } catch (error) {
       setErrorMessage(
-        getApiErrorMessage(error, "Unable to submit leave request."),
+        getApiErrorMessage(
+          error,
+          'Unable to submit leave request.'
+        )
       );
     } finally {
       setLoading(false);
@@ -275,9 +420,12 @@ export default function ApplyLeave() {
 
   const handleSuccessClose = () => {
     setSuccessMessage(null);
-
-    navigate("/leave/history");
+    navigate('/leave/history');
   };
+
+  if (!user) {
+    return null;
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -301,7 +449,10 @@ export default function ApplyLeave() {
             No leave policy is currently available for your account.
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-5"
+          >
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
                 Leave type
@@ -310,25 +461,36 @@ export default function ApplyLeave() {
               <select
                 value={leaveType}
                 onChange={(event) =>
-                  setLeaveType(event.target.value as LeaveType)
+                  setLeaveType(
+                    event.target.value as LeaveType
+                  )
                 }
                 className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               >
                 {leaveTypes.map((type) => (
-                  <option key={type} value={type} className="capitalize">
-                    {type.replace(/_/g, " ")}
+                  <option
+                    key={type}
+                    value={type}
+                    className="capitalize"
+                  >
+                    {String(type).replace(
+                      /_/g,
+                      ' '
+                    )}
                   </option>
                 ))}
               </select>
 
               {policy && (
                 <p className="mt-1.5 text-xs text-gray-500">
-                  Document upload:{" "}
-                  {policy.documentRequirement === "required"
-                    ? "Required"
-                    : policy.documentRequirement === "not_required"
-                      ? "Not required"
-                      : "Optional"}
+                  Document upload:{' '}
+                  {policy.documentRequirement ===
+                  'required'
+                    ? 'Required'
+                    : policy.documentRequirement ===
+                        'not_required'
+                      ? 'Not required'
+                      : 'Optional'}
                   .
                 </p>
               )}
@@ -343,7 +505,11 @@ export default function ApplyLeave() {
                 <input
                   type="date"
                   value={startDate}
-                  onChange={(event) => setStartDate(event.target.value)}
+                  onChange={(event) =>
+                    setStartDate(
+                      event.target.value
+                    )
+                  }
                   required
                   className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 />
@@ -357,7 +523,11 @@ export default function ApplyLeave() {
                 <input
                   type="date"
                   value={endDate}
-                  onChange={(event) => setEndDate(event.target.value)}
+                  onChange={(event) =>
+                    setEndDate(
+                      event.target.value
+                    )
+                  }
                   required
                   min={startDate}
                   className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -369,13 +539,22 @@ export default function ApplyLeave() {
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-3.5 py-2.5 text-sm text-blue-700">
                   <CalendarDays size={16} />
-                  {formatDate(startDate)} → {formatDate(endDate)} · Working
-                  days: <strong className="font-semibold">{calcDays()}</strong>
+
+                  {formatDate(startDate)}
+                  {' → '}
+                  {formatDate(endDate)}
+                  {' · Working days: '}
+
+                  <strong className="font-semibold">
+                    {calcDays()}
+                  </strong>
                 </div>
 
                 {excludedDates.length > 0 && (
                   <p className="px-1 text-xs text-amber-600">
-                    Sat/Sun included —{excludedDates.length} day(s) excluded.
+                    Sat/Sun included —{' '}
+                    {excludedDates.length}{' '}
+                    day(s) excluded.
                   </p>
                 )}
               </div>
@@ -388,7 +567,11 @@ export default function ApplyLeave() {
 
               <textarea
                 value={reason}
-                onChange={(event) => setReason(event.target.value)}
+                onChange={(event) =>
+                  setReason(
+                    event.target.value
+                  )
+                }
                 required
                 rows={3}
                 placeholder="Briefly describe the reason for your leave..."
@@ -400,7 +583,9 @@ export default function ApplyLeave() {
               <div className="space-y-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
                 <div>
                   <label className="mb-1.5 flex items-center justify-between text-sm font-medium text-gray-700">
-                    <span>Document Attachment</span>
+                    <span>
+                      Document Attachment
+                    </span>
 
                     {isDocRequired ? (
                       <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-semibold text-rose-700">
@@ -421,7 +606,8 @@ export default function ApplyLeave() {
                 <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-blue-300 bg-white px-4 py-3 text-sm text-gray-600 transition-colors hover:border-blue-400 hover:bg-blue-50/50">
                   <Upload size={16} />
 
-                  {selectedFile?.name || "Click to select supporting document"}
+                  {selectedFile?.name ||
+                    'Click to select supporting document'}
 
                   <input
                     type="file"
@@ -433,7 +619,8 @@ export default function ApplyLeave() {
 
                 {selectedFile && (
                   <p className="rounded-lg border border-emerald-100 bg-emerald-50 p-2 text-xs font-medium text-emerald-700">
-                    File selected: {selectedFile.name}
+                    File selected:{' '}
+                    {selectedFile.name}
                   </p>
                 )}
               </div>
@@ -444,13 +631,20 @@ export default function ApplyLeave() {
                 type="button"
                 variant="secondary"
                 disabled={loading}
-                onClick={() => navigate("/leave/history")}
+                onClick={() =>
+                  navigate('/leave/history')
+                }
               >
                 Cancel
               </Button>
 
-              <Button type="submit" disabled={loading}>
-                {loading ? "Submitting..." : "Submit Request"}
+              <Button
+                type="submit"
+                disabled={loading}
+              >
+                {loading
+                  ? 'Submitting...'
+                  : 'Submit Request'}
               </Button>
             </div>
           </form>
@@ -468,34 +662,52 @@ export default function ApplyLeave() {
           </p>
         ) : (
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {relevantBalances.map((balance) => (
-              <div
-                key={balance.leaveType}
-                className="rounded-lg bg-gray-50 p-3"
-              >
-                <p className="text-xs capitalize text-gray-500">
-                  {balance.leaveType}
-                </p>
+            {relevantBalances.map(
+              (balance) => (
+                <div
+                  key={balance.leaveType}
+                  className="rounded-lg bg-gray-50 p-3"
+                >
+                  <p className="text-xs capitalize text-gray-500">
+                    {String(
+                      balance.leaveType
+                    ).replace(
+                      /_/g,
+                      ' '
+                    )}
+                  </p>
 
-                <p className="mt-0.5 text-lg font-semibold text-gray-900">
-                  {balance.remaining}
+                  <p className="mt-0.5 text-lg font-semibold text-gray-900">
+                    {balance.remaining}
 
-                  <span className="text-xs font-normal text-gray-400">
-                    /{balance.quota}
-                  </span>
-                </p>
-              </div>
-            ))}
+                    <span className="text-xs font-normal text-gray-400">
+                      /
+                      {balance.quota}
+                    </span>
+                  </p>
+                </div>
+              )
+            )}
           </div>
         )}
       </div>
 
       <Modal
         open={!!errorMessage}
-        onClose={() => setErrorMessage(null)}
+        onClose={() =>
+          setErrorMessage(null)
+        }
         title="Unable to Submit Leave"
         size="sm"
-        footer={<Button onClick={() => setErrorMessage(null)}>OK</Button>}
+        footer={
+          <Button
+            onClick={() =>
+              setErrorMessage(null)
+            }
+          >
+            OK
+          </Button>
+        }
       >
         <p className="whitespace-pre-line text-sm text-gray-600">
           {errorMessage}
@@ -507,9 +719,17 @@ export default function ApplyLeave() {
         onClose={handleSuccessClose}
         title="Leave Submitted"
         size="sm"
-        footer={<Button onClick={handleSuccessClose}>OK</Button>}
+        footer={
+          <Button
+            onClick={handleSuccessClose}
+          >
+            OK
+          </Button>
+        }
       >
-        <p className="text-sm text-gray-600">{successMessage}</p>
+        <p className="text-sm text-gray-600">
+          {successMessage}
+        </p>
       </Modal>
     </div>
   );
