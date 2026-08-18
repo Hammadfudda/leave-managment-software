@@ -16,8 +16,6 @@
     LeaveType,
   } from '../types';
 
-  import { CORE_LEAVE_TYPES } from '../types';
-
   import { calcWorkingDays } from '../utils/formatDate';
 
   import api, {
@@ -243,9 +241,7 @@
     children: ReactNode;
   }) {
     /*
-     * Real client data starts empty and is populated from backend APIs.
-     * mockData.ts remains in the project for the future dedicated Demo Mode,
-     * but it is not used as the real client's master-data source.
+     * Real client data starts empty and is populated only from backend APIs.
      */
 
     const [users, setUsers] =
@@ -521,27 +517,14 @@
 
     const getActiveLeaveTypes =
       useCallback((): LeaveType[] => {
-        const fromPolicies =
-          leavePolicies.map(
-            (policy) =>
-              policy.leaveType as LeaveType
-          );
-
-        const combined = [
-          ...CORE_LEAVE_TYPES,
-        ];
-
-        fromPolicies.forEach(
-          (type) => {
-            if (
-              !combined.includes(type)
-            ) {
-              combined.push(type);
-            }
-          }
+        return Array.from(
+          new Set(
+            leavePolicies.map(
+              (policy) =>
+                policy.leaveType as LeaveType
+            )
+          )
         );
-
-        return combined;
       }, [leavePolicies]);
 
     /* =========================================================
