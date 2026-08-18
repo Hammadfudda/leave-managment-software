@@ -207,6 +207,22 @@ export default function Employees() {
     gradeFilter,
   ]);
 
+  const availableManagers = useMemo(() => {
+    if (!form.department) return [];
+
+    return users.filter(
+      (candidate) =>
+        candidate.role === 'manager' &&
+        candidate.status === 'active' &&
+        candidate.department === form.department &&
+        candidate.id !== editingUser?.id
+    );
+  }, [
+    users,
+    form.department,
+    editingUser?.id,
+  ]);
+
   const validate = () => {
     const next: Record<string, string> = {};
 
@@ -262,6 +278,7 @@ export default function Employees() {
         'Missing Information',
         'Please complete all required fields correctly.'
       );
+
       return false;
     }
 
@@ -269,17 +286,23 @@ export default function Employees() {
   };
 
   const resetForm = () => {
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+    });
+
     setErrors({});
     setEditingUser(null);
   };
 
   const openCreate = () => {
-    resetForm();
+    setEditingUser(null);
+    setErrors({});
+
     setForm({
       ...emptyForm,
       grade: grades[0]?.name || '',
     });
+
     setShowAdd(true);
   };
 
@@ -312,30 +335,65 @@ export default function Employees() {
   ) => {
     event.preventDefault();
 
-    if (!validate()) return;
+    if (!validate()) {
+      return;
+    }
 
     setSaving(true);
 
     try {
+      const isEdit =
+        Boolean(editingUser?.id);
+
       const payload: User = {
-        ...(editingUser || { id: '' }),
-        fullName: form.fullName.trim(),
-        email: form.email.trim().toLowerCase(),
-        employeeId: form.employeeId.trim(),
-        cnic: form.cnic.trim(),
-        phone: form.phone.trim(),
-        role: form.role,
-        designation: form.designation,
-        grade: form.grade,
-        department: form.department,
-        dateOfJoining: form.dateOfJoining,
-        status: form.status,
-        managerId: form.managerId || undefined,
+        ...(isEdit && editingUser
+          ? editingUser
+          : { id: '' }),
+
+        fullName:
+          form.fullName.trim(),
+
+        email:
+          form.email
+            .trim()
+            .toLowerCase(),
+
+        employeeId:
+          form.employeeId.trim(),
+
+        cnic:
+          form.cnic.trim(),
+
+        phone:
+          form.phone.trim(),
+
+        role:
+          form.role,
+
+        designation:
+          form.designation,
+
+        grade:
+          form.grade,
+
+        department:
+          form.department,
+
+        dateOfJoining:
+          form.dateOfJoining,
+
+        status:
+          form.status,
+
+        managerId:
+          form.managerId ||
+          undefined,
+
         canApproveOtherDepartments:
           form.canApproveOtherDepartments,
       } as User;
 
-      if (editingUser) {
+      if (isEdit) {
         await updateUser(payload);
 
         showMessage(
@@ -355,14 +413,22 @@ export default function Employees() {
 
       setShowAdd(false);
       resetForm();
+
       await refreshEmployees();
     } catch (error) {
+      const isEdit =
+        Boolean(editingUser?.id);
+
       showMessage(
         'error',
-        editingUser ? 'Update Failed' : 'Create Failed',
+        isEdit
+          ? 'Update Failed'
+          : 'Create Failed',
         getApiErrorMessage(
           error,
-          'Unable to save employee.'
+          isEdit
+            ? 'Unable to update employee.'
+            : 'Unable to create employee.'
         )
       );
     } finally {
@@ -409,21 +475,25 @@ export default function Employees() {
         'Name Required',
         'Please enter a name.'
       );
+
       return;
     }
 
     try {
       if (addNewField === 'designation') {
         await addDesignation(name);
+
         setForm((previous) => ({
           ...previous,
           designation: name,
         }));
       } else {
         await addDepartment(name);
+
         setForm((previous) => ({
           ...previous,
           department: name,
+          managerId: '',
         }));
       }
 
@@ -450,26 +520,36 @@ export default function Employees() {
   const handleImport = async (
     event: ChangeEvent<HTMLInputElement>
   ) => {
-    const file = event.target.files?.[0];
+    const file =
+      event.target.files?.[0];
 
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith('.csv')) {
+    if (
+      !file.name
+        .toLowerCase()
+        .endsWith('.csv')
+    ) {
       showMessage(
         'error',
         'Invalid File',
         'Please select a CSV file.'
       );
+
       event.target.value = '';
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
+    if (
+      file.size >
+      5 * 1024 * 1024
+    ) {
       showMessage(
         'error',
         'File Too Large',
         'CSV file must be 5 MB or smaller.'
       );
+
       event.target.value = '';
       return;
     }
@@ -539,9 +619,6 @@ export default function Employees() {
   const filterCls =
     'rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20';
 
-  const errorCls =
-    'mt-1 text-xs text-rose-600';
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -549,6 +626,7 @@ export default function Employees() {
           <h1 className="text-2xl font-semibold text-gray-900">
             Employees
           </h1>
+
           <p className="mt-1 text-sm text-gray-500">
             Manage real employee records from the backend.
           </p>
@@ -558,14 +636,21 @@ export default function Employees() {
           <button
             type="button"
             disabled={exporting}
-            onClick={() => void handleExport()}
+            onClick={() =>
+              void handleExport()
+            }
             className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {exporting ? 'Exporting…' : 'Export CSV'}
+            {exporting
+              ? 'Exporting…'
+              : 'Export CSV'}
           </button>
 
           <label className="cursor-pointer rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
-            {importing ? 'Importing…' : 'Import CSV'}
+            {importing
+              ? 'Importing…'
+              : 'Import CSV'}
+
             <input
               type="file"
               accept=".csv,text/csv"
@@ -592,73 +677,112 @@ export default function Employees() {
           <input
             value={query}
             onChange={(event) =>
-              setQuery(event.target.value)
+              setQuery(
+                event.target.value
+              )
             }
             placeholder="Search name, email, ID, designation"
             className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           />
         </div>
 
-        <Filter size={15} className="text-gray-400" />
+        <Filter
+          size={15}
+          className="text-gray-400"
+        />
 
         <select
           value={deptFilter}
           onChange={(event) =>
-            setDeptFilter(event.target.value)
+            setDeptFilter(
+              event.target.value
+            )
           }
           className={filterCls}
         >
-          <option value="">All Departments</option>
-          {departments.map((department) => (
-            <option
-              key={department}
-              value={department}
-            >
-              {department}
-            </option>
-          ))}
+          <option value="">
+            All Departments
+          </option>
+
+          {departments.map(
+            (department) => (
+              <option
+                key={department}
+                value={department}
+              >
+                {department}
+              </option>
+            )
+          )}
         </select>
 
         <select
           value={roleFilter}
           onChange={(event) =>
-            setRoleFilter(event.target.value)
+            setRoleFilter(
+              event.target.value
+            )
           }
           className={filterCls}
         >
-          <option value="">All Roles</option>
-          <option value="manager">Managers</option>
-          <option value="employee">Employees</option>
+          <option value="">
+            All Roles
+          </option>
+
+          <option value="manager">
+            Managers
+          </option>
+
+          <option value="employee">
+            Employees
+          </option>
         </select>
 
         <select
           value={statusFilter}
           onChange={(event) =>
-            setStatusFilter(event.target.value)
+            setStatusFilter(
+              event.target.value
+            )
           }
           className={filterCls}
         >
-          <option value="">All Status</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
+          <option value="">
+            All Status
+          </option>
+
+          <option value="active">
+            Active
+          </option>
+
+          <option value="inactive">
+            Inactive
+          </option>
         </select>
 
         <select
           value={gradeFilter}
           onChange={(event) =>
-            setGradeFilter(event.target.value)
+            setGradeFilter(
+              event.target.value
+            )
           }
           className={filterCls}
         >
-          <option value="">All Grades</option>
-          {grades.map((grade) => (
-            <option
-              key={grade.id}
-              value={grade.name}
-            >
-              {grade.name}
-            </option>
-          ))}
+          <option value="">
+            All Grades
+          </option>
+
+          {grades.map(
+            (grade) => (
+              <option
+                key={grade.id}
+                value={grade.name}
+              >
+                {grade.name}
+              </option>
+            )
+          )}
         </select>
 
         <button
@@ -680,14 +804,37 @@ export default function Employees() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50/60 text-left text-xs uppercase tracking-wide text-gray-400">
                 <tr>
-                  <th className="px-5 py-3 font-medium">Emp ID</th>
-                  <th className="px-5 py-3 font-medium">Name</th>
-                  <th className="px-5 py-3 font-medium">Designation</th>
-                  <th className="px-5 py-3 font-medium">Grade</th>
-                  <th className="px-5 py-3 font-medium">Dept</th>
-                  <th className="px-5 py-3 font-medium">Role</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium">Action</th>
+                  <th className="px-5 py-3 font-medium">
+                    Emp ID
+                  </th>
+
+                  <th className="px-5 py-3 font-medium">
+                    Name
+                  </th>
+
+                  <th className="px-5 py-3 font-medium">
+                    Designation
+                  </th>
+
+                  <th className="px-5 py-3 font-medium">
+                    Grade
+                  </th>
+
+                  <th className="px-5 py-3 font-medium">
+                    Dept
+                  </th>
+
+                  <th className="px-5 py-3 font-medium">
+                    Role
+                  </th>
+
+                  <th className="px-5 py-3 font-medium">
+                    Status
+                  </th>
+
+                  <th className="px-5 py-3 font-medium">
+                    Action
+                  </th>
                 </tr>
               </thead>
 
@@ -703,89 +850,120 @@ export default function Employees() {
                   </tr>
                 )}
 
-                {filtered.map((user) => (
-                  <tr
-                    key={user.id}
-                    className="animate-fade-in hover:bg-gray-50/50"
-                  >
-                    <td className="px-5 py-3 font-mono text-xs text-gray-500">
-                      {user.employeeId}
-                    </td>
+                {filtered.map(
+                  (user) => (
+                    <tr
+                      key={user.id}
+                      className="animate-fade-in hover:bg-gray-50/50"
+                    >
+                      <td className="px-5 py-3 font-mono text-xs text-gray-500">
+                        {user.employeeId}
+                      </td>
 
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">
-                          {user.fullName.charAt(0)}
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">
+                            {user.fullName.charAt(0)}
+                          </div>
+
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {user.fullName}
+                            </p>
+
+                            <p className="text-xs text-gray-500">
+                              {user.email}
+                            </p>
+                          </div>
                         </div>
+                      </td>
 
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {user.fullName}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {user.email}
-                          </p>
+                      <td className="px-5 py-3 text-gray-600">
+                        {user.designation ||
+                          '—'}
+                      </td>
+
+                      <td className="px-5 py-3">
+                        <Badge variant="teal">
+                          {user.grade ||
+                            '—'}
+                        </Badge>
+                      </td>
+
+                      <td className="px-5 py-3 text-gray-600">
+                        {user.department ||
+                          '—'}
+                      </td>
+
+                      <td className="px-5 py-3 text-gray-600">
+                        {roleLabel[user.role]}
+                      </td>
+
+                      <td className="px-5 py-3">
+                        {user.status ===
+                        'active' ? (
+                          <Badge variant="green">
+                            Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="gray">
+                            Inactive
+                          </Badge>
+                        )}
+                      </td>
+
+                      <td className="px-5 py-3">
+                        <div className="flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setViewUser(
+                                user
+                              )
+                            }
+                            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+                          >
+                            <Eye
+                              size={
+                                14
+                              }
+                            />
+                            View
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleEdit(
+                                user
+                              )
+                            }
+                            className="text-sm font-medium text-amber-600 hover:text-amber-700"
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRemoveTarget(
+                                user
+                              )
+                            }
+                            className="inline-flex items-center gap-1 text-sm font-medium text-rose-600 hover:text-rose-700"
+                          >
+                            <Trash2
+                              size={
+                                14
+                              }
+                            />
+                            Remove
+                          </button>
                         </div>
-                      </div>
-                    </td>
-
-                    <td className="px-5 py-3 text-gray-600">
-                      {user.designation || '—'}
-                    </td>
-
-                    <td className="px-5 py-3">
-                      <Badge variant="teal">
-                        {user.grade || '—'}
-                      </Badge>
-                    </td>
-
-                    <td className="px-5 py-3 text-gray-600">
-                      {user.department || '—'}
-                    </td>
-
-                    <td className="px-5 py-3 text-gray-600">
-                      {roleLabel[user.role]}
-                    </td>
-
-                    <td className="px-5 py-3">
-                      {user.status === 'active' ? (
-                        <Badge variant="green">Active</Badge>
-                      ) : (
-                        <Badge variant="gray">Inactive</Badge>
-                      )}
-                    </td>
-
-                    <td className="px-5 py-3">
-                      <div className="flex flex-wrap gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setViewUser(user)}
-                          className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
-                        >
-                          <Eye size={14} />
-                          View
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleEdit(user)}
-                          className="text-sm font-medium text-amber-600 hover:text-amber-700"
-                        >
-                          Edit
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setRemoveTarget(user)}
-                          className="inline-flex items-center gap-1 text-sm font-medium text-rose-600 hover:text-rose-700"
-                        >
-                          <Trash2 size={14} />
-                          Remove
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  )
+                )}
               </tbody>
             </table>
           </div>
@@ -796,11 +974,16 @@ export default function Employees() {
         open={showAdd}
         onClose={() => {
           if (saving) return;
+
           setShowAdd(false);
           setAddNewField(null);
           resetForm();
         }}
-        title={editingUser ? 'Edit Employee' : 'Create Employee'}
+        title={
+          editingUser?.id
+            ? 'Edit Employee'
+            : 'Create Employee'
+        }
         size="lg"
         footer={
           <>
@@ -822,7 +1005,7 @@ export default function Employees() {
             >
               {saving
                 ? 'Saving…'
-                : editingUser
+                : editingUser?.id
                   ? 'Save Changes'
                   : 'Create Employee'}
             </Button>
@@ -835,41 +1018,57 @@ export default function Employees() {
           className="space-y-5"
         >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField label="Full Name" error={errors.fullName}>
+            <FormField
+              label="Full Name"
+              error={errors.fullName}
+            >
               <input
                 value={form.fullName}
                 onChange={(event) =>
                   setForm({
                     ...form,
-                    fullName: event.target.value,
+                    fullName:
+                      event.target.value,
                   })
                 }
                 className={inputCls}
               />
             </FormField>
 
-            <FormField label="Email" error={errors.email}>
+            <FormField
+              label="Email"
+              error={errors.email}
+            >
               <input
                 type="email"
                 value={form.email}
                 onChange={(event) =>
                   setForm({
                     ...form,
-                    email: event.target.value,
+                    email:
+                      event.target.value,
                   })
                 }
                 className={inputCls}
               />
             </FormField>
 
-            <FormField label="CNIC" error={errors.cnic}>
+            <FormField
+              label="CNIC"
+              error={errors.cnic}
+            >
               <input
                 value={form.cnic}
-                disabled={Boolean(editingUser)}
+                disabled={
+                  Boolean(
+                    editingUser?.id
+                  )
+                }
                 onChange={(event) =>
                   setForm({
                     ...form,
-                    cnic: event.target.value,
+                    cnic:
+                      event.target.value,
                   })
                 }
                 placeholder="12345-1234567-1"
@@ -877,13 +1076,17 @@ export default function Employees() {
               />
             </FormField>
 
-            <FormField label="Phone" error={errors.phone}>
+            <FormField
+              label="Phone"
+              error={errors.phone}
+            >
               <input
                 value={form.phone}
                 onChange={(event) =>
                   setForm({
                     ...form,
-                    phone: event.target.value,
+                    phone:
+                      event.target.value,
                   })
                 }
                 className={inputCls}
@@ -899,7 +1102,8 @@ export default function Employees() {
                 onChange={(event) =>
                   setForm({
                     ...form,
-                    employeeId: event.target.value,
+                    employeeId:
+                      event.target.value,
                   })
                 }
                 className={inputCls}
@@ -912,13 +1116,20 @@ export default function Employees() {
                 onChange={(event) =>
                   setForm({
                     ...form,
-                    role: event.target.value as Role,
+                    role:
+                      event.target
+                        .value as Role,
                   })
                 }
                 className={inputCls}
               >
-                <option value="employee">Employee</option>
-                <option value="manager">Manager</option>
+                <option value="employee">
+                  Employee
+                </option>
+
+                <option value="manager">
+                  Manager
+                </option>
               </select>
             </FormField>
 
@@ -932,23 +1143,35 @@ export default function Employees() {
                   onChange={(event) =>
                     setForm({
                       ...form,
-                      designation: event.target.value,
+                      designation:
+                        event.target
+                          .value,
                     })
                   }
                   className={inputCls}
                 >
-                  <option value="">Select designation</option>
-                  {designations.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
+                  <option value="">
+                    Select designation
+                  </option>
+
+                  {designations.map(
+                    (name) => (
+                      <option
+                        key={name}
+                        value={name}
+                      >
+                        {name}
+                      </option>
+                    )
+                  )}
                 </select>
 
                 <button
                   type="button"
                   onClick={() =>
-                    setAddNewField('designation')
+                    setAddNewField(
+                      'designation'
+                    )
                   }
                   className="rounded-lg border border-gray-200 px-3 text-blue-600 hover:bg-blue-50"
                 >
@@ -957,185 +1180,210 @@ export default function Employees() {
               </div>
             </FormField>
 
-            <FormField label="Grade" error={errors.grade}>
+            <FormField
+              label="Grade"
+              error={errors.grade}
+            >
               <select
                 value={form.grade}
                 onChange={(event) =>
                   setForm({
                     ...form,
-                    grade: event.target.value,
+                    grade:
+                      event.target.value,
                   })
                 }
                 className={inputCls}
               >
-                <option value="">Select grade</option>
-                {grades.map((grade) => (
-                  <option
-                    key={grade.id}
-                    value={grade.name}
-                  >
-                    {grade.name}
-                  </option>
-                ))}
+                <option value="">
+                  Select grade
+                </option>
+
+                {grades.map(
+                  (grade) => (
+                    <option
+                      key={grade.id}
+                      value={grade.name}
+                    >
+                      {grade.name}
+                    </option>
+                  )
+                )}
               </select>
             </FormField>
 
-        <FormField
-  label="Department"
-  error={errors.department}
->
-  <div className="flex gap-2">
-    <select
-      value={form.department}
-      onChange={(event) => {
-        const newDepartment =
-          event.target.value;
-
-        setForm((previous) => ({
-          ...previous,
-          department: newDepartment,
-          managerId: '',
-        }));
-      }}
-      className={inputCls}
-    >
-      <option value="">
-        Select department
-      </option>
-
-      {departments.map((name) => (
-        <option
-          key={name}
-          value={name}
-        >
-          {name}
-        </option>
-      ))}
-    </select>
-
-    <button
-      type="button"
-      onClick={() =>
-        setAddNewField('department')
-      }
-      className="rounded-lg border border-gray-200 px-3 text-blue-600 hover:bg-blue-50"
-    >
-      <Plus size={17} />
-    </button>
-  </div>
-</FormField>
-
-        <FormField
-          label="Date of Joining"
-          error={errors.dateOfJoining}
-        >
-          <input
-            type="date"
-            value={form.dateOfJoining}
-            onChange={(event) =>
-              setForm({
-                ...form,
-                dateOfJoining: event.target.value,
-              })
-            }
-            className={inputCls}
-          />
-        </FormField>
-
-        {editingUser && (
-          <FormField label="Status">
-            <select
-              value={form.status}
-              onChange={(event) =>
-                setForm({
-                  ...form,
-                  status:
-                    event.target.value as
-                    | 'active'
-                    | 'inactive',
-                })
-              }
-              className={inputCls}
+            <FormField
+              label="Department"
+              error={errors.department}
             >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </FormField>
-        )}
-        <FormField label="Manager">
-          <select
-            value={form.managerId}
-            onChange={(event) =>
-              setForm({
-                ...form,
-                managerId: event.target.value,
-              })
-            }
-            disabled={!form.department}
-            className={`${inputCls} disabled:cursor-not-allowed disabled:bg-gray-100`}
-          >
-            <option value="">
-              {form.department
-                ? 'No Manager'
-                : 'Select department first'}
-            </option>
+              <div className="flex gap-2">
+                <select
+                  value={form.department}
+                  onChange={(event) => {
+                    const newDepartment =
+                      event.target.value;
 
-            {users
-              .filter(
-                (candidate) =>
-                  candidate.role === 'manager' &&
-                  candidate.status === 'active' &&
-                  candidate.department === form.department &&
-                  candidate.id !== editingUser?.id
-              )
-              .map((manager) => (
-                <option
-                  key={manager.id}
-                  value={manager.id}
+                    setForm(
+                      (previous) => ({
+                        ...previous,
+                        department:
+                          newDepartment,
+                        managerId: '',
+                      })
+                    );
+                  }}
+                  className={inputCls}
                 >
-                  {manager.fullName} — {manager.designation}
-                </option>
-              ))}
-          </select>
+                  <option value="">
+                    Select department
+                  </option>
 
-          {form.department &&
-            users.filter(
-              (candidate) =>
-                candidate.role === 'manager' &&
-                candidate.status === 'active' &&
-                candidate.department === form.department &&
-                candidate.id !== editingUser?.id
-            ).length === 0 && (
-              <p className="mt-1 text-xs text-gray-400">
-                No active manager is available in this department.
-              </p>
-            )}
-        </FormField>
+                  {departments.map(
+                    (name) => (
+                      <option
+                        key={name}
+                        value={name}
+                      >
+                        {name}
+                      </option>
+                    )
+                  )}
+                </select>
 
-        {form.role === 'manager' && (
-          <div className="sm:col-span-2">
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAddNewField(
+                      'department'
+                    )
+                  }
+                  className="rounded-lg border border-gray-200 px-3 text-blue-600 hover:bg-blue-50"
+                >
+                  <Plus size={17} />
+                </button>
+              </div>
+            </FormField>
+
+            <FormField
+              label="Date of Joining"
+              error={
+                errors.dateOfJoining
+              }
+            >
               <input
-                type="checkbox"
-                checked={
-                  form.canApproveOtherDepartments
+                type="date"
+                value={
+                  form.dateOfJoining
                 }
                 onChange={(event) =>
                   setForm({
                     ...form,
-                    canApproveOtherDepartments:
-                      event.target.checked,
+                    dateOfJoining:
+                      event.target.value,
                   })
                 }
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className={inputCls}
               />
-              Can approve leaves from other departments too
-            </label>
+            </FormField>
+
+            {editingUser?.id && (
+              <FormField label="Status">
+                <select
+                  value={form.status}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      status:
+                        event.target
+                          .value as
+                          | 'active'
+                          | 'inactive',
+                    })
+                  }
+                  className={inputCls}
+                >
+                  <option value="active">
+                    Active
+                  </option>
+
+                  <option value="inactive">
+                    Inactive
+                  </option>
+                </select>
+              </FormField>
+            )}
+
+            <FormField label="Manager">
+              <select
+                value={form.managerId}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    managerId:
+                      event.target.value,
+                  })
+                }
+                disabled={
+                  !form.department
+                }
+                className={`${inputCls} disabled:cursor-not-allowed disabled:bg-gray-100`}
+              >
+                <option value="">
+                  {form.department
+                    ? 'No Manager'
+                    : 'Select department first'}
+                </option>
+
+                {availableManagers.map(
+                  (manager) => (
+                    <option
+                      key={manager.id}
+                      value={manager.id}
+                    >
+                      {manager.fullName}
+                      {' — '}
+                      {manager.designation}
+                    </option>
+                  )
+                )}
+              </select>
+
+              {form.department &&
+                availableManagers.length ===
+                  0 && (
+                  <p className="mt-1 text-xs text-gray-400">
+                    No active manager is available in this department.
+                  </p>
+                )}
+            </FormField>
+
+            {form.role ===
+              'manager' && (
+              <div className="sm:col-span-2">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={
+                      form.canApproveOtherDepartments
+                    }
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        canApproveOtherDepartments:
+                          event.target
+                            .checked,
+                      })
+                    }
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+
+                  Can approve leaves from other departments too
+                </label>
+              </div>
+            )}
           </div>
-        )}
-    </div>
-        </form >
-      </Modal >
+        </form>
+      </Modal>
 
       <Modal
         open={Boolean(addNewField)}
@@ -1144,7 +1392,8 @@ export default function Employees() {
           setNewItemName('');
         }}
         title={
-          addNewField === 'designation'
+          addNewField ===
+          'designation'
             ? 'Add Designation'
             : 'Add Department'
         }
@@ -1160,7 +1409,11 @@ export default function Employees() {
               Cancel
             </Button>
 
-            <Button onClick={() => void handleAddNewItem()}>
+            <Button
+              onClick={() =>
+                void handleAddNewItem()
+              }
+            >
               Add
             </Button>
           </>
@@ -1169,7 +1422,9 @@ export default function Employees() {
         <input
           value={newItemName}
           onChange={(event) =>
-            setNewItemName(event.target.value)
+            setNewItemName(
+              event.target.value
+            )
           }
           className={inputCls}
           autoFocus
@@ -1178,7 +1433,9 @@ export default function Employees() {
 
       <Modal
         open={Boolean(viewUser)}
-        onClose={() => setViewUser(null)}
+        onClose={() =>
+          setViewUser(null)
+        }
         title="Employee Details"
         size="lg"
       >
@@ -1192,40 +1449,88 @@ export default function Employees() {
 
             return (
               <div className="space-y-3">
-                <Detail label="Name" value={viewUser.fullName} />
-                <Detail label="Email" value={viewUser.email} />
+                <Detail
+                  label="Name"
+                  value={
+                    viewUser.fullName
+                  }
+                />
+
+                <Detail
+                  label="Email"
+                  value={
+                    viewUser.email
+                  }
+                />
+
                 <Detail
                   label="Employee ID"
-                  value={viewUser.employeeId}
+                  value={
+                    viewUser.employeeId
+                  }
                 />
-                <Detail label="CNIC" value={viewUser.cnic} />
+
+                <Detail
+                  label="CNIC"
+                  value={
+                    viewUser.cnic
+                  }
+                />
+
                 <Detail
                   label="Phone"
-                  value={viewUser.phone || '—'}
+                  value={
+                    viewUser.phone ||
+                    '—'
+                  }
                 />
+
                 <Detail
                   label="Designation"
-                  value={viewUser.designation || '—'}
+                  value={
+                    viewUser.designation ||
+                    '—'
+                  }
                 />
+
                 <Detail
                   label="Grade"
-                  value={viewUser.grade || '—'}
+                  value={
+                    viewUser.grade ||
+                    '—'
+                  }
                 />
+
                 <Detail
                   label="Department"
-                  value={viewUser.department || '—'}
+                  value={
+                    viewUser.department ||
+                    '—'
+                  }
                 />
+
                 <Detail
                   label="Role"
-                  value={roleLabel[viewUser.role]}
+                  value={
+                    roleLabel[
+                      viewUser.role
+                    ]
+                  }
                 />
+
                 <Detail
                   label="Joining Date"
-                  value={formatDate(viewUser.dateOfJoining)}
+                  value={formatDate(
+                    viewUser.dateOfJoining
+                  )}
                 />
+
                 <Detail
                   label="Manager"
-                  value={manager?.fullName || '—'}
+                  value={
+                    manager?.fullName ||
+                    '—'
+                  }
                 />
               </div>
             );
@@ -1245,7 +1550,11 @@ export default function Employees() {
             <Button
               variant="secondary"
               disabled={deleting}
-              onClick={() => setRemoveTarget(null)}
+              onClick={() =>
+                setRemoveTarget(
+                  null
+                )
+              }
             >
               Cancel
             </Button>
@@ -1253,10 +1562,14 @@ export default function Employees() {
             <button
               type="button"
               disabled={deleting}
-              onClick={() => void handleRemove()}
+              onClick={() =>
+                void handleRemove()
+              }
               className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
             >
-              {deleting ? 'Removing…' : 'Remove Employee'}
+              {deleting
+                ? 'Removing…'
+                : 'Remove Employee'}
             </button>
           </>
         }
@@ -1273,19 +1586,23 @@ export default function Employees() {
       <Modal
         open={message.open}
         onClose={() =>
-          setMessage((previous) => ({
-            ...previous,
-            open: false,
-          }))
+          setMessage(
+            (previous) => ({
+              ...previous,
+              open: false,
+            })
+          )
         }
         title={message.title}
         footer={
           <Button
             onClick={() =>
-              setMessage((previous) => ({
-                ...previous,
-                open: false,
-              }))
+              setMessage(
+                (previous) => ({
+                  ...previous,
+                  open: false,
+                })
+              )
             }
           >
             OK
@@ -1296,9 +1613,11 @@ export default function Employees() {
           className={`rounded-lg px-4 py-3 text-sm ${
             message.type === 'error'
               ? 'bg-rose-50 text-rose-700'
-              : message.type === 'warning'
+              : message.type ===
+                  'warning'
                 ? 'bg-amber-50 text-amber-700'
-                : message.type === 'success'
+                : message.type ===
+                    'success'
                   ? 'bg-emerald-50 text-emerald-700'
                   : 'bg-blue-50 text-blue-700'
           }`}
@@ -1306,7 +1625,7 @@ export default function Employees() {
           {message.message}
         </div>
       </Modal>
-    </div >
+    </div>
   );
 }
 
@@ -1348,6 +1667,7 @@ function Detail({
       <p className="text-xs text-gray-500">
         {label}
       </p>
+
       <p className="mt-0.5 text-sm font-medium text-gray-900">
         {value}
       </p>
