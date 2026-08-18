@@ -26,8 +26,12 @@ import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
 
 import {
+  createEmployee as apiCreateEmployee,
+  updateEmployee as apiUpdateEmployee,
   exportEmployeesCsv,
   importEmployeesCsv,
+  type CreateEmployeePayload,
+  type UpdateEmployeePayload,
 } from '../services/employees';
 
 import {
@@ -87,8 +91,6 @@ export default function Employees() {
     employeesLoading,
     refreshEmployees,
     refreshLookups,
-    addUser,
-    updateUser,
     removeUser,
     addDesignation,
     addDepartment,
@@ -341,73 +343,143 @@ export default function Employees() {
 
     setSaving(true);
 
+    const isEdit =
+      Boolean(editingUser?.id);
+
     try {
-      const isEdit =
-        Boolean(editingUser?.id);
+      const selectedGrade =
+        grades.find(
+          (grade) =>
+            grade.name ===
+            form.grade
+        );
 
-      const payload: User = {
-        ...(isEdit && editingUser
-          ? editingUser
-          : { id: '' }),
-
-        fullName:
-          form.fullName.trim(),
-
-        email:
-          form.email
-            .trim()
-            .toLowerCase(),
-
-        employeeId:
-          form.employeeId.trim(),
-
-        cnic:
-          form.cnic.trim(),
-
-        phone:
-          form.phone.trim(),
-
-        role:
-          form.role,
-
-        designation:
-          form.designation,
-
-        grade:
-          form.grade,
-
-        department:
-          form.department,
-
-        dateOfJoining:
-          form.dateOfJoining,
-
-        status:
-          form.status,
-
-        managerId:
-          form.managerId ||
-          undefined,
-
-        canApproveOtherDepartments:
-          form.canApproveOtherDepartments,
-      } as User;
+      if (!selectedGrade) {
+        throw new Error(
+          'Please select a valid grade.'
+        );
+      }
 
       if (isEdit) {
-        await updateUser(payload);
+        if (!editingUser?.id) {
+          throw new Error(
+            'Employee ID is missing for update.'
+          );
+        }
+
+        const updatePayload:
+          UpdateEmployeePayload = {
+          fullName:
+            form.fullName.trim(),
+
+          email:
+            form.email
+              .trim()
+              .toLowerCase(),
+
+          role:
+            form.role,
+
+          gradeId:
+            selectedGrade.id,
+
+          employeeId:
+            form.employeeId.trim(),
+
+          designation:
+            form.designation,
+
+          department:
+            form.department,
+
+          dateOfJoining:
+            form.dateOfJoining,
+
+          phone:
+            form.phone.trim(),
+
+          managerId:
+            form.managerId ||
+            null,
+
+          canApproveOtherDepartments:
+            form.canApproveOtherDepartments,
+
+          status:
+            form.status,
+        };
+
+        await apiUpdateEmployee(
+          editingUser.id,
+          updatePayload
+        );
 
         showMessage(
           'success',
           'Employee Updated',
-          `${payload.fullName} has been updated successfully.`
+          `${form.fullName.trim()} has been updated successfully.`
         );
       } else {
-        await addUser(payload);
+        /*
+         * CREATE MODE ALWAYS USES POST.
+         *
+         * This deliberately bypasses any edit/update context state,
+         * so Create Employee can never call PATCH /employees/.
+         */
+        const createPayload:
+          CreateEmployeePayload = {
+          fullName:
+            form.fullName.trim(),
+
+          email:
+            form.email
+              .trim()
+              .toLowerCase(),
+
+          cnic:
+            form.cnic.trim(),
+
+          role:
+            form.role ===
+            'manager'
+              ? 'manager'
+              : 'employee',
+
+          gradeId:
+            selectedGrade.id,
+
+          employeeId:
+            form.employeeId.trim(),
+
+          designation:
+            form.designation,
+
+          department:
+            form.department,
+
+          dateOfJoining:
+            form.dateOfJoining,
+
+          phone:
+            form.phone.trim() ||
+            undefined,
+
+          managerId:
+            form.managerId ||
+            null,
+
+          canApproveOtherDepartments:
+            form.canApproveOtherDepartments,
+        };
+
+        await apiCreateEmployee(
+          createPayload
+        );
 
         showMessage(
           'success',
           'Employee Created',
-          `${payload.fullName} has been created successfully.`
+          `${form.fullName.trim()} has been created successfully.`
         );
       }
 
@@ -416,9 +488,6 @@ export default function Employees() {
 
       await refreshEmployees();
     } catch (error) {
-      const isEdit =
-        Boolean(editingUser?.id);
-
       showMessage(
         'error',
         isEdit
