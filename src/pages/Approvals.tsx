@@ -303,18 +303,11 @@ export default function Approvals() {
     );
 
   const balances =
-    detail
-      ? (
-          leaveBalances[
-            detail.employeeId
-          ] || []
-        ).filter((balance) =>
-          CORE_LEAVE_TYPES.includes(
-            balance.leaveType as
-              typeof CORE_LEAVE_TYPES[number]
-          )
-        )
-      : [];
+  detail
+    ? leaveBalances[
+        detail.employeeId
+      ] || []
+    : [];
 
   const takeAction = (
     action:
