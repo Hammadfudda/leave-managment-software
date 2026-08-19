@@ -164,9 +164,7 @@ export default function Policies() {
               'active' &&
             (
               candidate.role ===
-                'manager' ||
-              candidate.role ===
-                'admin'
+                'manager'
             )
         ),
       [users]
@@ -329,7 +327,7 @@ export default function Policies() {
         form.finalApprovalMode
       ) {
         setApiError(
-          'Admin Only and Assigned Manager Final cannot both be enabled.'
+          'Manager Approval and Assigned Manager Final cannot both be enabled.'
         );
         return;
       }
@@ -341,7 +339,7 @@ export default function Policies() {
           .length === 0
       ) {
         setApiError(
-          'Select at least one approver or use Assigned Manager Final/Admin Only.'
+          'Select at least one approver or use Assigned Manager Final/Manager Approval.'
         );
         return;
       }
@@ -657,7 +655,7 @@ export default function Policies() {
                           .adminOnlyApproval
                           ? (
                             <Badge variant="orange">
-                              Admin Only
+                              Manager Approval
                             </Badge>
                           )
                           : policy
@@ -1086,7 +1084,7 @@ export default function Policies() {
                       })
                     }
                   />
-                  Admin Only
+                  Manager Approval
                 </label>
 
                 <label className="flex items-center gap-2 text-sm text-gray-700">

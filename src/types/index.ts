@@ -10,22 +10,12 @@ export type LeaveStatus =
   | 'cancelled';
 
 /*
- * Dynamic leave types.
- * Admin may create any leave type through Leave Policies.
+ * Dynamic leave type.
+ *
+ * Leave Policies are the source of truth, so Admin can create any
+ * leave type without changing frontend code.
  */
-export type LeaveType =
-  string;
-
-/*
- * Kept only for compatibility with older UI code.
- * Balance logic no longer depends on these three types.
- */
-export const CORE_LEAVE_TYPES:
-  LeaveType[] = [
-    'annual',
-    'sick',
-    'casual',
-  ];
+export type LeaveType = string;
 
 export interface User {
   id: string;
@@ -52,8 +42,9 @@ export interface Grade {
   name: string;
 
   /*
-   * Legacy fields retained for Grade Master compatibility.
-   * Leave balances now come from LeavePolicy.yearlyQuota.
+   * Legacy Grade fields may remain in Master Data for compatibility,
+   * but employee leave entitlement is now driven by
+   * LeavePolicy.yearlyQuota.
    */
   annualLeaveQuota: number;
   sickLeaveQuota: number;
@@ -70,7 +61,7 @@ export interface LeavePolicy {
   role?: string;
 
   /*
-   * Yearly entitlement for the matching applicant scope.
+   * Matching employees receive this amount each leave year.
    */
   yearlyQuota: number;
 
@@ -122,7 +113,7 @@ export interface LeaveRequest {
   employeeName: string;
   department: string;
 
-  leaveType: string;
+  leaveType: LeaveType;
 
   startDate: string;
   endDate: string;
@@ -161,7 +152,6 @@ export interface LeaveRequest {
   isPaidOverride?: boolean;
 
   isStopRequest?: boolean;
-
   isAdminOnlyDecision?:
     boolean;
 
@@ -205,8 +195,7 @@ export interface Notification {
 }
 
 export interface LeaveBalance {
-  leaveType:
-    LeaveType;
+  leaveType: LeaveType;
 
   quota: number;
   used: number;
