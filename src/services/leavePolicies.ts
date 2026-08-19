@@ -12,8 +12,8 @@ type BackendApprover =
 
 interface BackendLeavePolicy {
   _id: string;
-
   leaveType: string;
+  yearlyQuota?: number;
 
   applicableRole?:
     | 'All Employees'
@@ -29,7 +29,6 @@ interface BackendLeavePolicy {
     | 'not_required';
 
   adminOnlyApproval?: boolean;
-
   finalApprovalMode?: boolean;
 
   approvalRouting?: {
@@ -39,9 +38,6 @@ interface BackendLeavePolicy {
     department?:
       string | null;
 
-    /*
-     * Grade MongoDB ID
-     */
     grade?:
       string | null;
 
@@ -77,6 +73,12 @@ export function mapLeavePolicy(
 
     leaveType:
       policy.leaveType,
+
+    yearlyQuota:
+      Number(
+        policy.yearlyQuota ??
+          0
+      ),
 
     role:
       policy.applicableRole ||
@@ -120,28 +122,27 @@ export function mapLeavePolicy(
     },
 
     requiresDocumentUpload:
-      policy.documentRequirement ===
+      policy
+        .documentRequirement ===
       'required',
 
     documentRequirement:
-      policy.documentRequirement ||
+      policy
+        .documentRequirement ||
       'optional',
 
     adminOnlyApproval:
       Boolean(
-        policy.adminOnlyApproval
+        policy
+          .adminOnlyApproval
       ),
 
     finalApprovalMode:
       Boolean(
-        policy.finalApprovalMode
+        policy
+          .finalApprovalMode
       ),
 
-    /*
-     * Field retained only because
-     * current TypeScript type has it.
-     * UI/backend no longer use notice.
-     */
     minDaysNoticeRequired:
       0,
 
@@ -159,6 +160,11 @@ function toBackendPayload(
     leaveType:
       policy.leaveType,
 
+    yearlyQuota:
+      Number(
+        policy.yearlyQuota
+      ),
+
     applicableRole:
       policy.role ||
       'All Employees',
@@ -168,14 +174,12 @@ function toBackendPayload(
         policy.isPaid
       ),
 
-    /*
-     * Notice removed.
-     */
     minDaysNoticeRequired:
       0,
 
     documentRequirement:
-      policy.documentRequirement ||
+      policy
+        .documentRequirement ||
       (
         policy
           .requiresDocumentUpload
@@ -185,12 +189,14 @@ function toBackendPayload(
 
     adminOnlyApproval:
       Boolean(
-        policy.adminOnlyApproval
+        policy
+          .adminOnlyApproval
       ),
 
     finalApprovalMode:
       Boolean(
-        policy.finalApprovalMode
+        policy
+          .finalApprovalMode
       ),
 
     approvalRouting: {
@@ -206,9 +212,6 @@ function toBackendPayload(
           ?.department ||
         null,
 
-      /*
-       * Grade ID
-       */
       grade:
         policy
           .approvalRouting
@@ -271,7 +274,6 @@ export async function updateLeavePolicy(
   const response =
     await api.patch(
       `/leave-policies/${policy.id}`,
-
       toBackendPayload(
         policy
       )

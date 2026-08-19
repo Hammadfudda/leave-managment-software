@@ -1,4 +1,7 @@
-export type Role = 'admin' | 'manager' | 'employee';
+export type Role =
+  | 'admin'
+  | 'manager'
+  | 'employee';
 
 export type LeaveStatus =
   | 'pending'
@@ -6,19 +9,23 @@ export type LeaveStatus =
   | 'rejected'
   | 'cancelled';
 
+/*
+ * Dynamic leave types.
+ * Admin may create any leave type through Leave Policies.
+ */
 export type LeaveType =
-  | 'annual'
-  | 'sick'
-  | 'casual'
-  | 'unpaid'
-  | 'maternity'
-  | 'paternity';
+  string;
 
-export const CORE_LEAVE_TYPES: LeaveType[] = [
-  'annual',
-  'sick',
-  'casual',
-];
+/*
+ * Kept only for compatibility with older UI code.
+ * Balance logic no longer depends on these three types.
+ */
+export const CORE_LEAVE_TYPES:
+  LeaveType[] = [
+    'annual',
+    'sick',
+    'casual',
+  ];
 
 export interface User {
   id: string;
@@ -32,7 +39,9 @@ export interface User {
   dateOfJoining: string;
   cnic: string;
   phone: string;
-  status: 'active' | 'inactive';
+  status:
+    | 'active'
+    | 'inactive';
   managerId?: string;
   canApproveOtherDepartments?: boolean;
   profilePhotoUrl?: string;
@@ -41,9 +50,15 @@ export interface User {
 export interface Grade {
   id: string;
   name: string;
+
+  /*
+   * Legacy fields retained for Grade Master compatibility.
+   * Leave balances now come from LeavePolicy.yearlyQuota.
+   */
   annualLeaveQuota: number;
   sickLeaveQuota: number;
   casualLeaveQuota: number;
+
   carryForwardAllowed: boolean;
   maxCarryForwardDays: number;
   description?: string;
@@ -53,6 +68,11 @@ export interface LeavePolicy {
   id: string;
   leaveType: string;
   role?: string;
+
+  /*
+   * Yearly entitlement for the matching applicant scope.
+   */
+  yearlyQuota: number;
 
   requiresApprovalFrom:
     | 'manager'
@@ -65,7 +85,8 @@ export interface LeavePolicy {
     approverIds: string[];
   };
 
-  requiresDocumentUpload: boolean;
+  requiresDocumentUpload:
+    boolean;
 
   documentRequirement?:
     | 'optional'
@@ -75,7 +96,9 @@ export interface LeavePolicy {
   adminOnlyApproval?: boolean;
   finalApprovalMode?: boolean;
 
-  minDaysNoticeRequired: number;
+  minDaysNoticeRequired:
+    number;
+
   isPaid: boolean;
 }
 
@@ -95,7 +118,6 @@ export interface ApprovalHistoryEntry {
 
 export interface LeaveRequest {
   id: string;
-
   employeeId: string;
   employeeName: string;
   department: string;
@@ -105,8 +127,11 @@ export interface LeaveRequest {
   startDate: string;
   endDate: string;
 
-  totalDaysRequested: number;
-  totalWorkingDays: number;
+  totalDaysRequested:
+    number;
+
+  totalWorkingDays:
+    number;
 
   reason: string;
 
@@ -119,11 +144,17 @@ export interface LeaveRequest {
   approvalHistory:
     ApprovalHistoryEntry[];
 
-  requiredApproverIds?: string[];
-  approvedByIds?: string[];
-  rejectedByIds?: string[];
+  requiredApproverIds?:
+    string[];
 
-  excludedWeekendDates?: string[];
+  approvedByIds?:
+    string[];
+
+  rejectedByIds?:
+    string[];
+
+  excludedWeekendDates?:
+    string[];
 
   isExtension?: boolean;
   originalRequestId?: string;
@@ -131,23 +162,20 @@ export interface LeaveRequest {
 
   isStopRequest?: boolean;
 
-  isAdminOnlyDecision?: boolean;
+  isAdminOnlyDecision?:
+    boolean;
+
   isPaid?: boolean;
 
   cancelledBy?: string;
   cancelledByName?: string;
   cancelledReason?: string;
 
-  daysUsedBeforeCancel?: number;
+  daysUsedBeforeCancel?:
+    number;
+
   actualEndDate?: string;
 
-  /*
-   * PRIVATE CLOUDINARY ATTACHMENT
-   *
-   * We DO NOT keep a permanent public URL.
-   * Backend returns only whether an
-   * attachment exists + its original name.
-   */
   hasAttachment?: boolean;
   attachmentName?: string;
 
@@ -168,7 +196,8 @@ export interface Notification {
 
   message: string;
 
-  relatedLeaveRequestId?: string;
+  relatedLeaveRequestId?:
+    string;
 
   isRead: boolean;
 
@@ -176,11 +205,14 @@ export interface Notification {
 }
 
 export interface LeaveBalance {
-  leaveType: LeaveType;
+  leaveType:
+    LeaveType;
 
   quota: number;
   used: number;
   remaining: number;
+
+  year?: number;
 }
 
 export interface AuditLog {

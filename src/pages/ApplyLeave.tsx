@@ -47,6 +47,7 @@ const ALLOWED_TYPES = new Set([
 interface PolicyInfo {
   _id: string;
   leaveType: string;
+  yearlyQuota?: number;
 
   applicableRole?:
     | 'All Employees'
@@ -483,7 +484,7 @@ export default function ApplyLeave() {
 
               {policy && (
                 <p className="mt-1.5 text-xs text-gray-500">
-                  Document upload:{' '}
+                  Yearly quota: {policy.yearlyQuota ?? 0} day(s) · Document upload:{' '}
                   {policy.documentRequirement ===
                   'required'
                     ? 'Required'
