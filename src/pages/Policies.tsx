@@ -778,7 +778,7 @@ export default function Policies() {
                         </h3>
 
                         <p className="mt-1 text-xs text-gray-400">
-                          Database
+                          Leave
                           Policy
                         </p>
                       </div>
