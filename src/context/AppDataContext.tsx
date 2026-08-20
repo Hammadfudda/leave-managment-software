@@ -404,20 +404,7 @@
               (grade: any): Grade => ({
                 id: grade._id,
                 name: grade.name,
-
-                annualLeaveQuota:
-                  grade.annualLeaveQuota ??
-                  0,
-
-                sickLeaveQuota:
-                  grade.sickLeaveQuota ??
-                  0,
-
-                casualLeaveQuota:
-                  grade.casualLeaveQuota ??
-                  0,
-
-                carryForwardAllowed:
+carryForwardAllowed:
                   Boolean(
                     grade.carryForwardAllowed
                   ),
@@ -1239,17 +1226,7 @@
           '/grades',
           {
             name: grade.name,
-
-            annualLeaveQuota:
-              grade.annualLeaveQuota,
-
-            sickLeaveQuota:
-              grade.sickLeaveQuota,
-
-            casualLeaveQuota:
-              grade.casualLeaveQuota,
-
-            carryForwardAllowed:
+carryForwardAllowed:
               grade.carryForwardAllowed,
 
             maxCarryForwardDays:
@@ -1283,17 +1260,7 @@
           `/grades/${grade.id}`,
           {
             name: grade.name,
-
-            annualLeaveQuota:
-              grade.annualLeaveQuota,
-
-            sickLeaveQuota:
-              grade.sickLeaveQuota,
-
-            casualLeaveQuota:
-              grade.casualLeaveQuota,
-
-            carryForwardAllowed:
+carryForwardAllowed:
               grade.carryForwardAllowed,
 
             maxCarryForwardDays:
