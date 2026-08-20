@@ -29,12 +29,15 @@ export interface User {
   managerId?: string;
   canApproveOtherDepartments?: boolean;
   profilePhotoUrl?: string;
+
+  // CSV import completion state.
+  detailsStatus?: 'complete' | 'pending';
+  pendingFields?: string[];
 }
 
 export interface Grade {
   id: string;
   name: string;
-
   /*
    * Grade contains NO leave quotas now.
    */
@@ -64,7 +67,6 @@ export interface LeavePolicy {
     department?: string;
     approverIds: string[];
   };
-
   requiresDocumentUpload:
     boolean;
 

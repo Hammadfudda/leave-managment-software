@@ -22,20 +22,23 @@ export interface BackendEmployee {
 
   gradeId:
     | string
-    | BackendGrade;
+    | BackendGrade
+    | null;
 
   managerId?: string | null;
 
   canApproveOtherDepartments?: boolean;
 
-  dateOfJoining: string;
-
+  dateOfJoining?: string | null;
   status:
     | 'active'
     | 'inactive'
     | 'pending_deletion';
 
   profilePhotoUrl?: string;
+
+  detailsStatus?: 'complete' | 'pending';
+  pendingFields?: string[];
 
   deactivatedAt?: string | null;
   scheduledPurgeAt?: string | null;
@@ -89,7 +92,6 @@ export interface UpdateEmployeePayload {
   gradeId?: string;
 
   employeeId?: string;
-
   designation?: string;
   department?: string;
 
@@ -105,6 +107,47 @@ export interface UpdateEmployeePayload {
   profilePhotoUrl?: string;
 }
 
+export type CsvPendingIssue = {
+  field: string;
+  message: string;
+  currentValue?: string;
+};
+
+export type CsvPendingEmployee = {
+  row: number;
+  fullName: string;
+  employeeId: string;
+  issues: CsvPendingIssue[];
+  pendingFields: string[];
+};
+
+export type CsvHardError = {
+  row: number;
+  employee: string;
+  field: string;
+  message: string;
+};
+
+export type CsvImportResponse = {
+  success: boolean;
+  preview?: boolean;
+  requiresConfirmation?: boolean;
+  created?: number;
+  message?: string;
+  summary: {
+    total: number;
+    complete?: number;
+    pending?: number;
+    blocking?: number;
+  };
+  pendingEmployees?: CsvPendingEmployee[];
+  hardErrors?: CsvHardError[];
+};
+
+export interface CompletePendingEmployeePayload {
+  cnic: string;
+}
+
 /* ==============================
    MAP BACKEND -> FRONTEND
 ============================== */
@@ -113,8 +156,9 @@ export function mapEmployeeToUser(
   employee: BackendEmployee
 ): User {
   const grade =
-    typeof employee.gradeId === 'object'
-      ? employee.gradeId?.name || ''
+    typeof employee.gradeId === 'object' &&
+    employee.gradeId
+      ? employee.gradeId.name || ''
       : '';
 
   return {
@@ -147,7 +191,12 @@ export function mapEmployeeToUser(
 
     cnic:
       employee.cnic ||
-      employee.nationalId ||
+      (
+        employee.nationalId &&
+        !employee.nationalId.startsWith('PENDING-')
+          ? employee.nationalId
+          : ''
+      ) ||
       '',
 
     phone:
@@ -167,13 +216,18 @@ export function mapEmployeeToUser(
 
     profilePhotoUrl:
       employee.profilePhotoUrl,
+
+    detailsStatus:
+      employee.detailsStatus || 'complete',
+
+    pendingFields:
+      employee.pendingFields || [],
   };
 }
 
 /* ==============================
    GET ALL EMPLOYEES
 ============================== */
-
 export async function getEmployees(
   params?: {
     search?: string;
@@ -223,7 +277,6 @@ export async function getEmployeeById(
 /* ==============================
    CREATE
 ============================== */
-
 export async function createEmployee(
   payload: CreateEmployeePayload
 ): Promise<User> {
@@ -241,7 +294,6 @@ export async function createEmployee(
 /* ==============================
    UPDATE
 ============================== */
-
 export async function updateEmployee(
   id: string,
   payload: UpdateEmployeePayload
@@ -258,9 +310,26 @@ export async function updateEmployee(
 }
 
 /* ==============================
+   COMPLETE PENDING CSV EMPLOYEE
+============================== */
+export async function completePendingEmployee(
+  id: string,
+  payload: CompletePendingEmployeePayload
+): Promise<User> {
+  const response =
+    await api.patch<EmployeeResponse>(
+      `/employees/${id}/complete-pending`,
+      payload
+    );
+
+  return mapEmployeeToUser(
+    response.data.data
+  );
+}
+
+/* ==============================
    REMOVE
 ============================== */
-
 export async function removeEmployee(
   id: string
 ): Promise<BackendEmployee> {
@@ -312,8 +381,9 @@ export async function getRemovedEmployees() {
 ============================== */
 
 export async function importEmployeesCsv(
-  file: File
-) {
+  file: File,
+  mode: 'preview' | 'commit' = 'preview'
+): Promise<CsvImportResponse> {
   const formData =
     new FormData();
 
@@ -323,10 +393,13 @@ export async function importEmployeesCsv(
   );
 
   const response =
-    await api.post(
+    await api.post<CsvImportResponse>(
       '/employees/import',
       formData,
       {
+        params: {
+          mode,
+        },
         headers: {
           'Content-Type':
             'multipart/form-data',
@@ -340,7 +413,6 @@ export async function importEmployeesCsv(
 /* ==============================
    CSV EXPORT
 ============================== */
-
 export async function exportEmployeesCsv() {
   const response =
     await api.get(

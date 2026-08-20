@@ -26,11 +26,14 @@ import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
 
 import {
+  completePendingEmployee,
   createEmployee as apiCreateEmployee,
   updateEmployee as apiUpdateEmployee,
   exportEmployeesCsv,
   importEmployeesCsv,
   type CreateEmployeePayload,
+  type CsvHardError,
+  type CsvImportResponse,
   type UpdateEmployeePayload,
 } from '../services/employees';
 
@@ -82,6 +85,24 @@ const emptyForm = {
   canApproveOtherDepartments: false,
 };
 
+function getBlockingCsvErrors(
+  error: unknown
+): CsvHardError[] {
+  const maybe =
+    error as {
+      response?: {
+        data?: {
+          hardErrors?: CsvHardError[];
+        };
+      };
+    };
+
+  return (
+    maybe.response?.data?.hardErrors ||
+    []
+  );
+}
+
 export default function Employees() {
   const {
     users,
@@ -113,20 +134,33 @@ export default function Employees() {
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  const [csvReview, setCsvReview] =
+    useState<CsvImportResponse | null>(null);
+
+  const [csvFile, setCsvFile] =
+    useState<File | null>(null);
+
+  const [csvBlockingErrors, setCsvBlockingErrors] =
+    useState<CsvHardError[]>([]);
+
   const [form, setForm] = useState(emptyForm);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const [errors, setErrors] =
+    useState<Record<string, string>>({});
 
   const [addNewField, setAddNewField] =
     useState<'designation' | 'department' | null>(null);
 
-  const [newItemName, setNewItemName] = useState('');
+  const [newItemName, setNewItemName] =
+    useState('');
 
-  const [message, setMessage] = useState<MessageState>({
-    open: false,
-    type: 'info',
-    title: '',
-    message: '',
-  });
+  const [message, setMessage] =
+    useState<MessageState>({
+      open: false,
+      type: 'info',
+      title: '',
+      message: '',
+    });
 
   const showMessage = (
     type: MessageType,
@@ -161,36 +195,61 @@ export default function Employees() {
     };
 
     void load();
-  }, [refreshEmployees, refreshLookups]);
+  }, [
+    refreshEmployees,
+    refreshLookups,
+  ]);
 
   const filtered = useMemo(() => {
-    const search = query.trim().toLowerCase();
+    const search =
+      query
+        .trim()
+        .toLowerCase();
 
     return users
-      .filter((user) => user.role !== 'admin')
+      .filter(
+        (user) =>
+          user.role !==
+          'admin'
+      )
       .filter((user) => {
         const matchesSearch =
           !search ||
-          user.fullName.toLowerCase().includes(search) ||
-          user.email.toLowerCase().includes(search) ||
-          user.employeeId.toLowerCase().includes(search) ||
-          (user.designation || '').toLowerCase().includes(search);
+          user.fullName
+            .toLowerCase()
+            .includes(search) ||
+          user.email
+            .toLowerCase()
+            .includes(search) ||
+          user.employeeId
+            .toLowerCase()
+            .includes(search) ||
+          (
+            user.designation ||
+            ''
+          )
+            .toLowerCase()
+            .includes(search);
 
         const matchesDepartment =
           !deptFilter ||
-          user.department === deptFilter;
+          user.department ===
+            deptFilter;
 
         const matchesRole =
           !roleFilter ||
-          user.role === roleFilter;
+          user.role ===
+            roleFilter;
 
         const matchesStatus =
           !statusFilter ||
-          user.status === statusFilter;
+          user.status ===
+            statusFilter;
 
         const matchesGrade =
           !gradeFilter ||
-          user.grade === gradeFilter;
+          user.grade ===
+            gradeFilter;
 
         return (
           matchesSearch &&
@@ -209,72 +268,145 @@ export default function Employees() {
     gradeFilter,
   ]);
 
-  const availableManagers = useMemo(() => {
-    if (!form.department) return [];
+  /*
+   * IMPORTANT:
+   * Manager dropdown remains department-scoped.
+   * Only active managers from the selected department are shown.
+   */
+  const availableManagers =
+    useMemo(() => {
+      if (!form.department) {
+        return [];
+      }
 
-    return users.filter(
-      (candidate) =>
-        candidate.role === 'manager' &&
-        candidate.status === 'active' &&
-        candidate.department === form.department &&
-        candidate.id !== editingUser?.id
+      return users.filter(
+        (candidate) =>
+          candidate.role ===
+            'manager' &&
+          candidate.status ===
+            'active' &&
+          candidate.department ===
+            form.department &&
+          candidate.id !==
+            editingUser?.id
+      );
+    }, [
+      users,
+      form.department,
+      editingUser?.id,
+    ]);
+
+  const pendingSet =
+    useMemo(
+      () =>
+        new Set(
+          editingUser?.pendingFields ||
+            []
+        ),
+      [
+        editingUser?.pendingFields,
+      ]
     );
-  }, [
-    users,
-    form.department,
-    editingUser?.id,
-  ]);
+
+  const inputCls =
+    'w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20';
+
+  const filterCls =
+    'rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20';
+
+  const pendingInputClass = (
+    field: string
+  ) =>
+    pendingSet.has(field)
+      ? `${inputCls} border-rose-400 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20`
+      : inputCls;
 
   const validate = () => {
     const next: Record<string, string> = {};
 
-    if (!form.fullName.trim()) {
-      next.fullName = 'Full name is required';
-    }
-
-    if (!form.email.trim()) {
-      next.email = 'Email is required';
-    } else if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)
+    if (
+      !form.fullName.trim()
     ) {
-      next.email = 'Invalid email format';
+      next.fullName =
+        'Full name is required';
     }
 
-    if (!form.employeeId.trim()) {
-      next.employeeId = 'Employee ID is required';
-    }
-
-    if (!form.cnic.trim()) {
-      next.cnic = 'CNIC is required';
-    } else if (
-      !/^\d{5}-\d{7}-\d$/.test(form.cnic)
+    if (
+      !form.email.trim()
     ) {
-      next.cnic = 'Format: 12345-1234567-1';
+      next.email =
+        'Email is required';
+    } else if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        form.email
+      )
+    ) {
+      next.email =
+        'Invalid email format';
     }
 
-    if (!form.phone.trim()) {
-      next.phone = 'Phone is required';
+    if (
+      !form.employeeId.trim()
+    ) {
+      next.employeeId =
+        'Employee ID is required';
     }
 
-    if (!form.designation) {
-      next.designation = 'Designation is required';
+    if (
+      !form.cnic.trim()
+    ) {
+      next.cnic =
+        'CNIC is required';
+    } else if (
+      !/^\d{5}-\d{7}-\d$/.test(
+        form.cnic
+      )
+    ) {
+      next.cnic =
+        'Format: 12345-1234567-1';
     }
 
-    if (!form.grade) {
-      next.grade = 'Grade is required';
+    if (
+      !form.phone.trim()
+    ) {
+      next.phone =
+        'Phone is required';
     }
 
-    if (!form.department) {
-      next.department = 'Department is required';
+    if (
+      !form.designation
+    ) {
+      next.designation =
+        'Designation is required';
     }
 
-    if (!form.dateOfJoining) {
-      next.dateOfJoining = 'Date of joining is required';
+    if (
+      !form.grade
+    ) {
+      next.grade =
+        'Grade is required';
+    }
+
+    if (
+      !form.department
+    ) {
+      next.department =
+        'Department is required';
+    }
+
+    if (
+      !form.dateOfJoining
+    ) {
+      next.dateOfJoining =
+        'Date of joining is required';
     }
 
     setErrors(next);
 
-    if (Object.keys(next).length > 0) {
+    if (
+      Object.keys(next)
+        .length > 0
+    ) {
       showMessage(
         'warning',
         'Missing Information',
@@ -302,38 +434,68 @@ export default function Employees() {
 
     setForm({
       ...emptyForm,
-      grade: grades[0]?.name || '',
+      grade:
+        grades[0]?.name ||
+        '',
     });
 
     setShowAdd(true);
   };
 
-  const handleEdit = (user: User) => {
+  const handleEdit = (
+    user: User
+  ) => {
     setEditingUser(user);
     setErrors({});
 
     setForm({
-      fullName: user.fullName,
-      email: user.email,
-      employeeId: user.employeeId,
-      cnic: user.cnic,
-      phone: user.phone || '',
-      role: user.role,
-      designation: user.designation,
-      grade: user.grade,
-      department: user.department,
-      dateOfJoining: user.dateOfJoining,
-      status: user.status,
-      managerId: user.managerId || '',
+      fullName:
+        user.fullName,
+
+      email:
+        user.email,
+
+      employeeId:
+        user.employeeId,
+
+      cnic:
+        user.cnic || '',
+
+      phone:
+        user.phone || '',
+
+      role:
+        user.role,
+
+      designation:
+        user.designation || '',
+
+      grade:
+        user.grade || '',
+
+      department:
+        user.department || '',
+
+      dateOfJoining:
+        user.dateOfJoining || '',
+
+      status:
+        user.status,
+
+      managerId:
+        user.managerId || '',
+
       canApproveOtherDepartments:
-        user.canApproveOtherDepartments || false,
+        user.canApproveOtherDepartments ||
+        false,
     });
 
     setShowAdd(true);
   };
 
   const handleSubmit = async (
-    event: FormEvent<HTMLFormElement>
+    event:
+      FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
@@ -344,7 +506,9 @@ export default function Employees() {
     setSaving(true);
 
     const isEdit =
-      Boolean(editingUser?.id);
+      Boolean(
+        editingUser?.id
+      );
 
     try {
       const selectedGrade =
@@ -354,14 +518,18 @@ export default function Employees() {
             form.grade
         );
 
-      if (!selectedGrade) {
+      if (
+        !selectedGrade
+      ) {
         throw new Error(
           'Please select a valid grade.'
         );
       }
 
       if (isEdit) {
-        if (!editingUser?.id) {
+        if (
+          !editingUser?.id
+        ) {
           throw new Error(
             'Employee ID is missing for update.'
           );
@@ -409,23 +577,42 @@ export default function Employees() {
             form.status,
         };
 
+        /*
+         * Existing update endpoint stays exactly in use.
+         * No CSV feature bypasses the old manager/department validation.
+         */
         await apiUpdateEmployee(
           editingUser.id,
           updatePayload
         );
 
+        /*
+         * Only a CSV-pending employee needs the separate completion call.
+         * It validates the corrected DB values, updates CNIC/default password,
+         * clears Details Pending and initializes leave balances.
+         */
+        if (
+          editingUser.detailsStatus ===
+          'pending'
+        ) {
+          await completePendingEmployee(
+            editingUser.id,
+            {
+              cnic:
+                form.cnic.trim(),
+            }
+          );
+        }
+
         showMessage(
           'success',
-          'Employee Updated',
+          editingUser.detailsStatus ===
+            'pending'
+            ? 'Employee Details Completed'
+            : 'Employee Updated',
           `${form.fullName.trim()} has been updated successfully.`
         );
       } else {
-        /*
-         * CREATE MODE ALWAYS USES POST.
-         *
-         * This deliberately bypasses any edit/update context state,
-         * so Create Employee can never call PATCH /employees/.
-         */
         const createPayload:
           CreateEmployeePayload = {
           fullName:
@@ -488,6 +675,11 @@ export default function Employees() {
 
       await refreshEmployees();
     } catch (error) {
+      /*
+       * Do not close the Edit modal on failure.
+       * Corrected values already saved by the normal update endpoint stay safe,
+       * while pending status remains until all details pass validation.
+       */
       showMessage(
         'error',
         isEdit
@@ -506,12 +698,16 @@ export default function Employees() {
   };
 
   const handleRemove = async () => {
-    if (!removeTarget) return;
+    if (!removeTarget) {
+      return;
+    }
 
     setDeleting(true);
 
     try {
-      await removeUser(removeTarget.id);
+      await removeUser(
+        removeTarget.id
+      );
 
       showMessage(
         'success',
@@ -520,6 +716,7 @@ export default function Employees() {
       );
 
       setRemoveTarget(null);
+
       await refreshEmployees();
     } catch (error) {
       showMessage(
@@ -535,64 +732,85 @@ export default function Employees() {
     }
   };
 
-  const handleAddNewItem = async () => {
-    const name = newItemName.trim();
+  const handleAddNewItem =
+    async () => {
+      const name =
+        newItemName.trim();
 
-    if (!name || !addNewField) {
-      showMessage(
-        'warning',
-        'Name Required',
-        'Please enter a name.'
-      );
+      if (
+        !name ||
+        !addNewField
+      ) {
+        showMessage(
+          'warning',
+          'Name Required',
+          'Please enter a name.'
+        );
 
-      return;
-    }
-
-    try {
-      if (addNewField === 'designation') {
-        await addDesignation(name);
-
-        setForm((previous) => ({
-          ...previous,
-          designation: name,
-        }));
-      } else {
-        await addDepartment(name);
-
-        setForm((previous) => ({
-          ...previous,
-          department: name,
-          managerId: '',
-        }));
+        return;
       }
 
-      setAddNewField(null);
-      setNewItemName('');
+      try {
+        if (
+          addNewField ===
+          'designation'
+        ) {
+          await addDesignation(
+            name
+          );
 
-      showMessage(
-        'success',
-        'Added Successfully',
-        `${name} has been added.`
-      );
-    } catch (error) {
-      showMessage(
-        'error',
-        'Unable to Add',
-        getApiErrorMessage(
-          error,
-          'Unable to save this item.'
-        )
-      );
-    }
-  };
+          setForm(
+            (previous) => ({
+              ...previous,
+              designation:
+                name,
+            })
+          );
+        } else {
+          await addDepartment(
+            name
+          );
+
+          setForm(
+            (previous) => ({
+              ...previous,
+              department:
+                name,
+              managerId: '',
+            })
+          );
+        }
+
+        setAddNewField(null);
+        setNewItemName('');
+
+        showMessage(
+          'success',
+          'Added Successfully',
+          `${name} has been added.`
+        );
+      } catch (error) {
+        showMessage(
+          'error',
+          'Unable to Add',
+          getApiErrorMessage(
+            error,
+            'Unable to save this item.'
+          )
+        );
+      }
+    };
 
   const handleImport = async (
-    event: ChangeEvent<HTMLInputElement>
+    event:
+      ChangeEvent<HTMLInputElement>
   ) => {
     const file =
       event.target.files?.[0];
 
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     if (
       !file.name
@@ -605,7 +823,9 @@ export default function Employees() {
         'Please select a CSV file.'
       );
 
-      event.target.value = '';
+      event.target.value =
+        '';
+
       return;
     }
 
@@ -619,60 +839,159 @@ export default function Employees() {
         'CSV file must be 5 MB or smaller.'
       );
 
-      event.target.value = '';
+      event.target.value =
+        '';
+
       return;
     }
 
     setImporting(true);
+    setCsvBlockingErrors([]);
 
     try {
-      await importEmployeesCsv(file);
-      await refreshEmployees();
+      const preview =
+        await importEmployeesCsv(
+          file,
+          'preview'
+        );
 
-      showMessage(
-        'success',
-        'Import Complete',
-        'Employees were imported successfully.'
-      );
+      if (
+        preview.requiresConfirmation ||
+        (
+          preview.summary.pending ||
+          0
+        ) > 0
+      ) {
+        setCsvFile(file);
+        setCsvReview(
+          preview
+        );
+      } else {
+        const result =
+          await importEmployeesCsv(
+            file,
+            'commit'
+          );
+
+        await refreshEmployees();
+
+        showMessage(
+          'success',
+          'Import Complete',
+          result.message ||
+            'Employees were imported successfully.'
+        );
+      }
     } catch (error) {
-      showMessage(
-        'error',
-        'Import Failed',
-        getApiErrorMessage(
-          error,
-          'Unable to import employee CSV.'
-        )
-      );
+      const hardErrors =
+        getBlockingCsvErrors(
+          error
+        );
+
+      if (
+        hardErrors.length
+      ) {
+        setCsvBlockingErrors(
+          hardErrors
+        );
+      } else {
+        showMessage(
+          'error',
+          'Import Failed',
+          getApiErrorMessage(
+            error,
+            'Unable to import employee CSV.'
+          )
+        );
+      }
     } finally {
       setImporting(false);
-      event.target.value = '';
+
+      event.target.value =
+        '';
     }
   };
 
-  const handleExport = async () => {
-    setExporting(true);
+  const confirmPendingImport =
+    async () => {
+      if (!csvFile) {
+        return;
+      }
 
-    try {
-      await exportEmployeesCsv();
+      setImporting(true);
 
-      showMessage(
-        'success',
-        'Export Complete',
-        'Employee CSV has been exported successfully.'
-      );
-    } catch (error) {
-      showMessage(
-        'error',
-        'Export Failed',
-        getApiErrorMessage(
-          error,
-          'Unable to export employees.'
-        )
-      );
-    } finally {
-      setExporting(false);
-    }
-  };
+      try {
+        const result =
+          await importEmployeesCsv(
+            csvFile,
+            'commit'
+          );
+
+        setCsvReview(null);
+        setCsvFile(null);
+
+        await refreshEmployees();
+
+        showMessage(
+          'success',
+          'Import Complete',
+          result.message ||
+            'Employees were imported successfully.'
+        );
+      } catch (error) {
+        const hardErrors =
+          getBlockingCsvErrors(
+            error
+          );
+
+        if (
+          hardErrors.length
+        ) {
+          setCsvReview(null);
+          setCsvFile(null);
+          setCsvBlockingErrors(
+            hardErrors
+          );
+        } else {
+          showMessage(
+            'error',
+            'Import Failed',
+            getApiErrorMessage(
+              error,
+              'Unable to import employee CSV.'
+            )
+          );
+        }
+      } finally {
+        setImporting(false);
+      }
+    };
+
+  const handleExport =
+    async () => {
+      setExporting(true);
+
+      try {
+        await exportEmployeesCsv();
+
+        showMessage(
+          'success',
+          'Export Complete',
+          'Employee CSV has been exported successfully.'
+        );
+      } catch (error) {
+        showMessage(
+          'error',
+          'Export Failed',
+          getApiErrorMessage(
+            error,
+            'Unable to export employees.'
+          )
+        );
+      } finally {
+        setExporting(false);
+      }
+    };
 
   const clearFilters = () => {
     setQuery('');
@@ -681,12 +1000,6 @@ export default function Employees() {
     setStatusFilter('');
     setGradeFilter('');
   };
-
-  const inputCls =
-    'w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20';
-
-  const filterCls =
-    'rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20';
 
   return (
     <div className="space-y-6">
@@ -704,7 +1017,9 @@ export default function Employees() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            disabled={exporting}
+            disabled={
+              exporting
+            }
             onClick={() =>
               void handleExport()
             }
@@ -724,13 +1039,23 @@ export default function Employees() {
               type="file"
               accept=".csv,text/csv"
               className="hidden"
-              disabled={importing}
-              onChange={handleImport}
+              disabled={
+                importing
+              }
+              onChange={
+                handleImport
+              }
             />
           </label>
 
-          <Button onClick={openCreate}>
-            <UserPlus size={16} />
+          <Button
+            onClick={
+              openCreate
+            }
+          >
+            <UserPlus
+              size={16}
+            />
             Create Employee
           </Button>
         </div>
@@ -744,11 +1069,14 @@ export default function Employees() {
           />
 
           <input
-            value={query}
-            onChange={(event) =>
-              setQuery(
-                event.target.value
-              )
+            value={
+              query
+            }
+            onChange={
+              (event) =>
+                setQuery(
+                  event.target.value
+                )
             }
             placeholder="Search name, email, ID, designation"
             className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -761,13 +1089,18 @@ export default function Employees() {
         />
 
         <select
-          value={deptFilter}
-          onChange={(event) =>
-            setDeptFilter(
-              event.target.value
-            )
+          value={
+            deptFilter
           }
-          className={filterCls}
+          onChange={
+            (event) =>
+              setDeptFilter(
+                event.target.value
+              )
+          }
+          className={
+            filterCls
+          }
         >
           <option value="">
             All Departments
@@ -776,8 +1109,12 @@ export default function Employees() {
           {departments.map(
             (department) => (
               <option
-                key={department}
-                value={department}
+                key={
+                  department
+                }
+                value={
+                  department
+                }
               >
                 {department}
               </option>
@@ -786,13 +1123,18 @@ export default function Employees() {
         </select>
 
         <select
-          value={roleFilter}
-          onChange={(event) =>
-            setRoleFilter(
-              event.target.value
-            )
+          value={
+            roleFilter
           }
-          className={filterCls}
+          onChange={
+            (event) =>
+              setRoleFilter(
+                event.target.value
+              )
+          }
+          className={
+            filterCls
+          }
         >
           <option value="">
             All Roles
@@ -808,13 +1150,18 @@ export default function Employees() {
         </select>
 
         <select
-          value={statusFilter}
-          onChange={(event) =>
-            setStatusFilter(
-              event.target.value
-            )
+          value={
+            statusFilter
           }
-          className={filterCls}
+          onChange={
+            (event) =>
+              setStatusFilter(
+                event.target.value
+              )
+          }
+          className={
+            filterCls
+          }
         >
           <option value="">
             All Status
@@ -830,13 +1177,18 @@ export default function Employees() {
         </select>
 
         <select
-          value={gradeFilter}
-          onChange={(event) =>
-            setGradeFilter(
-              event.target.value
-            )
+          value={
+            gradeFilter
           }
-          className={filterCls}
+          onChange={
+            (event) =>
+              setGradeFilter(
+                event.target.value
+              )
+          }
+          className={
+            filterCls
+          }
         >
           <option value="">
             All Grades
@@ -845,8 +1197,12 @@ export default function Employees() {
           {grades.map(
             (grade) => (
               <option
-                key={grade.id}
-                value={grade.name}
+                key={
+                  grade.id
+                }
+                value={
+                  grade.name
+                }
               >
                 {grade.name}
               </option>
@@ -856,7 +1212,9 @@ export default function Employees() {
 
         <button
           type="button"
-          onClick={clearFilters}
+          onClick={
+            clearFilters
+          }
           className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
         >
           Clear Filters
@@ -876,31 +1234,24 @@ export default function Employees() {
                   <th className="px-5 py-3 font-medium">
                     Emp ID
                   </th>
-
                   <th className="px-5 py-3 font-medium">
                     Name
                   </th>
-
                   <th className="px-5 py-3 font-medium">
                     Designation
                   </th>
-
                   <th className="px-5 py-3 font-medium">
                     Grade
                   </th>
-
                   <th className="px-5 py-3 font-medium">
                     Dept
                   </th>
-
                   <th className="px-5 py-3 font-medium">
                     Role
                   </th>
-
                   <th className="px-5 py-3 font-medium">
                     Status
                   </th>
-
                   <th className="px-5 py-3 font-medium">
                     Action
                   </th>
@@ -908,7 +1259,8 @@ export default function Employees() {
               </thead>
 
               <tbody className="divide-y divide-gray-50">
-                {filtered.length === 0 && (
+                {filtered.length ===
+                  0 && (
                   <tr>
                     <td
                       colSpan={8}
@@ -922,7 +1274,9 @@ export default function Employees() {
                 {filtered.map(
                   (user) => (
                     <tr
-                      key={user.id}
+                      key={
+                        user.id
+                      }
                       className="animate-fade-in hover:bg-gray-50/50"
                     >
                       <td className="px-5 py-3 font-mono text-xs text-gray-500">
@@ -932,7 +1286,9 @@ export default function Employees() {
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2.5">
                           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">
-                            {user.fullName.charAt(0)}
+                            {user.fullName.charAt(
+                              0
+                            )}
                           </div>
 
                           <div>
@@ -953,10 +1309,15 @@ export default function Employees() {
                       </td>
 
                       <td className="px-5 py-3">
-                        <Badge variant="teal">
-                          {user.grade ||
-                            '—'}
-                        </Badge>
+                        {user.grade ? (
+                          <Badge variant="teal">
+                            {user.grade}
+                          </Badge>
+                        ) : (
+                          <span className="text-gray-400">
+                            —
+                          </span>
+                        )}
                       </td>
 
                       <td className="px-5 py-3 text-gray-600">
@@ -965,20 +1326,31 @@ export default function Employees() {
                       </td>
 
                       <td className="px-5 py-3 text-gray-600">
-                        {roleLabel[user.role]}
+                        {roleLabel[
+                          user.role
+                        ]}
                       </td>
 
                       <td className="px-5 py-3">
-                        {user.status ===
-                        'active' ? (
-                          <Badge variant="green">
-                            Active
-                          </Badge>
-                        ) : (
-                          <Badge variant="gray">
-                            Inactive
-                          </Badge>
-                        )}
+                        <div className="flex flex-col items-start gap-1">
+                          {user.status ===
+                          'active' ? (
+                            <Badge variant="green">
+                              Active
+                            </Badge>
+                          ) : (
+                            <Badge variant="gray">
+                              Inactive
+                            </Badge>
+                          )}
+
+                          {user.detailsStatus ===
+                            'pending' && (
+                            <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700">
+                              Details Pending
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="px-5 py-3">
@@ -993,9 +1365,7 @@ export default function Employees() {
                             className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
                           >
                             <Eye
-                              size={
-                                14
-                              }
+                              size={14}
                             />
                             View
                           </button>
@@ -1022,9 +1392,7 @@ export default function Employees() {
                             className="inline-flex items-center gap-1 text-sm font-medium text-rose-600 hover:text-rose-700"
                           >
                             <Trash2
-                              size={
-                                14
-                              }
+                              size={14}
                             />
                             Remove
                           </button>
@@ -1040,9 +1408,13 @@ export default function Employees() {
       </div>
 
       <Modal
-        open={showAdd}
+        open={
+          showAdd
+        }
         onClose={() => {
-          if (saving) return;
+          if (saving) {
+            return;
+          }
 
           setShowAdd(false);
           setAddNewField(null);
@@ -1058,9 +1430,14 @@ export default function Employees() {
           <>
             <Button
               variant="secondary"
-              disabled={saving}
+              disabled={
+                saving
+              }
               onClick={() => {
-                setShowAdd(false);
+                setShowAdd(
+                  false
+                );
+
                 resetForm();
               }}
             >
@@ -1070,7 +1447,9 @@ export default function Employees() {
             <Button
               type="submit"
               form="employee-form"
-              disabled={saving}
+              disabled={
+                saving
+              }
             >
               {saving
                 ? 'Saving…'
@@ -1083,114 +1462,178 @@ export default function Employees() {
       >
         <form
           id="employee-form"
-          onSubmit={handleSubmit}
+          onSubmit={
+            handleSubmit
+          }
           className="space-y-5"
         >
+          {editingUser?.detailsStatus ===
+            'pending' && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              <p className="font-semibold">
+                Details Pending
+              </p>
+
+              <p className="mt-1">
+                Complete the highlighted employee details:
+                {' '}
+                {(
+                  editingUser.pendingFields ||
+                  []
+                ).join(', ') ||
+                  'required employee details'}
+                .
+              </p>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField
               label="Full Name"
-              error={errors.fullName}
+              error={
+                errors.fullName
+              }
             >
               <input
-                value={form.fullName}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    fullName:
-                      event.target.value,
-                  })
+                value={
+                  form.fullName
                 }
-                className={inputCls}
+                onChange={
+                  (event) =>
+                    setForm({
+                      ...form,
+                      fullName:
+                        event.target.value,
+                    })
+                }
+                className={
+                  inputCls
+                }
               />
             </FormField>
 
             <FormField
               label="Email"
-              error={errors.email}
+              error={
+                errors.email
+              }
             >
               <input
                 type="email"
-                value={form.email}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    email:
-                      event.target.value,
-                  })
+                value={
+                  form.email
                 }
-                className={inputCls}
+                onChange={
+                  (event) =>
+                    setForm({
+                      ...form,
+                      email:
+                        event.target.value,
+                    })
+                }
+                className={
+                  inputCls
+                }
               />
             </FormField>
 
             <FormField
               label="CNIC"
-              error={errors.cnic}
+              error={
+                errors.cnic
+              }
             >
               <input
-                value={form.cnic}
+                value={
+                  form.cnic
+                }
                 disabled={
                   Boolean(
-                    editingUser?.id
+                    editingUser?.id &&
+                    editingUser.detailsStatus !==
+                      'pending'
                   )
                 }
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    cnic:
-                      event.target.value,
-                  })
+                onChange={
+                  (event) =>
+                    setForm({
+                      ...form,
+                      cnic:
+                        event.target.value,
+                    })
                 }
                 placeholder="12345-1234567-1"
-                className={`${inputCls} disabled:bg-gray-100`}
+                className={`${pendingInputClass('cnic')} disabled:bg-gray-100`}
               />
             </FormField>
 
             <FormField
               label="Phone"
-              error={errors.phone}
+              error={
+                errors.phone
+              }
             >
               <input
-                value={form.phone}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    phone:
-                      event.target.value,
-                  })
+                value={
+                  form.phone
                 }
-                className={inputCls}
+                onChange={
+                  (event) =>
+                    setForm({
+                      ...form,
+                      phone:
+                        event.target.value,
+                    })
+                }
+                className={
+                  pendingInputClass(
+                    'phone'
+                  )
+                }
               />
             </FormField>
 
             <FormField
               label="Employee ID"
-              error={errors.employeeId}
+              error={
+                errors.employeeId
+              }
             >
               <input
-                value={form.employeeId}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    employeeId:
-                      event.target.value,
-                  })
+                value={
+                  form.employeeId
                 }
-                className={inputCls}
+                onChange={
+                  (event) =>
+                    setForm({
+                      ...form,
+                      employeeId:
+                        event.target.value,
+                    })
+                }
+                className={
+                  inputCls
+                }
               />
             </FormField>
 
             <FormField label="Portal Access">
               <select
-                value={form.role}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    role:
-                      event.target
-                        .value as Role,
-                  })
+                value={
+                  form.role
                 }
-                className={inputCls}
+                onChange={
+                  (event) =>
+                    setForm({
+                      ...form,
+                      role:
+                        event.target
+                          .value as Role,
+                    })
+                }
+                className={
+                  inputCls
+                }
               >
                 <option value="employee">
                   Employee
@@ -1204,20 +1647,28 @@ export default function Employees() {
 
             <FormField
               label="Designation"
-              error={errors.designation}
+              error={
+                errors.designation
+              }
             >
               <div className="flex gap-2">
                 <select
-                  value={form.designation}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      designation:
-                        event.target
-                          .value,
-                    })
+                  value={
+                    form.designation
                   }
-                  className={inputCls}
+                  onChange={
+                    (event) =>
+                      setForm({
+                        ...form,
+                        designation:
+                          event.target.value,
+                      })
+                  }
+                  className={
+                    pendingInputClass(
+                      'designation'
+                    )
+                  }
                 >
                   <option value="">
                     Select designation
@@ -1226,8 +1677,12 @@ export default function Employees() {
                   {designations.map(
                     (name) => (
                       <option
-                        key={name}
-                        value={name}
+                        key={
+                          name
+                        }
+                        value={
+                          name
+                        }
                       >
                         {name}
                       </option>
@@ -1244,25 +1699,36 @@ export default function Employees() {
                   }
                   className="rounded-lg border border-gray-200 px-3 text-blue-600 hover:bg-blue-50"
                 >
-                  <Plus size={17} />
+                  <Plus
+                    size={17}
+                  />
                 </button>
               </div>
             </FormField>
 
             <FormField
               label="Grade"
-              error={errors.grade}
+              error={
+                errors.grade
+              }
             >
               <select
-                value={form.grade}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    grade:
-                      event.target.value,
-                  })
+                value={
+                  form.grade
                 }
-                className={inputCls}
+                onChange={
+                  (event) =>
+                    setForm({
+                      ...form,
+                      grade:
+                        event.target.value,
+                    })
+                }
+                className={
+                  pendingInputClass(
+                    'grade'
+                  )
+                }
               >
                 <option value="">
                   Select grade
@@ -1271,8 +1737,12 @@ export default function Employees() {
                 {grades.map(
                   (grade) => (
                     <option
-                      key={grade.id}
-                      value={grade.name}
+                      key={
+                        grade.id
+                      }
+                      value={
+                        grade.name
+                      }
                     >
                       {grade.name}
                     </option>
@@ -1283,25 +1753,36 @@ export default function Employees() {
 
             <FormField
               label="Department"
-              error={errors.department}
+              error={
+                errors.department
+              }
             >
               <div className="flex gap-2">
                 <select
-                  value={form.department}
-                  onChange={(event) => {
-                    const newDepartment =
-                      event.target.value;
+                  value={
+                    form.department
+                  }
+                  onChange={
+                    (event) => {
+                      const newDepartment =
+                        event.target.value;
 
-                    setForm(
-                      (previous) => ({
-                        ...previous,
-                        department:
-                          newDepartment,
-                        managerId: '',
-                      })
-                    );
-                  }}
-                  className={inputCls}
+                      setForm(
+                        (previous) => ({
+                          ...previous,
+                          department:
+                            newDepartment,
+                          managerId:
+                            '',
+                        })
+                      );
+                    }
+                  }
+                  className={
+                    pendingInputClass(
+                      'department'
+                    )
+                  }
                 >
                   <option value="">
                     Select department
@@ -1310,8 +1791,12 @@ export default function Employees() {
                   {departments.map(
                     (name) => (
                       <option
-                        key={name}
-                        value={name}
+                        key={
+                          name
+                        }
+                        value={
+                          name
+                        }
                       >
                         {name}
                       </option>
@@ -1328,7 +1813,9 @@ export default function Employees() {
                   }
                   className="rounded-lg border border-gray-200 px-3 text-blue-600 hover:bg-blue-50"
                 >
-                  <Plus size={17} />
+                  <Plus
+                    size={17}
+                  />
                 </button>
               </div>
             </FormField>
@@ -1344,32 +1831,42 @@ export default function Employees() {
                 value={
                   form.dateOfJoining
                 }
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    dateOfJoining:
-                      event.target.value,
-                  })
+                onChange={
+                  (event) =>
+                    setForm({
+                      ...form,
+                      dateOfJoining:
+                        event.target.value,
+                    })
                 }
-                className={inputCls}
+                className={
+                  pendingInputClass(
+                    'dateOfJoining'
+                  )
+                }
               />
             </FormField>
 
             {editingUser?.id && (
               <FormField label="Status">
                 <select
-                  value={form.status}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      status:
-                        event.target
-                          .value as
-                          | 'active'
-                          | 'inactive',
-                    })
+                  value={
+                    form.status
                   }
-                  className={inputCls}
+                  onChange={
+                    (event) =>
+                      setForm({
+                        ...form,
+                        status:
+                          event.target
+                            .value as
+                            | 'active'
+                            | 'inactive',
+                      })
+                  }
+                  className={
+                    inputCls
+                  }
                 >
                   <option value="active">
                     Active
@@ -1384,13 +1881,16 @@ export default function Employees() {
 
             <FormField label="Manager">
               <select
-                value={form.managerId}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    managerId:
-                      event.target.value,
-                  })
+                value={
+                  form.managerId
+                }
+                onChange={
+                  (event) =>
+                    setForm({
+                      ...form,
+                      managerId:
+                        event.target.value,
+                    })
                 }
                 disabled={
                   !form.department
@@ -1406,8 +1906,12 @@ export default function Employees() {
                 {availableManagers.map(
                   (manager) => (
                     <option
-                      key={manager.id}
-                      value={manager.id}
+                      key={
+                        manager.id
+                      }
+                      value={
+                        manager.id
+                      }
                     >
                       {manager.fullName}
                       {' — '}
@@ -1420,10 +1924,10 @@ export default function Employees() {
               {form.department &&
                 availableManagers.length ===
                   0 && (
-                  <p className="mt-1 text-xs text-gray-400">
-                    No active manager is available in this department.
-                  </p>
-                )}
+                <p className="mt-1 text-xs text-gray-400">
+                  No active manager is available in this department.
+                </p>
+              )}
             </FormField>
 
             {form.role ===
@@ -1435,13 +1939,13 @@ export default function Employees() {
                     checked={
                       form.canApproveOtherDepartments
                     }
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        canApproveOtherDepartments:
-                          event.target
-                            .checked,
-                      })
+                    onChange={
+                      (event) =>
+                        setForm({
+                          ...form,
+                          canApproveOtherDepartments:
+                            event.target.checked,
+                        })
                     }
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
@@ -1455,7 +1959,11 @@ export default function Employees() {
       </Modal>
 
       <Modal
-        open={Boolean(addNewField)}
+        open={
+          Boolean(
+            addNewField
+          )
+        }
         onClose={() => {
           setAddNewField(null);
           setNewItemName('');
@@ -1471,8 +1979,13 @@ export default function Employees() {
             <Button
               variant="secondary"
               onClick={() => {
-                setAddNewField(null);
-                setNewItemName('');
+                setAddNewField(
+                  null
+                );
+
+                setNewItemName(
+                  ''
+                );
               }}
             >
               Cancel
@@ -1489,28 +2002,41 @@ export default function Employees() {
         }
       >
         <input
-          value={newItemName}
-          onChange={(event) =>
-            setNewItemName(
-              event.target.value
-            )
+          value={
+            newItemName
           }
-          className={inputCls}
+          onChange={
+            (event) =>
+              setNewItemName(
+                event.target.value
+              )
+          }
+          className={
+            inputCls
+          }
           autoFocus
         />
       </Modal>
 
       <Modal
-        open={Boolean(viewUser)}
+        open={
+          Boolean(
+            viewUser
+          )
+        }
         onClose={() =>
-          setViewUser(null)
+          setViewUser(
+            null
+          )
         }
         title="Employee Details"
         size="lg"
       >
         {viewUser &&
           (() => {
-            const { manager } =
+            const {
+              manager,
+            } =
               getReportingChain(
                 viewUser,
                 getUserById
@@ -1518,6 +2044,21 @@ export default function Employees() {
 
             return (
               <div className="space-y-3">
+                {viewUser.detailsStatus ===
+                  'pending' && (
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    <strong>
+                      Details Pending:
+                    </strong>
+                    {' '}
+                    {(
+                      viewUser.pendingFields ||
+                      []
+                    ).join(', ') ||
+                      'required employee details'}
+                  </div>
+                )}
+
                 <Detail
                   label="Name"
                   value={
@@ -1542,7 +2083,8 @@ export default function Employees() {
                 <Detail
                   label="CNIC"
                   value={
-                    viewUser.cnic
+                    viewUser.cnic ||
+                    '—'
                   }
                 />
 
@@ -1589,9 +2131,13 @@ export default function Employees() {
 
                 <Detail
                   label="Joining Date"
-                  value={formatDate(
+                  value={
                     viewUser.dateOfJoining
-                  )}
+                      ? formatDate(
+                          viewUser.dateOfJoining
+                        )
+                      : '—'
+                  }
                 />
 
                 <Detail
@@ -1607,10 +2153,18 @@ export default function Employees() {
       </Modal>
 
       <Modal
-        open={Boolean(removeTarget)}
+        open={
+          Boolean(
+            removeTarget
+          )
+        }
         onClose={() => {
-          if (!deleting) {
-            setRemoveTarget(null);
+          if (
+            !deleting
+          ) {
+            setRemoveTarget(
+              null
+            );
           }
         }}
         title="Remove Employee"
@@ -1618,7 +2172,9 @@ export default function Employees() {
           <>
             <Button
               variant="secondary"
-              disabled={deleting}
+              disabled={
+                deleting
+              }
               onClick={() =>
                 setRemoveTarget(
                   null
@@ -1630,7 +2186,9 @@ export default function Employees() {
 
             <button
               type="button"
-              disabled={deleting}
+              disabled={
+                deleting
+              }
               onClick={() =>
                 void handleRemove()
               }
@@ -1653,7 +2211,237 @@ export default function Employees() {
       </Modal>
 
       <Modal
-        open={message.open}
+        open={
+          Boolean(
+            csvReview
+          )
+        }
+        onClose={() => {
+          if (
+            importing
+          ) {
+            return;
+          }
+
+          setCsvReview(
+            null
+          );
+          setCsvFile(
+            null
+          );
+        }}
+        title="CSV Import Review"
+        size="lg"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              disabled={
+                importing
+              }
+              onClick={() => {
+                setCsvReview(
+                  null
+                );
+                setCsvFile(
+                  null
+                );
+              }}
+            >
+              Cancel Import
+            </Button>
+
+            <Button
+              disabled={
+                importing
+              }
+              onClick={() =>
+                void confirmPendingImport()
+              }
+            >
+              {importing
+                ? 'Importing…'
+                : 'Import & Complete Later'}
+            </Button>
+          </>
+        }
+      >
+        {csvReview && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <SummaryCard
+                label="Total"
+                value={
+                  csvReview.summary.total
+                }
+              />
+
+              <SummaryCard
+                label="Complete"
+                value={
+                  csvReview.summary.complete ||
+                  0
+                }
+              />
+
+              <SummaryCard
+                label="Details Pending"
+                value={
+                  csvReview.summary.pending ||
+                  0
+                }
+                danger
+              />
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              These employees can be imported now and completed later.
+              Unknown Department, Designation or Grade values will not be
+              created in Master Data automatically.
+            </div>
+
+            <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+              {(
+                csvReview.pendingEmployees ||
+                []
+              )
+                .slice(
+                  0,
+                  10
+                )
+                .map(
+                  (
+                    employee
+                  ) => (
+                    <div
+                      key={
+                        employee.row
+                      }
+                      className="rounded-lg border border-rose-100 bg-rose-50/50 p-3"
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <strong className="text-sm text-gray-900">
+                          {employee.fullName ||
+                            employee.employeeId ||
+                            'Employee'}
+                        </strong>
+
+                        <span className="text-xs text-gray-500">
+                          Row {employee.row}
+                        </span>
+                      </div>
+
+                      <ul className="space-y-1 text-sm text-rose-700">
+                        {employee.issues.map(
+                          (
+                            issue,
+                            index
+                          ) => (
+                            <li
+                              key={`${employee.row}-${issue.field}-${index}`}
+                            >
+                              • {issue.message}
+                            </li>
+                          )
+                        )}
+                      </ul>
+                    </div>
+                  )
+                )}
+
+              {(
+                csvReview
+                  .pendingEmployees
+                  ?.length ||
+                0
+              ) > 10 && (
+                <p className="text-xs text-gray-500">
+                  Showing first 10 pending employees. Total pending:{' '}
+                  {
+                    csvReview
+                      .pendingEmployees
+                      ?.length
+                  }
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={
+          csvBlockingErrors.length >
+          0
+        }
+        onClose={() =>
+          setCsvBlockingErrors(
+            []
+          )
+        }
+        title="CSV Import Blocked"
+        size="lg"
+        footer={
+          <Button
+            onClick={() =>
+              setCsvBlockingErrors(
+                []
+              )
+            }
+          >
+            Close
+          </Button>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            The CSV contains blocking errors. Nothing was imported.
+            Fix these fields and upload the file again.
+          </div>
+
+          <div className="max-h-80 space-y-2 overflow-y-auto">
+            {csvBlockingErrors
+              .slice(
+                0,
+                20
+              )
+              .map(
+                (
+                  item,
+                  index
+                ) => (
+                  <div
+                    key={`${item.row}-${item.field}-${index}`}
+                    className="rounded-lg border border-gray-100 px-3 py-2 text-sm"
+                  >
+                    <strong>
+                      Row {item.row}
+                    </strong>
+                    {' — '}
+                    {item.employee}
+                    {' — '}
+                    <span className="text-rose-700">
+                      {item.message}
+                    </span>
+                  </div>
+                )
+              )}
+
+            {csvBlockingErrors.length >
+              20 && (
+              <p className="text-xs text-gray-500">
+                Showing first 20 errors. Total errors:{' '}
+                {csvBlockingErrors.length}
+              </p>
+            )}
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={
+          message.open
+        }
         onClose={() =>
           setMessage(
             (previous) => ({
@@ -1662,7 +2450,9 @@ export default function Employees() {
             })
           )
         }
-        title={message.title}
+        title={
+          message.title
+        }
         footer={
           <Button
             onClick={() =>
@@ -1680,7 +2470,8 @@ export default function Employees() {
       >
         <div
           className={`rounded-lg px-4 py-3 text-sm ${
-            message.type === 'error'
+            message.type ===
+            'error'
               ? 'bg-rose-50 text-rose-700'
               : message.type ===
                   'warning'
@@ -1738,6 +2529,40 @@ function Detail({
       </p>
 
       <p className="mt-0.5 text-sm font-medium text-gray-900">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function SummaryCard({
+  label,
+  value,
+  danger = false,
+}: {
+  label: string;
+  value: number;
+  danger?: boolean;
+}) {
+  return (
+    <div
+      className={
+        danger
+          ? 'rounded-lg border border-rose-200 bg-rose-50 p-3'
+          : 'rounded-lg border border-gray-100 bg-gray-50 p-3'
+      }
+    >
+      <p className="text-xs text-gray-500">
+        {label}
+      </p>
+
+      <p
+        className={
+          danger
+            ? 'mt-1 text-xl font-semibold text-rose-700'
+            : 'mt-1 text-xl font-semibold text-gray-900'
+        }
+      >
         {value}
       </p>
     </div>
