@@ -39,16 +39,19 @@ export default function Grades() {
 
   const openEdit = (grade: Grade) => {
     setEditing(grade);
+
     setForm({
       name: grade.name,
       description: grade.description || '',
     });
+
     setMessage(null);
     setShowForm(true);
   };
 
   const closeForm = () => {
     if (saving) return;
+
     setShowForm(false);
     setEditing(null);
     setForm(EMPTY_FORM);
@@ -97,9 +100,7 @@ export default function Grades() {
         type: 'error',
         text: getApiErrorMessage(
           error,
-          editing
-            ? 'Unable to update grade.'
-            : 'Unable to create grade.'
+          editing ? 'Unable to update grade.' : 'Unable to create grade.'
         ),
       });
     } finally {
