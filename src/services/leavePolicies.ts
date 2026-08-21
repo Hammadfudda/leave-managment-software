@@ -1,16 +1,5 @@
 import api from './api';
-
-import type {
-  GradeQuota,
-  LeavePolicy,
-} from '../types';
-
-type BackendGrade =
-  | string
-  | {
-      _id?: string;
-      name?: string;
-    };
+import type { LeavePolicy } from '../types';
 
 type BackendApprover =
   | string
@@ -18,290 +7,154 @@ type BackendApprover =
       _id?: string;
     };
 
+interface BackendGradeQuota {
+  gradeId:
+    | string
+    | {
+        _id?: string;
+        name?: string;
+      };
+  yearlyQuota: number;
+}
+
 interface BackendLeavePolicy {
   _id: string;
   leaveType: string;
-
-  applicableRole?: string;
-
-  gradeQuotas?: Array<{
-    gradeId: BackendGrade;
-    yearlyQuota: number;
-  }>;
-
+  gradeQuotas?: BackendGradeQuota[];
   isPaid?: boolean;
-
   documentRequirement?:
     | 'required'
     | 'optional'
     | 'not_required';
-
+  carryForwardAllowed?: boolean;
+  maxCarryForwardDays?: number;
   finalApprovalMode?: boolean;
-
   approvalRouting?: {
-    designation?: string | null;
-    department?: string | null;
     approverIds?: BackendApprover[];
   };
 }
 
-function getId(
-  value:
-    | BackendGrade
-    | BackendApprover
-) {
-  if (
-    typeof value ===
-    'string'
-  ) {
-    return value;
-  }
-
-  return value._id || '';
+function getApproverId(approver: BackendApprover): string {
+  if (typeof approver === 'string') return approver;
+  return approver._id || '';
 }
 
-function mapGradeQuota(
-  row: {
-    gradeId: BackendGrade;
-    yearlyQuota: number;
-  }
-): GradeQuota {
-  const populated =
-    typeof row.gradeId ===
-    'object'
-      ? row.gradeId
-      : null;
+function getGradeId(
+  value: BackendGradeQuota['gradeId']
+): string {
+  return typeof value === 'string'
+    ? value
+    : value?._id || '';
+}
 
-  return {
-    gradeId:
-      getId(
-        row.gradeId
-      ),
-
-    gradeName:
-      populated?.name,
-
-    yearlyQuota:
-      Number(
-        row.yearlyQuota ||
-        0
-      ),
-  };
+function getGradeName(
+  value: BackendGradeQuota['gradeId']
+): string | undefined {
+  return typeof value === 'string'
+    ? undefined
+    : value?.name;
 }
 
 export function mapLeavePolicy(
-  policy:
-    BackendLeavePolicy
+  policy: BackendLeavePolicy
 ): LeavePolicy {
   return {
-    id:
-      policy._id,
-
-    leaveType:
-      policy.leaveType,
-
-    role:
-      policy.applicableRole ||
-      'All Employees',
-
-    gradeQuotas:
-      (
-        policy.gradeQuotas ||
-        []
-      ).map(
-        mapGradeQuota
-      ),
-
-    requiresApprovalFrom:
-      'manager',
-
+    id: policy._id,
+    leaveType: policy.leaveType,
+    gradeQuotas: (policy.gradeQuotas || []).map((item) => ({
+      gradeId: getGradeId(item.gradeId),
+      gradeName: getGradeName(item.gradeId),
+      yearlyQuota: Number(item.yearlyQuota || 0),
+    })),
+    requiresApprovalFrom: 'manager',
     approvalRouting: {
-      designation:
-        policy
-          .approvalRouting
-          ?.designation ||
-        undefined,
-
-      department:
-        policy
-          .approvalRouting
-          ?.department ||
-        undefined,
-
-      approverIds:
-        (
-          policy
-            .approvalRouting
-            ?.approverIds ||
-          []
-        )
-          .map(
-            getId
-          )
-          .filter(Boolean),
+      approverIds: (
+        policy.approvalRouting?.approverIds || []
+      )
+        .map(getApproverId)
+        .filter(Boolean),
     },
-
     requiresDocumentUpload:
-      policy
-        .documentRequirement ===
-      'required',
-
+      policy.documentRequirement === 'required',
     documentRequirement:
-      policy
-        .documentRequirement ||
-      'optional',
-
+      policy.documentRequirement || 'optional',
     finalApprovalMode:
-      Boolean(
-        policy
-          .finalApprovalMode
-      ),
-
-    minDaysNoticeRequired:
-      0,
-
-    isPaid:
-      policy.isPaid ??
-      true,
+      policy.finalApprovalMode ?? true,
+    carryForwardAllowed:
+      Boolean(policy.carryForwardAllowed),
+    maxCarryForwardDays:
+      Number(policy.maxCarryForwardDays || 0),
+    minDaysNoticeRequired: 0,
+    isPaid: policy.isPaid ?? true,
   };
 }
 
-function makePayload(
-  policy:
-    LeavePolicy
-) {
+function toBackendPayload(policy: LeavePolicy) {
   return {
-    leaveType:
-      policy.leaveType,
-
-    applicableRole:
-      policy.role ||
-      'All Employees',
-
-    gradeQuotas:
-      policy.gradeQuotas
-        .map(
-          (row) => ({
-            gradeId:
-              row.gradeId,
-
-            yearlyQuota:
-              Number(
-                row.yearlyQuota
-              ),
-          })
-        ),
-
-    isPaid:
-      Boolean(
-        policy.isPaid
-      ),
-
-    minDaysNoticeRequired:
-      0,
-
+    leaveType: policy.leaveType,
+    gradeQuotas: policy.gradeQuotas.map((item) => ({
+      gradeId: item.gradeId,
+      yearlyQuota: Number(item.yearlyQuota),
+    })),
+    isPaid: Boolean(policy.isPaid),
     documentRequirement:
-      policy
-        .documentRequirement ||
-      (
-        policy
-          .requiresDocumentUpload
-          ? 'required'
-          : 'optional'
-      ),
-
+      policy.documentRequirement ||
+      (policy.requiresDocumentUpload
+        ? 'required'
+        : 'optional'),
+    carryForwardAllowed:
+      Boolean(policy.carryForwardAllowed),
+    maxCarryForwardDays:
+      policy.carryForwardAllowed
+        ? Number(policy.maxCarryForwardDays || 0)
+        : 0,
     finalApprovalMode:
-      Boolean(
-        policy
-          .finalApprovalMode
-      ),
-
+      policy.finalApprovalMode !== false,
     approvalRouting: {
-      designation:
-        policy
-          .approvalRouting
-          ?.designation ||
-        null,
-
-      department:
-        policy
-          .approvalRouting
-          ?.department ||
-        null,
-
       approverIds:
-        policy
-          .finalApprovalMode
+        policy.finalApprovalMode !== false
           ? []
-          : (
-              policy
-                .approvalRouting
-                ?.approverIds ||
-              []
-            ),
+          : policy.approvalRouting?.approverIds || [],
     },
   };
 }
 
 export async function getLeavePolicies():
 Promise<LeavePolicy[]> {
-  const response =
-    await api.get(
-      '/leave-policies',
-      {
-        params: {
-          page: 1,
-          limit: 500,
-        },
-      }
-    );
+  const response = await api.get('/leave-policies', {
+    params: {
+      page: 1,
+      limit: 500,
+    },
+  });
 
-  return (
-    response.data?.data ||
-    []
-  ).map(
-    mapLeavePolicy
-  );
+  return (response.data?.data || []).map(mapLeavePolicy);
 }
 
 export async function createLeavePolicy(
-  policy:
-    LeavePolicy
-) {
-  const response =
-    await api.post(
-      '/leave-policies',
-      makePayload(
-        policy
-      )
-    );
-
-  return mapLeavePolicy(
-    response.data.data
+  policy: LeavePolicy
+): Promise<LeavePolicy> {
+  const response = await api.post(
+    '/leave-policies',
+    toBackendPayload(policy)
   );
+
+  return mapLeavePolicy(response.data.data);
 }
 
 export async function updateLeavePolicy(
-  policy:
-    LeavePolicy
-) {
-  const response =
-    await api.patch(
-      `/leave-policies/${policy.id}`,
-      makePayload(
-        policy
-      )
-    );
-
-  return mapLeavePolicy(
-    response.data.data
+  policy: LeavePolicy
+): Promise<LeavePolicy> {
+  const response = await api.patch(
+    `/leave-policies/${policy.id}`,
+    toBackendPayload(policy)
   );
+
+  return mapLeavePolicy(response.data.data);
 }
 
 export async function deleteLeavePolicy(
   policyId: string
-) {
-  await api.delete(
-    `/leave-policies/${policyId}`
-  );
+): Promise<void> {
+  await api.delete(`/leave-policies/${policyId}`);
 }

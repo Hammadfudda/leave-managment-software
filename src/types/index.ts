@@ -1,7 +1,4 @@
-export type Role =
-  | 'admin'
-  | 'manager'
-  | 'employee';
+export type Role = 'admin' | 'manager' | 'employee';
 
 export type LeaveStatus =
   | 'pending'
@@ -23,14 +20,10 @@ export interface User {
   dateOfJoining: string;
   cnic: string;
   phone: string;
-  status:
-    | 'active'
-    | 'inactive';
+  status: 'active' | 'inactive';
   managerId?: string;
   canApproveOtherDepartments?: boolean;
   profilePhotoUrl?: string;
-
-  // CSV import completion state.
   detailsStatus?: 'complete' | 'pending';
   pendingFields?: string[];
 }
@@ -38,12 +31,12 @@ export interface User {
 export interface Grade {
   id: string;
   name: string;
-  /*
-   * Grade contains NO leave quotas now.
-   */
-  carryForwardAllowed: boolean;
-  maxCarryForwardDays: number;
   description?: string;
+
+  // Kept optional only for backward compatibility with older local data.
+  // Leave entitlement no longer comes from Grade.
+  carryForwardAllowed?: boolean;
+  maxCarryForwardDays?: number;
 }
 
 export interface GradeQuota {
@@ -55,21 +48,15 @@ export interface GradeQuota {
 export interface LeavePolicy {
   id: string;
   leaveType: LeaveType;
-  role?: string;
-
   gradeQuotas: GradeQuota[];
 
-  requiresApprovalFrom:
-    'manager';
+  requiresApprovalFrom: 'manager';
 
   approvalRouting?: {
-    designation?: string;
-    department?: string;
     approverIds: string[];
   };
-  requiresDocumentUpload:
-    boolean;
 
+  requiresDocumentUpload: boolean;
   documentRequirement?:
     | 'optional'
     | 'required'
@@ -77,9 +64,10 @@ export interface LeavePolicy {
 
   finalApprovalMode?: boolean;
 
-  minDaysNoticeRequired:
-    number;
+  carryForwardAllowed?: boolean;
+  maxCarryForwardDays?: number;
 
+  minDaysNoticeRequired: number;
   isPaid: boolean;
 }
 
@@ -87,12 +75,7 @@ export interface ApprovalHistoryEntry {
   approverId: string;
   approverName: string;
   approverRole: string;
-
-  action:
-    | 'approved'
-    | 'rejected'
-    | 'cancelled';
-
+  action: 'approved' | 'rejected' | 'cancelled';
   comment?: string;
   actionDate: string;
 }
@@ -109,11 +92,8 @@ export interface LeaveRequest {
   totalWorkingDays: number;
   reason: string;
   status: LeaveStatus;
-  currentApproverRole:
-    | 'manager'
-    | 'admin';
-  approvalHistory:
-    ApprovalHistoryEntry[];
+  currentApproverRole: 'manager' | 'admin';
+  approvalHistory: ApprovalHistoryEntry[];
   requiredApproverIds?: string[];
   approvedByIds?: string[];
   rejectedByIds?: string[];
@@ -136,14 +116,14 @@ export interface LeaveRequest {
 export interface Notification {
   id: string;
   userId: string;
-
   type:
     | 'leave_submitted'
     | 'leave_approved'
     | 'leave_rejected'
     | 'leave_cancelled'
-    | 'leave_pending_approval';
-
+    | 'leave_pending_approval'
+    | 'extension_requested'
+    | 'stop_requested';
   message: string;
   relatedLeaveRequestId?: string;
   isRead: boolean;
