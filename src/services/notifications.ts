@@ -6,42 +6,91 @@ interface BackendNotification {
   userId: string;
   type: Notification['type'];
   message: string;
-  relatedLeaveRequestId?: string | null;
+  relatedLeaveRequestId?: string;
   isRead: boolean;
-  emailSent?: boolean;
   createdAt: string;
   updatedAt?: string;
+  emailSent?: boolean;
 }
 
-function mapNotification(item: BackendNotification): Notification {
+interface NotificationListResponse {
+  success: boolean;
+  data: BackendNotification[];
+  unreadCount: number;
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
+}
+
+function mapNotification(
+  notification: BackendNotification
+): Notification {
   return {
-    id: item._id,
-    userId: String(item.userId),
-    type: item.type,
-    message: item.message,
-    relatedLeaveRequestId: item.relatedLeaveRequestId || undefined,
-    isRead: Boolean(item.isRead),
-    createdAt: item.createdAt,
+    id: notification._id,
+    userId: notification.userId,
+    type: notification.type,
+    message: notification.message,
+    relatedLeaveRequestId:
+      notification.relatedLeaveRequestId,
+    isRead: notification.isRead,
+    createdAt: notification.createdAt,
   };
 }
 
-export async function getNotifications(): Promise<{
-  items: Notification[];
+export async function getNotifications(
+  params?: {
+    isRead?: boolean;
+    page?: number;
+    limit?: number;
+  }
+): Promise<{
+  notifications: Notification[];
   unreadCount: number;
 }> {
-  const response = await api.get('/notifications', {
-    params: { page: 1, limit: 500 },
-  });
+  const response =
+    await api.get<NotificationListResponse>(
+      '/notifications',
+      {
+        params: {
+          page: 1,
+          limit: 100,
+          ...params,
+        },
+      }
+    );
 
   return {
-    items: (response.data?.data || []).map(mapNotification),
-    unreadCount: Number(response.data?.unreadCount || 0),
+    notifications:
+      (response.data.data || []).map(
+        mapNotification
+      ),
+    unreadCount:
+      Number(
+        response.data.unreadCount || 0
+      ),
   };
 }
 
 export async function markNotificationRead(
-  notificationId: string
+  id: string
 ): Promise<Notification> {
-  const response = await api.patch(`/notifications/${notificationId}/read`);
-  return mapNotification(response.data.data);
+  const response =
+    await api.patch<{
+      success: boolean;
+      data: BackendNotification;
+    }>(
+      `/notifications/${id}/read`
+    );
+
+  return mapNotification(
+    response.data.data
+  );
+}
+
+export async function markAllNotificationsRead():
+Promise<void> {
+  await api.patch(
+    '/notifications/read-all'
+  );
 }

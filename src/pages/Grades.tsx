@@ -20,18 +20,21 @@ export default function Grades() {
     updateGrade,
   } = useAppData();
 
-  const [showAdd, setShowAdd] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Grade | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+
+  const [message, setMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
 
   const openCreate = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
-    setErrorMessage('');
-    setShowAdd(true);
+    setMessage(null);
+    setShowForm(true);
   };
 
   const openEdit = (grade: Grade) => {
@@ -40,62 +43,72 @@ export default function Grades() {
       name: grade.name,
       description: grade.description || '',
     });
-    setErrorMessage('');
-    setShowAdd(true);
+    setMessage(null);
+    setShowForm(true);
   };
 
   const closeForm = () => {
     if (saving) return;
-    setShowAdd(false);
+    setShowForm(false);
     setEditing(null);
-    setErrorMessage('');
+    setForm(EMPTY_FORM);
   };
 
   const handleSave = async () => {
     const name = form.name.trim();
 
     if (!name) {
-      setErrorMessage('Grade name is required.');
+      setMessage({
+        type: 'error',
+        text: 'Grade name is required.',
+      });
       return;
     }
 
     setSaving(true);
-    setErrorMessage('');
+    setMessage(null);
 
     try {
-      const grade: Grade = {
+      const payload: Grade = {
         id: editing?.id || '',
         name,
         description: form.description.trim(),
       };
 
       if (editing) {
-        await updateGrade(grade);
-        setSuccessMessage('Grade updated successfully.');
+        await updateGrade(payload);
+        setMessage({
+          type: 'success',
+          text: 'Grade updated successfully.',
+        });
       } else {
-        await addGrade(grade);
-        setSuccessMessage('Grade created successfully.');
+        await addGrade(payload);
+        setMessage({
+          type: 'success',
+          text: 'Grade created successfully.',
+        });
       }
 
-      setShowAdd(false);
+      setShowForm(false);
       setEditing(null);
       setForm(EMPTY_FORM);
     } catch (error) {
-      setErrorMessage(
-        getApiErrorMessage(
+      setMessage({
+        type: 'error',
+        text: getApiErrorMessage(
           error,
           editing
             ? 'Unable to update grade.'
             : 'Unable to create grade.'
-        )
-      );
+        ),
+      });
     } finally {
       setSaving(false);
     }
   };
 
   const inputClass =
-    'w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20';
+    'w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20';
 
   return (
     <div className="space-y-6">
@@ -104,8 +117,9 @@ export default function Grades() {
           <h1 className="text-2xl font-semibold text-gray-900">
             Grades
           </h1>
+
           <p className="mt-1 text-sm text-gray-500">
-            Grades define employee level only. Leave quotas are configured inside Leave Policies.
+            Grades define employee level only. Leave quotas and carry-forward rules are configured in Leave Policies.
           </p>
         </div>
 
@@ -115,41 +129,56 @@ export default function Grades() {
         </Button>
       </div>
 
+      {message && !showForm && (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            message.type === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              : 'border-rose-200 bg-rose-50 text-rose-700'
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {grades.map((grade) => (
           <div
             key={grade.id}
             className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm animate-fade-in"
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-gray-900">
-                {grade.name}
-              </h3>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">
+                  {grade.name}
+                </h3>
+
+                <p className="mt-2 text-sm text-gray-500">
+                  {grade.description || 'No description'}
+                </p>
+              </div>
 
               <button
                 type="button"
                 onClick={() => openEdit(grade)}
                 className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                aria-label={`Edit ${grade.name}`}
               >
                 <Pencil size={14} />
               </button>
             </div>
-
-            {grade.description ? (
-              <p className="mt-2 text-sm text-gray-500">
-                {grade.description}
-              </p>
-            ) : (
-              <p className="mt-2 text-sm text-gray-400">
-                No description
-              </p>
-            )}
           </div>
         ))}
+
+        {grades.length === 0 && (
+          <div className="col-span-full rounded-2xl border border-gray-100 bg-white p-10 text-center text-sm text-gray-400">
+            No grades have been created yet.
+          </div>
+        )}
       </div>
 
       <Modal
-        open={showAdd}
+        open={showForm}
         onClose={closeForm}
         title={editing ? 'Edit Grade' : 'Add Grade'}
         footer={
@@ -176,9 +205,9 @@ export default function Grades() {
         }
       >
         <div className="space-y-4">
-          {errorMessage && (
+          {message?.type === 'error' && (
             <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {errorMessage}
+              {message.text}
             </div>
           )}
 
@@ -190,13 +219,14 @@ export default function Grades() {
             <input
               value={form.name}
               onChange={(event) =>
-                setForm({
-                  ...form,
+                setForm((previous) => ({
+                  ...previous,
                   name: event.target.value,
-                })
+                }))
               }
               className={inputClass}
               placeholder="e.g. Grade A"
+              autoFocus
             />
           </div>
 
@@ -205,35 +235,23 @@ export default function Grades() {
               Description
             </label>
 
-            <input
+            <textarea
               value={form.description}
               onChange={(event) =>
-                setForm({
-                  ...form,
+                setForm((previous) => ({
+                  ...previous,
                   description: event.target.value,
-                })
+                }))
               }
-              className={inputClass}
+              className={`${inputClass} min-h-24 resize-y`}
               placeholder="Optional"
             />
           </div>
-        </div>
-      </Modal>
 
-      <Modal
-        open={Boolean(successMessage)}
-        onClose={() => setSuccessMessage('')}
-        title="Success"
-        size="sm"
-        footer={
-          <Button onClick={() => setSuccessMessage('')}>
-            OK
-          </Button>
-        }
-      >
-        <p className="text-sm text-gray-600">
-          {successMessage}
-        </p>
+          <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">
+            Annual, Sick, Casual and other yearly leave quotas are configured grade-wise inside Leave Policies.
+          </div>
+        </div>
       </Modal>
     </div>
   );
