@@ -304,6 +304,7 @@ function Dashboard({
     useState<{
       email: string;
       password: string;
+      emailSent?: boolean;
     } | null>(null);
 
   const [resetTarget, setResetTarget] =
@@ -836,6 +837,18 @@ function Dashboard({
           <div className="space-y-4">
             <div className="rounded-lg border border-emerald-900 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-300">
               Client Admin access created successfully.
+            </div>
+
+            <div
+              className={`rounded-lg border px-4 py-3 text-sm ${
+                credentials.emailSent
+                  ? 'border-emerald-900 bg-emerald-950/40 text-emerald-300'
+                  : 'border-amber-900 bg-amber-950/40 text-amber-300'
+              }`}
+            >
+              {credentials.emailSent
+                ? 'Setup email sent to the Client Admin.'
+                : 'Account created, but setup email was not sent. You can share the credentials shown below.'}
             </div>
 
             <div className="rounded-xl border border-slate-700 bg-slate-950 p-4">
