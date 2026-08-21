@@ -121,8 +121,8 @@ export default function Login() {
       <div className="w-full max-w-sm">
         <div className="mb-4 flex flex-col items-center">
           <img
-            src="/nedd-logo.png"
-            alt="Nedd Consultant"
+           src="/neddconsultantlogo.jpeg"
+  alt="Nedd Consultant"
             className="h-16 w-auto object-contain"
           />
 

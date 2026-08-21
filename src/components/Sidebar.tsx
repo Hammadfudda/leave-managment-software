@@ -14,7 +14,6 @@ import {
   UserCircle,
   Settings2,
 } from "lucide-react";
-
 import type { Role } from "../types";
 import { useAuth } from "../context/AuthContext";
 
@@ -32,79 +31,66 @@ const navItems: NavItem[] = [
     icon: LayoutDashboard,
     roles: ["admin", "manager", "employee"],
   },
-
-  // Admin is a system-level account.
-  // Personal employee profile is only for managers/employees.
   {
     to: "/profile",
     label: "My Profile",
     icon: UserCircle,
-    roles: ["manager", "employee"],
+    roles: ["admin", "manager", "employee"],
   },
-
   {
     to: "/leave/apply",
     label: "Apply Leave",
     icon: CalendarPlus,
     roles: ["manager", "employee"],
   },
-
   {
     to: "/leave/history",
     label: "My Leaves",
     icon: History,
     roles: ["manager", "employee"],
   },
-
   {
     to: "/approvals",
     label: "Approvals",
     icon: CheckSquare,
     roles: ["manager"],
   },
-
   {
     to: "/my-team",
     label: "My Team",
     icon: Users,
     roles: ["manager", "admin"],
   },
-
   {
     to: "/calendar",
     label: "Leave Calendar",
     icon: CalendarDays,
     roles: ["admin", "manager"],
   },
-
   {
     to: "/notifications",
     label: "Notifications",
     icon: Bell,
     roles: ["admin", "manager", "employee"],
   },
-
   {
     to: "/employees",
     label: "Employees",
     icon: Users,
     roles: ["admin"],
   },
-
   {
     to: "/create",
     label: "Create",
     icon: Settings2,
     roles: ["admin"],
   },
-
   {
     to: "/policies",
     label: "Leave Policies",
     icon: FileText,
     roles: ["admin"],
   },
-
   {
     to: "/audit",
     label: "Audit Logs",
@@ -149,18 +135,17 @@ export default function Sidebar({
         }`}
       >
         <div className="flex h-full flex-col">
-
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div className="flex items-center gap-2.5">
               <img
-                src="/Nutrilov_Logo.webp"
-                alt="Nutrilov"
-                className="h-9 w-9 rounded-lg object-contain"
+                src="/neddconsultantlogo.jpeg"
+  alt="Nedd Consultant"
+                className="h-9 w-auto max-w-[70px] object-contain"
               />
 
               <div>
                 <p className="text-sm font-semibold text-gray-900">
-                  Nutrilov
+                  Nedd Consultant
                 </p>
 
                 <p className="text-[11px] text-gray-500">
@@ -170,7 +155,6 @@ export default function Sidebar({
             </div>
 
             <button
-              type="button"
               onClick={onClose}
               className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 lg:hidden"
             >
@@ -211,7 +195,6 @@ export default function Sidebar({
 
           <div className="border-t border-gray-100 p-3">
             <div className="mb-3 flex items-center gap-3 rounded-lg bg-gray-50 px-3 py-2.5">
-
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold text-white">
                 {user.fullName.charAt(0)}
               </div>
@@ -228,8 +211,7 @@ export default function Sidebar({
             </div>
 
             <button
-              type="button"
-              onClick={() => void logout()}
+              onClick={logout}
               className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
             >
               <LogOut size={18} />
