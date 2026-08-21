@@ -138,7 +138,7 @@ export default function Sidebar({
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div className="flex items-center gap-2.5">
               <img
-                src="/neddconsultantlogo.jpeg"
+                src="/neddconsultantlogo.png"
   alt="Nedd Consultant"
                 className="h-9 w-auto max-w-[70px] object-contain"
               />

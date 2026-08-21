@@ -36,11 +36,6 @@ interface MessageState {
 
 const emptyGradeForm = {
   name: '',
-  annualLeaveQuota: 14,
-  sickLeaveQuota: 7,
-  casualLeaveQuota: 5,
-  carryForwardAllowed: false,
-  maxCarryForwardDays: 0,
   description: '',
 };
 
@@ -210,16 +205,6 @@ export default function MasterData() {
 
     setGradeForm({
       name: grade.name,
-      annualLeaveQuota:
-        grade.annualLeaveQuota,
-      sickLeaveQuota:
-        grade.sickLeaveQuota,
-      casualLeaveQuota:
-        grade.casualLeaveQuota,
-      carryForwardAllowed:
-        grade.carryForwardAllowed,
-      maxCarryForwardDays:
-        grade.maxCarryForwardDays,
       description:
         grade.description || '',
     });
@@ -436,43 +421,27 @@ export default function MasterData() {
         return;
       }
 
-      if (
-        gradeForm.annualLeaveQuota <
-          0 ||
-        gradeForm.sickLeaveQuota <
-          0 ||
-        gradeForm.casualLeaveQuota <
-          0 ||
-        gradeForm.maxCarryForwardDays <
-          0
-      ) {
-        showMessage(
-          'warning',
-          'Invalid Balance',
-          'Leave balances cannot be negative.'
-        );
-
-        return;
-      }
-
       setSaving(true);
 
       try {
+        const payload: Grade = {
+          id:
+            editingGrade?.id ||
+            '',
+          name:
+            gradeForm.name.trim(),
+          description:
+            gradeForm.description.trim(),
+        };
+
         if (editingGrade) {
-          await updateGrade({
-            id:
-              editingGrade.id,
-            ...gradeForm,
-            name:
-              gradeForm.name.trim(),
-          });
+          await updateGrade(
+            payload
+          );
         } else {
-          await addGrade({
-            id: '',
-            ...gradeForm,
-            name:
-              gradeForm.name.trim(),
-          });
+          await addGrade(
+            payload
+          );
         }
 
         await refreshLookups();
@@ -521,14 +490,18 @@ export default function MasterData() {
       icon: Building2,
     },
     {
-      key: 'grades' as const,
-      label: 'Grades',
+      key:
+        'grades' as const,
+      label:
+        'Grades',
       icon:
         GraduationCap,
     },
     {
-      key: 'roles' as const,
-      label: 'Roles',
+      key:
+        'roles' as const,
+      label:
+        'Roles',
       icon: ShieldCheck,
     },
   ];
@@ -564,18 +537,20 @@ export default function MasterData() {
                   className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-base font-semibold text-gray-900">
-                      {
-                        grade.name
-                      }
-                    </h3>
+                    <div className="min-w-0">
+                      <h3 className="text-base font-semibold text-gray-900">
+                        {
+                          grade.name
+                        }
+                      </h3>
+
+                      <p className="mt-1 text-sm text-gray-500">
+                        {grade.description ||
+                          'No description'}
+                      </p>
+                    </div>
 
                     <div className="flex items-center gap-2">
-                      <Badge variant="teal">
-                        {grade.description ||
-                          'Grade policy'}
-                      </Badge>
-
                       <button
                         type="button"
                         onClick={() =>
@@ -584,6 +559,7 @@ export default function MasterData() {
                           )
                         }
                         className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                        aria-label={`Edit ${grade.name}`}
                       >
                         <Pencil
                           size={
@@ -603,6 +579,7 @@ export default function MasterData() {
                           )
                         }
                         className="rounded-lg p-1.5 text-gray-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                        aria-label={`Delete ${grade.name}`}
                       >
                         <Trash2
                           size={
@@ -613,42 +590,10 @@ export default function MasterData() {
                     </div>
                   </div>
 
-                  <div className="mt-4 space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">
-                        Annual balance
-                      </span>
-                      <span className="font-medium text-gray-900">
-                        {
-                          grade.annualLeaveQuota
-                        }{' '}
-                        days
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">
-                        Sick balance
-                      </span>
-                      <span className="font-medium text-gray-900">
-                        {
-                          grade.sickLeaveQuota
-                        }{' '}
-                        days
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">
-                        Casual balance
-                      </span>
-                      <span className="font-medium text-gray-900">
-                        {
-                          grade.casualLeaveQuota
-                        }{' '}
-                        days
-                      </span>
-                    </div>
+                  <div className="mt-4">
+                    <Badge variant="teal">
+                      Employee grade
+                    </Badge>
                   </div>
                 </div>
               )
@@ -801,6 +746,7 @@ export default function MasterData() {
                   <Icon
                     size={15}
                   />
+
                   {item.label}
                 </button>
               );
@@ -919,149 +865,9 @@ export default function MasterData() {
                   })
                 }
                 className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                autoFocus
               />
             </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Annual balance
-                </label>
-
-                <input
-                  type="number"
-                  min="0"
-                  value={
-                    gradeForm.annualLeaveQuota
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setGradeForm({
-                      ...gradeForm,
-                      annualLeaveQuota:
-                        Number(
-                          event
-                            .target
-                            .value
-                        ),
-                    })
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Sick balance
-                </label>
-
-                <input
-                  type="number"
-                  min="0"
-                  value={
-                    gradeForm.sickLeaveQuota
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setGradeForm({
-                      ...gradeForm,
-                      sickLeaveQuota:
-                        Number(
-                          event
-                            .target
-                            .value
-                        ),
-                    })
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Casual balance
-                </label>
-
-                <input
-                  type="number"
-                  min="0"
-                  value={
-                    gradeForm.casualLeaveQuota
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setGradeForm({
-                      ...gradeForm,
-                      casualLeaveQuota:
-                        Number(
-                          event
-                            .target
-                            .value
-                        ),
-                    })
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                />
-              </div>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={
-                  gradeForm.carryForwardAllowed
-                }
-                onChange={(
-                  event
-                ) =>
-                  setGradeForm({
-                    ...gradeForm,
-                    carryForwardAllowed:
-                      event
-                        .target
-                        .checked,
-                  })
-                }
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-
-              Carry forward
-              allowed
-            </label>
-
-            {gradeForm.carryForwardAllowed && (
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Maximum carry
-                  forward days
-                </label>
-
-                <input
-                  type="number"
-                  min="0"
-                  value={
-                    gradeForm.maxCarryForwardDays
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setGradeForm({
-                      ...gradeForm,
-                      maxCarryForwardDays:
-                        Number(
-                          event
-                            .target
-                            .value
-                        ),
-                    })
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                />
-              </div>
-            )}
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -1083,8 +889,13 @@ export default function MasterData() {
                         .value,
                   })
                 }
+                placeholder="Optional description"
                 className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
+            </div>
+
+            <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">
+              Leave quotas and carry-forward rules are configured grade-wise inside Leave Policies.
             </div>
           </div>
         ) : (
@@ -1115,29 +926,29 @@ export default function MasterData() {
 
             {tab ===
               'departments' && (
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={
-                    saturdayOffValue
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setSaturdayOffValue(
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={
+                      saturdayOffValue
+                    }
+                    onChange={(
                       event
-                        .target
-                        .checked
-                    )
-                  }
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
+                    ) =>
+                      setSaturdayOffValue(
+                        event
+                          .target
+                          .checked
+                      )
+                    }
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
 
-                Saturday is a
-                day off for this
-                department
-              </label>
-            )}
+                  Saturday is a
+                  day off for this
+                  department
+                </label>
+              )}
           </div>
         )}
       </Modal>
