@@ -287,8 +287,11 @@ export default function App() {
                   to="/dashboard"
                   replace
                 />
-                <Route path="/super-admin" element={<SuperAdminApp />} />
-              }
+               
+<Route
+  path="/super-admin"
+  element={<SuperAdminApp />}
+/>              }
             />
           </Routes>
         </BrowserRouter>
