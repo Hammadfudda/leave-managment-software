@@ -27,7 +27,7 @@ import AuditLogs from "./pages/AuditLogs";
 import Profile from "./pages/Profile";
 import MasterData from "./pages/MasterData";
 import MyTeam from "./pages/MyTeam";
-
+import SuperAdminApp from "./super-admin/SuperAdminApp";
 import type { Role } from "./types";
 
 function Protected({
@@ -287,6 +287,7 @@ export default function App() {
                   to="/dashboard"
                   replace
                 />
+                <Route path="/super-admin" element={<SuperAdminApp />} />
               }
             />
           </Routes>
