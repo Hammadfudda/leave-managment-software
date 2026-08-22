@@ -27,7 +27,9 @@ import AuditLogs from "./pages/AuditLogs";
 import Profile from "./pages/Profile";
 import MasterData from "./pages/MasterData";
 import MyTeam from "./pages/MyTeam";
+
 import SuperAdminApp from "./super-admin/SuperAdminApp";
+
 import type { Role } from "./types";
 
 function Protected({
@@ -103,7 +105,6 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <Routes>
-
             {/* LOGIN */}
             <Route
               path="/"
@@ -112,6 +113,12 @@ export default function App() {
                   <Login />
                 </PublicOnly>
               }
+            />
+
+            {/* SUPER ADMIN */}
+            <Route
+              path="/super-admin"
+              element={<SuperAdminApp />}
             />
 
             {/* AUTHENTICATED AREA */}
@@ -280,6 +287,7 @@ export default function App() {
               />
             </Route>
 
+            {/* FALLBACK */}
             <Route
               path="*"
               element={
@@ -287,11 +295,7 @@ export default function App() {
                   to="/dashboard"
                   replace
                 />
-               
-<Route
-  path="/super-admin"
-  element={<SuperAdminApp />}
-/>              }
+              }
             />
           </Routes>
         </BrowserRouter>
