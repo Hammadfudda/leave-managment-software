@@ -35,7 +35,7 @@ const navItems: NavItem[] = [
     to: "/profile",
     label: "My Profile",
     icon: UserCircle,
-    roles: ["admin", "manager", "employee"],
+    roles: ["manager", "employee"],
   },
   {
     to: "/leave/apply",
@@ -139,7 +139,7 @@ export default function Sidebar({
             <div className="flex items-center gap-2.5">
               <img
                 src="/neddconsultantlogo.png"
-  alt="Nedd Consultant"
+                alt="Nedd Consultant"
                 className="h-9 w-auto max-w-[70px] object-contain"
               />
 

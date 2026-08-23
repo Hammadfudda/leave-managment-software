@@ -32,13 +32,22 @@ interface BackendUser {
   _id: string;
   fullName: string;
   email: string;
-  role: 'admin' | 'manager' | 'employee';
+  role:
+    | 'admin'
+    | 'manager'
+    | 'employee';
 
   employeeId?: string;
   designation?: string;
 
-  gradeId?: string | GradeObject;
-  grade?: string | GradeObject;
+  gradeId?:
+    | string
+    | GradeObject;
+
+  grade?:
+    | string
+    | GradeObject;
+
   gradeName?: string;
 
   department?: string;
@@ -46,11 +55,17 @@ interface BackendUser {
 
   cnic?: string;
   nationalId?: string;
+
   phone?: string;
 
-  status?: 'active' | 'inactive';
+  status?:
+    | 'active'
+    | 'inactive';
+
   managerId?: string | null;
+
   canApproveOtherDepartments?: boolean;
+
   profilePhotoUrl?: string;
 }
 
@@ -73,63 +88,113 @@ interface AuthContextType {
   logout: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext =
+  createContext<
+    AuthContextType | undefined
+  >(undefined);
 
-function getGradeName(backendUser: BackendUser): string {
-  const gradeId = backendUser.gradeId;
-  const grade = backendUser.grade;
-
-  if (gradeId && typeof gradeId === 'object') {
+function getGradeName(
+  backendUser: BackendUser
+): string {
+  if (
+    backendUser.gradeId &&
+    typeof backendUser.gradeId ===
+      'object'
+  ) {
     return (
-      gradeId.name ||
-      gradeId.gradeName ||
-      gradeId.title ||
-      gradeId.code ||
+      backendUser.gradeId.name ||
+      backendUser.gradeId
+        .gradeName ||
+      backendUser.gradeId.title ||
+      backendUser.gradeId.code ||
       ''
     );
   }
 
-  if (grade && typeof grade === 'object') {
+  if (
+    backendUser.grade &&
+    typeof backendUser.grade ===
+      'object'
+  ) {
     return (
-      grade.name ||
-      grade.gradeName ||
-      grade.title ||
-      grade.code ||
+      backendUser.grade.name ||
+      backendUser.grade
+        .gradeName ||
+      backendUser.grade.title ||
+      backendUser.grade.code ||
       ''
     );
   }
 
-  if (typeof grade === 'string' && grade.trim()) {
-    return grade.trim();
+  if (
+    typeof backendUser.grade ===
+      'string' &&
+    backendUser.grade.trim()
+  ) {
+    return backendUser.grade.trim();
   }
 
-  if (backendUser.gradeName?.trim()) {
-    return backendUser.gradeName.trim();
-  }
-
-  return '';
+  return (
+    backendUser.gradeName?.trim() ||
+    ''
+  );
 }
 
-function mapBackendUser(backendUser: BackendUser): User {
-  const grade = getGradeName(backendUser);
-
+function mapBackendUser(
+  backendUser: BackendUser
+): User {
   return {
     id: backendUser._id,
-    employeeId: backendUser.employeeId || '',
-    fullName: backendUser.fullName,
-    email: backendUser.email,
-    role: backendUser.role,
-    designation: backendUser.designation || '',
-    grade,
-    department: backendUser.department || '',
-    dateOfJoining: backendUser.dateOfJoining || '',
-    cnic: backendUser.cnic || backendUser.nationalId || '',
-    phone: backendUser.phone || '',
-    status: backendUser.status || 'active',
-    managerId: backendUser.managerId || undefined,
+
+    employeeId:
+      backendUser.employeeId || '',
+
+    fullName:
+      backendUser.fullName,
+
+    email:
+      backendUser.email,
+
+    role:
+      backendUser.role,
+
+    designation:
+      backendUser.designation || '',
+
+    grade:
+      getGradeName(
+        backendUser
+      ),
+
+    department:
+      backendUser.department || '',
+
+    dateOfJoining:
+      backendUser.dateOfJoining || '',
+
+    cnic:
+      backendUser.cnic ||
+      backendUser.nationalId ||
+      '',
+
+    phone:
+      backendUser.phone || '',
+
+    status:
+      backendUser.status ||
+      'active',
+
+    managerId:
+      backendUser.managerId ||
+      undefined,
+
     canApproveOtherDepartments:
-      backendUser.canApproveOtherDepartments ?? false,
-    profilePhotoUrl: backendUser.profilePhotoUrl,
+      backendUser
+        .canApproveOtherDepartments ??
+      false,
+
+    profilePhotoUrl:
+      backendUser.profilePhotoUrl,
   };
 }
 
@@ -138,30 +203,94 @@ export function AuthProvider({
 }: {
   children: ReactNode;
 }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] =
+    useState<User | null>(null);
+
+  const [loading, setLoading] =
+    useState(true);
 
   useEffect(() => {
-    const token = getAccessToken();
+    const restoreSession =
+      async () => {
+        const token =
+          getAccessToken();
 
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+        if (!token) {
+          setLoading(false);
+          return;
+        }
 
-    const storedUser = localStorage.getItem('authUser');
+        /*
+         * First restore cached user so
+         * the UI can render immediately.
+         */
+        const storedUser =
+          localStorage.getItem(
+            'authUser'
+          );
 
-    if (storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser) as User;
-        setUser(parsedUser);
-      } catch {
-        localStorage.removeItem('authUser');
-        removeAccessToken();
-      }
-    }
+        if (storedUser) {
+          try {
+            setUser(
+              JSON.parse(
+                storedUser
+              ) as User
+            );
+          } catch {
+            localStorage.removeItem(
+              'authUser'
+            );
+          }
+        }
 
-    setLoading(false);
+        /*
+         * Then refresh the current user
+         * from the real backend.
+         *
+         * /employees/me populates gradeId,
+         * so grade name stays correct after
+         * login and after page refresh.
+         */
+        try {
+          const response =
+            await api.get(
+              '/employees/me'
+            );
+
+          const backendUser =
+            response.data
+              ?.data as BackendUser;
+
+          if (
+            backendUser?._id
+          ) {
+            const mappedUser =
+              mapBackendUser(
+                backendUser
+              );
+
+            localStorage.setItem(
+              'authUser',
+              JSON.stringify(
+                mappedUser
+              )
+            );
+
+            setUser(
+              mappedUser
+            );
+          }
+        } catch {
+          /*
+           * Keep the cached user if the
+           * profile refresh fails.
+           */
+        } finally {
+          setLoading(false);
+        }
+      };
+
+    restoreSession();
   }, []);
 
   const login = async (
@@ -169,10 +298,15 @@ export function AuthProvider({
     password: string
   ): Promise<LoginResult> => {
     try {
-      const response = await api.post<LoginResponse>('/auth/login', {
-        email: email.trim(),
-        password,
-      });
+      const response =
+        await api.post<LoginResponse>(
+          '/auth/login',
+          {
+            email:
+              email.trim(),
+            password,
+          }
+        );
 
       if (
         !response.data.success ||
@@ -181,15 +315,55 @@ export function AuthProvider({
       ) {
         return {
           success: false,
-          error: 'Login failed.',
+          error:
+            'Login failed.',
         };
       }
 
-      const mappedUser = mapBackendUser(response.data.user);
+      setAccessToken(
+        response.data.accessToken
+      );
 
-      setAccessToken(response.data.accessToken);
+      /*
+       * The login response may contain only
+       * a raw gradeId. After storing the token,
+       * call /employees/me because that endpoint
+       * returns populated grade data.
+       */
+      let mappedUser =
+        mapBackendUser(
+          response.data.user
+        );
 
-      localStorage.setItem('authUser', JSON.stringify(mappedUser));
+      try {
+        const meResponse =
+          await api.get(
+            '/employees/me'
+          );
+
+        if (
+          meResponse.data
+            ?.data?._id
+        ) {
+          mappedUser =
+            mapBackendUser(
+              meResponse.data
+                .data
+            );
+        }
+      } catch {
+        /*
+         * Login should still succeed even if
+         * the profile refresh temporarily fails.
+         */
+      }
+
+      localStorage.setItem(
+        'authUser',
+        JSON.stringify(
+          mappedUser
+        )
+      );
 
       setUser(mappedUser);
 
@@ -198,51 +372,70 @@ export function AuthProvider({
       };
     } catch (error) {
       removeAccessToken();
-      localStorage.removeItem('authUser');
+
+      localStorage.removeItem(
+        'authUser'
+      );
+
       setUser(null);
 
       return {
         success: false,
-        error: getApiErrorMessage(
-          error,
-          'Invalid email or password.'
-        ),
+        error:
+          getApiErrorMessage(
+            error,
+            'Invalid email or password.'
+          ),
       };
     }
   };
 
-  const logout = async (): Promise<void> => {
-    try {
-      await api.post('/auth/logout');
-    } catch {
-      // Even if backend logout fails, local authentication must be cleared.
-    } finally {
-      removeAccessToken();
-      localStorage.removeItem('authUser');
-      setUser(null);
-    }
-  };
+  const logout =
+    async (): Promise<void> => {
+      try {
+        await api.post(
+          '/auth/logout'
+        );
+      } catch {
+        // Always clear local auth.
+      } finally {
+        removeAccessToken();
 
-  const value: AuthContextType = {
-    user,
-    isAuthenticated: Boolean(user),
-    loading,
-    login,
-    logout,
-  };
+        localStorage.removeItem(
+          'authUser'
+        );
+
+        setUser(null);
+      }
+    };
+
+  const value: AuthContextType =
+    {
+      user,
+      isAuthenticated:
+        Boolean(user),
+      loading,
+      login,
+      logout,
+    };
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider
+      value={value}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext);
+  const ctx =
+    useContext(AuthContext);
 
   if (!ctx) {
-    throw new Error('useAuth must be used within AuthProvider');
+    throw new Error(
+      'useAuth must be used within AuthProvider'
+    );
   }
 
   return ctx;
