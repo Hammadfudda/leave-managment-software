@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import StatusBadge from '../components/ui/StatusBadge';
+import LeaveAttachmentButton from '../components/leave/LeaveAttachmentButton';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
@@ -838,21 +839,17 @@ export default function Approvals() {
               </p>
             </div>
 
-            {detail.attachmentUrl && (
+            {detail.hasAttachment && (
               <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
-                <p className="text-gray-500">
+                <p className="mb-2 text-gray-500">
                   Attached document
                 </p>
 
-                <a
-                  href={detail.attachmentUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-1 inline-flex text-sm font-medium text-blue-700 hover:text-blue-800"
-                >
-                  {detail.attachmentName ||
-                    'View attachment'}
-                </a>
+                <LeaveAttachmentButton
+                  leaveRequestId={detail.id}
+                  hasAttachment={detail.hasAttachment}
+                  attachmentName={detail.attachmentName}
+                />
               </div>
             )}
 

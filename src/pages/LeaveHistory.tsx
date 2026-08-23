@@ -92,10 +92,6 @@ export default function LeaveHistory() {
     setReason,
   ] = useState('');
 
-  const [
-    isPaid,
-    setIsPaid,
-  ] = useState(true);
 
   const [
     submitting,
@@ -230,7 +226,6 @@ export default function LeaveHistory() {
       setActionMode(null);
       setActionDate('');
       setReason('');
-      setIsPaid(true);
     };
 
   const openExtend = (
@@ -240,7 +235,6 @@ export default function LeaveHistory() {
     setActionMode('extend');
     setActionDate('');
     setReason('');
-    setIsPaid(true);
     setApiError('');
   };
 
@@ -280,8 +274,7 @@ export default function LeaveHistory() {
             selected,
             user,
             actionDate,
-            reason.trim(),
-            isPaid
+            reason.trim()
           );
         } else {
           await requestStopLeave(
@@ -666,25 +659,6 @@ export default function LeaveHistory() {
               )}
             </div>
 
-            {actionMode ===
-              'extend' && (
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={isPaid}
-                  onChange={(
-                    event
-                  ) =>
-                    setIsPaid(
-                      event.target
-                        .checked
-                    )
-                  }
-                  className="rounded border-gray-300"
-                />
-                Extension is paid
-              </label>
-            )}
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">

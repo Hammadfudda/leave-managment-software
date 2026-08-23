@@ -264,8 +264,7 @@ export async function getLeaveAttachmentUrl(
 export async function extendLeaveRequest(
   leaveRequestId: string,
   newEndDate: string,
-  reason: string,
-  isPaidOverride?: boolean
+  reason: string
 ): Promise<LeaveRequest> {
   const response =
     await api.post(
@@ -273,7 +272,6 @@ export async function extendLeaveRequest(
       {
         newEndDate,
         reason,
-        isPaidOverride,
       }
     );
 

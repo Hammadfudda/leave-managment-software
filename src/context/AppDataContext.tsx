@@ -189,8 +189,7 @@
       originalRequest: LeaveRequest,
       initiator: User,
       newEndDate: string,
-      reason: string,
-      isPaid: boolean
+      reason: string
     ) => Promise<void>;
 
     requestStopLeave: (
@@ -1638,16 +1637,14 @@ carryForwardAllowed:
       originalRequest: LeaveRequest,
       _initiator: User,
       newEndDate: string,
-      reason: string,
-      isPaid: boolean
+      reason: string
     ): Promise<void> => {
       try {
         const created =
           await apiExtendLeaveRequest(
             originalRequest.id,
             newEndDate,
-            reason.trim(),
-            isPaid
+            reason.trim()
           );
 
         /*
@@ -1663,8 +1660,6 @@ carryForwardAllowed:
             ),
           ]
         );
-
-        await refreshLeaveRequests();
 
         await refreshLeaveRequests();
       } catch (error) {
