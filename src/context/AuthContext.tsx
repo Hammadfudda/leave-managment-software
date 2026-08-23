@@ -20,6 +20,14 @@ interface LoginResult {
   error?: string;
 }
 
+interface GradeObject {
+  _id?: string;
+  name?: string;
+  gradeName?: string;
+  title?: string;
+  code?: string;
+}
+
 interface BackendUser {
   _id: string;
   fullName: string;
@@ -28,23 +36,21 @@ interface BackendUser {
 
   employeeId?: string;
   designation?: string;
-  gradeId?: string | { _id?: string; name?: string };
-  grade?: string;
-  department?: string;
 
+  gradeId?: string | GradeObject;
+  grade?: string | GradeObject;
+  gradeName?: string;
+
+  department?: string;
   dateOfJoining?: string;
 
   cnic?: string;
   nationalId?: string;
-
   phone?: string;
 
   status?: 'active' | 'inactive';
-
   managerId?: string | null;
-
   canApproveOtherDepartments?: boolean;
-
   profilePhotoUrl?: string;
 }
 
@@ -67,65 +73,63 @@ interface AuthContextType {
   logout: () => Promise<void>;
 }
 
-const AuthContext =
-  createContext<AuthContextType | undefined>(
-    undefined
-  );
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function mapBackendUser(
-  backendUser: BackendUser
-): User {
-  const grade =
-    typeof backendUser.gradeId === 'object'
-      ? backendUser.gradeId?.name || ''
-      : backendUser.grade || '';
+function getGradeName(backendUser: BackendUser): string {
+  const gradeId = backendUser.gradeId;
+  const grade = backendUser.grade;
+
+  if (gradeId && typeof gradeId === 'object') {
+    return (
+      gradeId.name ||
+      gradeId.gradeName ||
+      gradeId.title ||
+      gradeId.code ||
+      ''
+    );
+  }
+
+  if (grade && typeof grade === 'object') {
+    return (
+      grade.name ||
+      grade.gradeName ||
+      grade.title ||
+      grade.code ||
+      ''
+    );
+  }
+
+  if (typeof grade === 'string' && grade.trim()) {
+    return grade.trim();
+  }
+
+  if (backendUser.gradeName?.trim()) {
+    return backendUser.gradeName.trim();
+  }
+
+  return '';
+}
+
+function mapBackendUser(backendUser: BackendUser): User {
+  const grade = getGradeName(backendUser);
 
   return {
     id: backendUser._id,
-
-    employeeId:
-      backendUser.employeeId || '',
-
-    fullName:
-      backendUser.fullName,
-
-    email:
-      backendUser.email,
-
-    role:
-      backendUser.role,
-
-    designation:
-      backendUser.designation || '',
-
+    employeeId: backendUser.employeeId || '',
+    fullName: backendUser.fullName,
+    email: backendUser.email,
+    role: backendUser.role,
+    designation: backendUser.designation || '',
     grade,
-
-    department:
-      backendUser.department || '',
-
-    dateOfJoining:
-      backendUser.dateOfJoining || '',
-
-    cnic:
-      backendUser.cnic ||
-      backendUser.nationalId ||
-      '',
-
-    phone:
-      backendUser.phone || '',
-
-    status:
-      backendUser.status || 'active',
-
-    managerId:
-      backendUser.managerId || undefined,
-
+    department: backendUser.department || '',
+    dateOfJoining: backendUser.dateOfJoining || '',
+    cnic: backendUser.cnic || backendUser.nationalId || '',
+    phone: backendUser.phone || '',
+    status: backendUser.status || 'active',
+    managerId: backendUser.managerId || undefined,
     canApproveOtherDepartments:
-      backendUser.canApproveOtherDepartments ??
-      false,
-
-    profilePhotoUrl:
-      backendUser.profilePhotoUrl,
+      backendUser.canApproveOtherDepartments ?? false,
+    profilePhotoUrl: backendUser.profilePhotoUrl,
   };
 }
 
@@ -134,21 +138,9 @@ export function AuthProvider({
 }: {
   children: ReactNode;
 }) {
-  const [user, setUser] =
-    useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const [loading, setLoading] =
-    useState(true);
-
-  /**
-   * On refresh:
-   *
-   * For now we restore user details from
-   * localStorage if a token exists.
-   *
-   * Later refresh-token flow can be added
-   * without changing pages/components.
-   */
   useEffect(() => {
     const token = getAccessToken();
 
@@ -157,14 +149,11 @@ export function AuthProvider({
       return;
     }
 
-    const storedUser =
-      localStorage.getItem('authUser');
+    const storedUser = localStorage.getItem('authUser');
 
     if (storedUser) {
       try {
-        const parsedUser =
-          JSON.parse(storedUser) as User;
-
+        const parsedUser = JSON.parse(storedUser) as User;
         setUser(parsedUser);
       } catch {
         localStorage.removeItem('authUser');
@@ -180,14 +169,10 @@ export function AuthProvider({
     password: string
   ): Promise<LoginResult> => {
     try {
-      const response =
-        await api.post<LoginResponse>(
-          '/auth/login',
-          {
-            email: email.trim(),
-            password,
-          }
-        );
+      const response = await api.post<LoginResponse>('/auth/login', {
+        email: email.trim(),
+        password,
+      });
 
       if (
         !response.data.success ||
@@ -200,19 +185,11 @@ export function AuthProvider({
         };
       }
 
-      const mappedUser =
-        mapBackendUser(
-          response.data.user
-        );
+      const mappedUser = mapBackendUser(response.data.user);
 
-      setAccessToken(
-        response.data.accessToken
-      );
+      setAccessToken(response.data.accessToken);
 
-      localStorage.setItem(
-        'authUser',
-        JSON.stringify(mappedUser)
-      );
+      localStorage.setItem('authUser', JSON.stringify(mappedUser));
 
       setUser(mappedUser);
 
@@ -221,11 +198,7 @@ export function AuthProvider({
       };
     } catch (error) {
       removeAccessToken();
-
-      localStorage.removeItem(
-        'authUser'
-      );
-
+      localStorage.removeItem('authUser');
       setUser(null);
 
       return {
@@ -242,15 +215,10 @@ export function AuthProvider({
     try {
       await api.post('/auth/logout');
     } catch {
-      // Even if backend logout fails,
-      // local authentication must be cleared.
+      // Even if backend logout fails, local authentication must be cleared.
     } finally {
       removeAccessToken();
-
-      localStorage.removeItem(
-        'authUser'
-      );
-
+      localStorage.removeItem('authUser');
       setUser(null);
     }
   };
@@ -274,9 +242,7 @@ export function useAuth() {
   const ctx = useContext(AuthContext);
 
   if (!ctx) {
-    throw new Error(
-      'useAuth must be used within AuthProvider'
-    );
+    throw new Error('useAuth must be used within AuthProvider');
   }
 
   return ctx;
