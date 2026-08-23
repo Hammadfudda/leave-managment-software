@@ -9,37 +9,21 @@ import Badge from '../components/ui/Badge';
 import { formatDate } from '../utils/formatDate';
 import { CORE_LEAVE_TYPES } from '../types';
 import type { LeaveRequest } from '../types';
+import LeaveAttachmentButton from '../components/leave/LeaveAttachmentButton';
 
-import {
-  openLeaveAttachment,
-} from '../services/leaveRequests';
-
-function getCurrentTurnApproverIds(
-  req: LeaveRequest
-): string[] {
+function getCurrentTurnApproverIds(req: LeaveRequest): string[] {
   if (req.status !== 'pending') return [];
 
-  const required =
-    req.requiredApproverIds || [];
-
+  const required = req.requiredApproverIds || [];
   if (required.length === 0) return [];
 
-  const approved =
-    req.approvedByIds || [];
-
-  const rejected =
-    req.rejectedByIds || [];
-
-  const gatekeeperId =
-    required[0];
+  const approved = req.approvedByIds || [];
+  const rejected = req.rejectedByIds || [];
+  const gatekeeperId = required[0];
 
   if (
-    !approved.includes(
-      gatekeeperId
-    ) &&
-    !rejected.includes(
-      gatekeeperId
-    )
+    !approved.includes(gatekeeperId) &&
+    !rejected.includes(gatekeeperId)
   ) {
     return [gatekeeperId];
   }
@@ -66,70 +50,20 @@ export default function Approvals() {
   } = useAppData();
 
   const [tab, setTab] =
-    useState<
-      'pending' | 'history'
-    >('pending');
+    useState<'pending' | 'history'>('pending');
 
   const [detail, setDetail] =
-    useState<
-      LeaveRequest | null
-    >(null);
+    useState<LeaveRequest | null>(null);
 
-  const [
-    comment,
-    setComment,
-  ] = useState('');
+  const [comment, setComment] = useState('');
+  const [cancelMode, setCancelMode] = useState(false);
+  const [returnDate, setReturnDate] = useState('');
+  const [cancelReason, setCancelReason] = useState('');
 
-  const [
-    cancelMode,
-    setCancelMode,
-  ] = useState(false);
-
-  const [
-    returnDate,
-    setReturnDate,
-  ] = useState('');
-
-  const [
-    cancelReason,
-    setCancelReason,
-  ] = useState('');
-
-  const [
-    query,
-    setQuery,
-  ] = useState('');
-
-  const [
-    departmentFilter,
-    setDepartmentFilter,
-  ] = useState('');
-
-  const [
-    typeFilter,
-    setTypeFilter,
-  ] = useState('');
-
-  const [
-    statusFilter,
-    setStatusFilter,
-  ] = useState('');
-
-  // ===============================
-  // PRIVATE DOCUMENT
-  // ===============================
-
-  const [
-    attachmentLoading,
-    setAttachmentLoading,
-  ] = useState(false);
-
-  const [
-    attachmentError,
-    setAttachmentError,
-  ] = useState<string | null>(
-    null
-  );
+  const [query, setQuery] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   if (!user) return null;
 
@@ -137,190 +71,145 @@ export default function Approvals() {
     user.role === 'admin' ||
     user.role === 'manager';
 
-  const pending =
-    leaveRequests.filter(
-      (leave) => {
-        if (
-          leave.status ===
-            'approved' ||
-          leave.status ===
-            'rejected' ||
-          leave.status ===
-            'cancelled'
-        ) {
-          return false;
-        }
+  const pending = leaveRequests.filter((leave) => {
+    if (
+      leave.status === 'approved' ||
+      leave.status === 'rejected' ||
+      leave.status === 'cancelled'
+    ) {
+      return false;
+    }
 
-        if (
-          user.role === 'admin'
-        ) {
-          return true;
-        }
+    if (user.role === 'admin') return true;
 
-        return getCurrentTurnApproverIds(
-          leave
-        ).includes(user.id);
-      }
-    );
+    return getCurrentTurnApproverIds(leave).includes(user.id);
+  });
 
-  const history =
-    leaveRequests.filter(
-      (leave) =>
-        leave.approvalHistory.some(
-          (historyItem) =>
-            historyItem.approverId ===
-            user.id
-        ) ||
-        (
-          user.role ===
-            'admin' &&
-          [
-            'approved',
-            'rejected',
-            'cancelled',
-          ].includes(
-            leave.status
-          )
+  const history = leaveRequests.filter(
+    (leave) =>
+      leave.approvalHistory.some(
+        (historyItem) =>
+          historyItem.approverId === user.id
+      ) ||
+      (
+        user.role === 'admin' &&
+        ['approved', 'rejected', 'cancelled'].includes(
+          leave.status
         )
-    );
+      )
+  );
 
   const baseList =
     tab === 'pending'
       ? pending
       : history;
 
-  const departments =
-    useMemo(
-      () =>
-        Array.from(
-          new Set(
-            leaveRequests
-              .map(
-                (leave) =>
-                  leave.department
-              )
-              .filter(Boolean)
+  const departments = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          leaveRequests
+            .map((leave) => leave.department)
+            .filter(Boolean)
+        )
+      ).sort(),
+    [leaveRequests]
+  );
+
+  const leaveTypes = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          leaveRequests.map(
+            (leave) => leave.leaveType
           )
-        ).sort(),
-      [leaveRequests]
-    );
+        )
+      ).sort(),
+    [leaveRequests]
+  );
 
-  const leaveTypes =
-    useMemo(
-      () =>
-        Array.from(
-          new Set(
-            leaveRequests.map(
-              (leave) =>
-                leave.leaveType
-            )
-          )
-        ).sort(),
-      [leaveRequests]
-    );
+  const list = useMemo(() => {
+    const q = query.trim().toLowerCase();
 
-  const list =
-    useMemo(() => {
-      const q =
-        query
-          .trim()
-          .toLowerCase();
+    return baseList.filter((leave) => {
+      const employee =
+        getUserById(leave.employeeId);
 
-      return baseList.filter(
-        (leave) => {
-          const employee =
-            getUserById(
-              leave.employeeId
-            );
+      const matchesSearch =
+        !q ||
+        leave.employeeName
+          .toLowerCase()
+          .includes(q) ||
+        (employee?.employeeId || '')
+          .toLowerCase()
+          .includes(q) ||
+        (leave.department || '')
+          .toLowerCase()
+          .includes(q) ||
+        leave.leaveType
+          .toLowerCase()
+          .includes(q);
 
-          const matchesSearch =
-            !q ||
-            leave.employeeName
-              .toLowerCase()
-              .includes(q) ||
-            (
-              employee?.employeeId ||
-              ''
-            )
-              .toLowerCase()
-              .includes(q) ||
-            (
-              leave.department ||
-              ''
-            )
-              .toLowerCase()
-              .includes(q) ||
-            leave.leaveType
-              .toLowerCase()
-              .includes(q);
+      const matchesDepartment =
+        !departmentFilter ||
+        leave.department === departmentFilter;
 
-          const matchesDepartment =
-            !departmentFilter ||
-            leave.department ===
-              departmentFilter;
+      const matchesType =
+        !typeFilter ||
+        leave.leaveType === typeFilter;
 
-          const matchesType =
-            !typeFilter ||
-            leave.leaveType ===
-              typeFilter;
+      const matchesStatus =
+        !statusFilter ||
+        leave.status === statusFilter;
 
-          const matchesStatus =
-            !statusFilter ||
-            leave.status ===
-              statusFilter;
-
-          return (
-            matchesSearch &&
-            matchesDepartment &&
-            matchesType &&
-            matchesStatus
-          );
-        }
+      return (
+        matchesSearch &&
+        matchesDepartment &&
+        matchesType &&
+        matchesStatus
       );
-    }, [
-      baseList,
-      query,
-      departmentFilter,
-      typeFilter,
-      statusFilter,
-      getUserById,
-    ]);
+    });
+  }, [
+    baseList,
+    query,
+    departmentFilter,
+    typeFilter,
+    statusFilter,
+    getUserById,
+  ]);
 
   const employee =
     detail
-      ? getUserById(
-          detail.employeeId
-        )
+      ? getUserById(detail.employeeId)
       : undefined;
 
   const isMyTurnOnDetail =
     !!detail &&
     (
       user.role === 'admin' ||
-      getCurrentTurnApproverIds(
-        detail
-      ).includes(user.id)
+      getCurrentTurnApproverIds(detail).includes(
+        user.id
+      )
     );
 
-  const balances =
-  detail
-    ? leaveBalances[
-        detail.employeeId
-      ] || []
+  const balances = detail
+    ? (
+        leaveBalances[detail.employeeId] ||
+        []
+      ).filter((balance) =>
+        CORE_LEAVE_TYPES.includes(
+          balance.leaveType as
+            typeof CORE_LEAVE_TYPES[number]
+        )
+      )
     : [];
 
   const takeAction = (
-    action:
-      | 'approved'
-      | 'rejected'
+    action: 'approved' | 'rejected'
   ) => {
-    if (!detail || !user) {
-      return;
-    }
+    if (!detail || !user) return;
 
-    if (
-      action === 'approved'
-    ) {
+    if (action === 'approved') {
       approveLeave(
         detail.id,
         user,
@@ -339,29 +228,28 @@ export default function Approvals() {
     setCancelMode(false);
   };
 
-  const handleCancelLeave =
-    () => {
-      if (
-        !detail ||
-        !user ||
-        !returnDate ||
-        !cancelReason.trim()
-      ) {
-        return;
-      }
+  const handleCancelLeave = () => {
+    if (
+      !detail ||
+      !user ||
+      !returnDate ||
+      !cancelReason.trim()
+    ) {
+      return;
+    }
 
-      cancelLeaveByAdmin(
-        detail.id,
-        user,
-        cancelReason.trim(),
-        returnDate
-      );
+    cancelLeaveByAdmin(
+      detail.id,
+      user,
+      cancelReason.trim(),
+      returnDate
+    );
 
-      setDetail(null);
-      setCancelMode(false);
-      setReturnDate('');
-      setCancelReason('');
-    };
+    setDetail(null);
+    setCancelMode(false);
+    setReturnDate('');
+    setCancelReason('');
+  };
 
   const openReview = (
     leave: LeaveRequest,
@@ -372,7 +260,6 @@ export default function Approvals() {
     setComment('');
     setReturnDate('');
     setCancelReason('');
-    setAttachmentError(null);
   };
 
   const clearFilters = () => {
@@ -382,46 +269,6 @@ export default function Approvals() {
     setStatusFilter('');
   };
 
-  // ===============================
-  // OPEN PRIVATE CLOUDINARY FILE
-  // ===============================
-
-  const handleViewAttachment =
-    async () => {
-      if (!detail) {
-        return;
-      }
-
-      try {
-        setAttachmentLoading(
-          true
-        );
-
-        setAttachmentError(
-          null
-        );
-
-        await openLeaveAttachment(
-          detail.id
-        );
-      } catch (error: any) {
-        const message =
-          error?.response?.data
-            ?.message ||
-          error?.response?.data
-            ?.error ||
-          'Unable to open the attached document.';
-
-        setAttachmentError(
-          message
-        );
-      } finally {
-        setAttachmentLoading(
-          false
-        );
-      }
-    };
-
   return (
     <div className="space-y-6">
       <div>
@@ -430,34 +277,25 @@ export default function Approvals() {
         </h1>
 
         <p className="mt-1 text-sm text-gray-500">
-          Review pending leave
-          requests. Your own
-          team's active leaves
-          and history live in
-          My Team.
+          Review pending leave requests. Your own team's active
+          leaves and history live in My Team.
         </p>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        {[
+        {([
           {
-            key:
-              'pending' as const,
-            label:
-              `Pending (${pending.length})`,
+            key: 'pending' as const,
+            label: `Pending (${pending.length})`,
           },
           {
-            key:
-              'history' as const,
-            label:
-              `History (${history.length})`,
+            key: 'history' as const,
+            label: `History (${history.length})`,
           },
-        ].map((item) => (
+        ]).map((item) => (
           <button
             key={item.key}
-            onClick={() =>
-              setTab(item.key)
-            }
+            onClick={() => setTab(item.key)}
             className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
               tab === item.key
                 ? 'bg-blue-600 text-white'
@@ -476,13 +314,10 @@ export default function Approvals() {
               size={16}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
             />
-
             <input
               value={query}
               onChange={(event) =>
-                setQuery(
-                  event.target.value
-                )
+                setQuery(event.target.value)
               }
               placeholder="Search employee, ID or leave type"
               className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -490,9 +325,7 @@ export default function Approvals() {
           </div>
 
           <select
-            value={
-              departmentFilter
-            }
+            value={departmentFilter}
             onChange={(event) =>
               setDepartmentFilter(
                 event.target.value
@@ -503,7 +336,6 @@ export default function Approvals() {
             <option value="">
               All Departments
             </option>
-
             {departments.map(
               (department) => (
                 <option
@@ -528,20 +360,14 @@ export default function Approvals() {
             <option value="">
               All Leave Types
             </option>
-
-            {leaveTypes.map(
-              (type) => (
-                <option
-                  key={type}
-                  value={type}
-                >
-                  {type.replace(
-                    /_/g,
-                    ' '
-                  )}
-                </option>
-              )
-            )}
+            {leaveTypes.map((type) => (
+              <option
+                key={type}
+                value={type}
+              >
+                {type.replace(/_/g, ' ')}
+              </option>
+            ))}
           </select>
 
           {tab === 'history' && (
@@ -557,15 +383,12 @@ export default function Approvals() {
               <option value="">
                 All Status
               </option>
-
               <option value="approved">
                 Approved
               </option>
-
               <option value="rejected">
                 Rejected
               </option>
-
               <option value="cancelled">
                 Cancelled
               </option>
@@ -574,9 +397,7 @@ export default function Approvals() {
 
           <button
             type="button"
-            onClick={
-              clearFilters
-            }
+            onClick={clearFilters}
             className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
           >
             Clear Filters
@@ -592,27 +413,21 @@ export default function Approvals() {
                 <th className="px-5 py-3 font-medium">
                   Employee
                 </th>
-
                 <th className="px-5 py-3 font-medium">
                   Type
                 </th>
-
                 <th className="px-5 py-3 font-medium">
                   Dates
                 </th>
-
                 <th className="px-5 py-3 font-medium">
                   Days
                 </th>
-
                 <th className="px-5 py-3 font-medium">
                   Status
                 </th>
-
                 <th className="px-5 py-3 font-medium">
                   Approvals
                 </th>
-
                 <th className="px-5 py-3 font-medium">
                   Action
                 </th>
@@ -620,191 +435,160 @@ export default function Approvals() {
             </thead>
 
             <tbody className="divide-y divide-gray-50">
-              {list.length ===
-                0 && (
+              {list.length === 0 && (
                 <tr>
                   <td
                     colSpan={7}
                     className="px-5 py-8 text-center text-gray-400"
                   >
-                    No records
-                    match the
-                    selected
-                    filters.
+                    No records match the selected filters.
                   </td>
                 </tr>
               )}
 
-              {list.map(
-                (leave) => (
-                  <tr
-                    key={leave.id}
-                    className="animate-fade-in hover:bg-gray-50/50"
-                  >
-                    <td className="px-5 py-3 text-gray-900">
-                      {
-                        leave.employeeName
-                      }
-                    </td>
+              {list.map((leave) => (
+                <tr
+                  key={leave.id}
+                  className="animate-fade-in hover:bg-gray-50/50"
+                >
+                  <td className="px-5 py-3 text-gray-900">
+                    {leave.employeeName}
+                  </td>
 
-                    <td className="px-5 py-3 capitalize text-gray-600">
-                      {
-                        leave.leaveType
-                      }
+                  <td className="px-5 py-3 capitalize text-gray-600">
+                    {leave.leaveType}
 
-                      {leave.isExtension && (
-                        <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-indigo-700">
-                          Extend
-                        </span>
-                      )}
+                    {leave.isExtension && (
+                      <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-indigo-700">
+                        Extend
+                      </span>
+                    )}
 
-                      {leave.isStopRequest && (
-                        <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-amber-700">
-                          Stop
-                        </span>
-                      )}
-                    </td>
+                    {leave.isStopRequest && (
+                      <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-amber-700">
+                        Stop
+                      </span>
+                    )}
+                  </td>
 
-                    <td className="px-5 py-3 text-gray-600">
-                      {formatDate(
-                        leave.startDate
-                      )}{' '}
-                      →{' '}
-                      {formatDate(
-                        leave.endDate
-                      )}
+                  <td className="px-5 py-3 text-gray-600">
+                    {formatDate(
+                      leave.startDate
+                    )}{' '}
+                    →{' '}
+                    {formatDate(
+                      leave.endDate
+                    )}
 
-                      {leave
-                        .excludedWeekendDates &&
-                        leave
-                          .excludedWeekendDates
-                          .length >
-                          0 && (
-                          <p className="mt-0.5 text-[10px] text-amber-600">
-                            Sat/Sun
-                            included —{' '}
-                            {
-                              leave
-                                .excludedWeekendDates
-                                .length
-                            }{' '}
-                            day(s)
-                            excluded
-                          </p>
-                        )}
-                    </td>
-
-                    <td className="px-5 py-3 text-gray-600">
-                      {
-                        leave.totalDaysRequested
-                      }
-                    </td>
-
-                    <td className="px-5 py-3">
-                      <StatusBadge
-                        status={
-                          leave.status
-                        }
-                      />
-                    </td>
-
-                    <td className="px-5 py-3">
-                      {leave
-                        .requiredApproverIds &&
-                      leave
-                        .requiredApproverIds
-                        .length >
-                        0 ? (
-                        <div className="space-y-1">
-                          {leave.requiredApproverIds.map(
-                            (
-                              id
-                            ) => {
-                              const approver =
-                                getUserById(
-                                  id
-                                );
-
-                              const hasApproved =
-                                leave.approvedByIds?.includes(
-                                  id
-                                );
-
-                              const hasRejected =
-                                leave.rejectedByIds?.includes(
-                                  id
-                                );
-
-                              return (
-                                <div
-                                  key={
-                                    id
-                                  }
-                                  className="flex items-center gap-1.5 text-xs"
-                                >
-                                  <span
-                                    className={
-                                      hasApproved
-                                        ? 'text-emerald-600'
-                                        : hasRejected
-                                          ? 'text-rose-600'
-                                          : 'text-gray-400'
-                                    }
-                                  >
-                                    {hasApproved
-                                      ? '✓'
-                                      : hasRejected
-                                        ? '✗'
-                                        : '○'}
-                                  </span>
-
-                                  <span
-                                    className={
-                                      hasApproved
-                                        ? 'text-gray-700'
-                                        : hasRejected
-                                          ? 'text-rose-600'
-                                          : 'text-gray-400'
-                                    }
-                                  >
-                                    {approver?.fullName ||
-                                      'Unknown'}{' '}
-                                    (
-                                    {
-                                      approver?.role
-                                    }
-                                    )
-                                  </span>
-                                </div>
-                              );
-                            }
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-400">
-                          —
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="px-5 py-3">
-                      <button
-                        onClick={() =>
-                          openReview(
+                    {leave.excludedWeekendDates &&
+                      leave.excludedWeekendDates
+                        .length > 0 && (
+                        <p className="mt-0.5 text-[10px] text-amber-600">
+                          Sat/Sun included —{' '}
+                          {
                             leave
-                          )
-                        }
-                        className="text-sm font-medium text-blue-600 hover:text-blue-700"
-                      >
-                        {tab ===
-                        'pending'
-                          ? 'Review'
-                          : 'View'}
-                      </button>
-                    </td>
-                  </tr>
-                )
-              )}
+                              .excludedWeekendDates
+                              .length
+                          }{' '}
+                          day(s) excluded
+                        </p>
+                      )}
+                  </td>
+
+                  <td className="px-5 py-3 text-gray-600">
+                    {
+                      leave.totalDaysRequested
+                    }
+                  </td>
+
+                  <td className="px-5 py-3">
+                    <StatusBadge
+                      status={leave.status}
+                    />
+                  </td>
+
+                  <td className="px-5 py-3">
+                    {leave.requiredApproverIds &&
+                    leave.requiredApproverIds
+                      .length > 0 ? (
+                      <div className="space-y-1">
+                        {leave.requiredApproverIds.map(
+                          (id) => {
+                            const approver =
+                              getUserById(id);
+
+                            const hasApproved =
+                              leave.approvedByIds?.includes(
+                                id
+                              );
+
+                            const hasRejected =
+                              leave.rejectedByIds?.includes(
+                                id
+                              );
+
+                            return (
+                              <div
+                                key={id}
+                                className="flex items-center gap-1.5 text-xs"
+                              >
+                                <span
+                                  className={
+                                    hasApproved
+                                      ? 'text-emerald-600'
+                                      : hasRejected
+                                        ? 'text-rose-600'
+                                        : 'text-gray-400'
+                                  }
+                                >
+                                  {hasApproved
+                                    ? '✓'
+                                    : hasRejected
+                                      ? '✗'
+                                      : '○'}
+                                </span>
+
+                                <span
+                                  className={
+                                    hasApproved
+                                      ? 'text-gray-700'
+                                      : hasRejected
+                                        ? 'text-rose-600'
+                                        : 'text-gray-400'
+                                  }
+                                >
+                                  {approver?.fullName ||
+                                    'Unknown'}{' '}
+                                  (
+                                  {approver?.role}
+                                  )
+                                </span>
+                              </div>
+                            );
+                          }
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">
+                        —
+                      </span>
+                    )}
+                  </td>
+
+                  <td className="px-5 py-3">
+                    <button
+                      onClick={() =>
+                        openReview(leave)
+                      }
+                      className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                    >
+                      {tab === 'pending'
+                        ? 'Review'
+                        : 'View'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -816,9 +600,6 @@ export default function Approvals() {
           setDetail(null);
           setComment('');
           setCancelMode(false);
-          setAttachmentError(
-            null
-          );
         }}
         title={
           cancelMode
@@ -834,9 +615,7 @@ export default function Approvals() {
               <Button
                 variant="secondary"
                 onClick={() =>
-                  setCancelMode(
-                    false
-                  )
+                  setCancelMode(false)
                 }
               >
                 Back
@@ -844,9 +623,7 @@ export default function Approvals() {
 
               <Button
                 variant="danger"
-                onClick={
-                  handleCancelLeave
-                }
+                onClick={handleCancelLeave}
                 disabled={
                   !returnDate ||
                   !cancelReason.trim()
@@ -860,9 +637,7 @@ export default function Approvals() {
               <Button
                 variant="danger"
                 onClick={() =>
-                  takeAction(
-                    'rejected'
-                  )
+                  takeAction('rejected')
                 }
               >
                 Reject
@@ -871,9 +646,7 @@ export default function Approvals() {
               <Button
                 variant="success"
                 onClick={() =>
-                  takeAction(
-                    'approved'
-                  )
+                  takeAction('approved')
                 }
               >
                 Approve
@@ -888,17 +661,14 @@ export default function Approvals() {
               isAdminOrManager && (
                 <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
                   <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-700">
-                    Employee
-                    details
+                    Employee details
                   </h4>
 
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                     <div>
                       <p className="text-xs text-gray-500">
-                        Joining
-                        date
+                        Joining date
                       </p>
-
                       <p className="font-medium text-gray-900">
                         {formatDate(
                           employee.dateOfJoining
@@ -910,7 +680,6 @@ export default function Approvals() {
                       <p className="text-xs text-gray-500">
                         Designation
                       </p>
-
                       <p className="font-medium text-gray-900">
                         {
                           employee.designation
@@ -922,11 +691,8 @@ export default function Approvals() {
                       <p className="text-xs text-gray-500">
                         Grade
                       </p>
-
                       <p className="font-medium text-gray-900">
-                        {
-                          employee.grade
-                        }
+                        {employee.grade}
                       </p>
                     </div>
 
@@ -934,7 +700,6 @@ export default function Approvals() {
                       <p className="text-xs text-gray-500">
                         Department
                       </p>
-
                       <p className="font-medium text-gray-900">
                         {
                           employee.department
@@ -945,9 +710,7 @@ export default function Approvals() {
 
                   <div className="mt-3 flex flex-wrap gap-2">
                     {balances.map(
-                      (
-                        balance
-                      ) => (
+                      (balance) => (
                         <div
                           key={
                             balance.leaveType
@@ -961,9 +724,7 @@ export default function Approvals() {
                           </p>
 
                           <p className="text-sm font-semibold text-gray-900">
-                            {
-                              balance.used
-                            }{' '}
+                            {balance.used}{' '}
                             used ·{' '}
                             {
                               balance.remaining
@@ -982,7 +743,6 @@ export default function Approvals() {
                 <p className="text-gray-500">
                   Employee
                 </p>
-
                 <p className="font-medium text-gray-900">
                   {
                     detail.employeeName
@@ -994,11 +754,8 @@ export default function Approvals() {
                 <p className="text-gray-500">
                   Department
                 </p>
-
                 <p className="font-medium text-gray-900">
-                  {
-                    detail.department
-                  }
+                  {detail.department}
                 </p>
               </div>
 
@@ -1006,11 +763,8 @@ export default function Approvals() {
                 <p className="text-gray-500">
                   Type
                 </p>
-
                 <p className="font-medium capitalize text-gray-900">
-                  {
-                    detail.leaveType
-                  }
+                  {detail.leaveType}
                 </p>
               </div>
 
@@ -1018,7 +772,6 @@ export default function Approvals() {
                 <p className="text-gray-500">
                   Days requested
                 </p>
-
                 <p className="font-medium text-gray-900">
                   {
                     detail.totalDaysRequested
@@ -1030,7 +783,6 @@ export default function Approvals() {
                 <p className="text-gray-500">
                   Start
                 </p>
-
                 <p className="font-medium text-gray-900">
                   {formatDate(
                     detail.startDate
@@ -1042,7 +794,6 @@ export default function Approvals() {
                 <p className="text-gray-500">
                   End
                 </p>
-
                 <p className="font-medium text-gray-900">
                   {formatDate(
                     detail.endDate
@@ -1055,89 +806,47 @@ export default function Approvals() {
               <p className="text-gray-500">
                 Reason
               </p>
-
               <p className="mt-1 text-gray-900">
                 {detail.reason}
               </p>
             </div>
 
-            {/* ===============================
-                PRIVATE CLOUDINARY DOCUMENT
-            =============================== */}
-
             {detail.hasAttachment && (
-              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-                  Supporting
-                  Document
+              <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+                <p className="mb-2 text-gray-500">
+                  Attached document
                 </p>
 
-                <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {detail.attachmentName ||
-                        'Attached document'}
-                    </p>
-
-                    <p className="mt-0.5 text-xs text-gray-500">
-                      Private
-                      attachment
-                    </p>
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={
-                      handleViewAttachment
-                    }
-                    disabled={
-                      attachmentLoading
-                    }
-                  >
-                    {attachmentLoading
-                      ? 'Opening...'
-                      : 'View Document'}
-                  </Button>
-                </div>
+                <LeaveAttachmentButton
+                  leaveRequestId={detail.id}
+                  hasAttachment={detail.hasAttachment}
+                  attachmentName={detail.attachmentName}
+                />
               </div>
             )}
 
             {cancelMode ? (
               <div className="space-y-3 rounded-lg border border-rose-100 bg-rose-50/50 p-4">
                 <p className="text-xs text-rose-700">
-                  Employee is
-                  returning early.
-                  Only days up to
-                  the return date
-                  will be counted
-                  against their
-                  balance.
+                  Employee is returning early.
+                  Only days up to the return
+                  date will be counted against
+                  their balance.
                 </p>
 
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                    Return / join
-                    date
+                    Return / join date
                   </label>
 
                   <input
                     type="date"
-                    value={
-                      returnDate
-                    }
-                    min={
-                      detail.startDate
-                    }
-                    max={
-                      detail.endDate
-                    }
-                    onChange={(
-                      event
-                    ) =>
+                    value={returnDate}
+                    min={detail.startDate}
+                    max={detail.endDate}
+                    onChange={(event) =>
                       setReturnDate(
-                        event.target
-                          .value
+                        event.target.value
                       )
                     }
                     className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -1146,20 +855,14 @@ export default function Approvals() {
 
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                    Reason for
-                    cancellation
+                    Reason for cancellation
                   </label>
 
                   <textarea
-                    value={
-                      cancelReason
-                    }
-                    onChange={(
-                      event
-                    ) =>
+                    value={cancelReason}
+                    onChange={(event) =>
                       setCancelReason(
-                        event.target
-                          .value
+                        event.target.value
                       )
                     }
                     rows={2}
@@ -1169,24 +872,17 @@ export default function Approvals() {
                 </div>
               </div>
             ) : (
-              tab ===
-                'pending' && (
+              tab === 'pending' && (
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                    Comment
-                    (optional)
+                    Comment (optional)
                   </label>
 
                   <textarea
-                    value={
-                      comment
-                    }
-                    onChange={(
-                      event
-                    ) =>
+                    value={comment}
+                    onChange={(event) =>
                       setComment(
-                        event.target
-                          .value
+                        event.target.value
                       )
                     }
                     rows={2}
@@ -1196,8 +892,7 @@ export default function Approvals() {
               )
             )}
 
-            {detail.approvalHistory
-              .length >
+            {detail.approvalHistory.length >
               0 && (
               <div>
                 <p className="text-gray-500">
@@ -1249,36 +944,6 @@ export default function Approvals() {
             )}
           </div>
         )}
-      </Modal>
-
-      {/* PRIVATE DOCUMENT ERROR */}
-
-      <Modal
-        open={
-          !!attachmentError
-        }
-        onClose={() =>
-          setAttachmentError(
-            null
-          )
-        }
-        title="Unable to Open Document"
-        size="sm"
-        footer={
-          <Button
-            onClick={() =>
-              setAttachmentError(
-                null
-              )
-            }
-          >
-            OK
-          </Button>
-        }
-      >
-        <p className="text-sm text-gray-600">
-          {attachmentError}
-        </p>
       </Modal>
     </div>
   );

@@ -1,7 +1,7 @@
 import api from './api';
-
 import type {
   LeaveRequest,
+  LeaveType,
 } from '../types';
 
 type BackendId =
@@ -15,104 +15,40 @@ type BackendId =
 
 interface BackendLeaveRequest {
   _id: string;
-
   employeeId: BackendId;
-
   employeeName?: string;
   department?: string;
-
-  leaveType:
-    LeaveRequest['leaveType'];
-
+  leaveType: LeaveRequest['leaveType'];
   startDate: string;
   endDate: string;
-
   totalDaysRequested?: number;
   totalWorkingDays?: number;
-
   excludedWeekendDates?: string[];
-
   reason?: string;
-
-  status:
-    LeaveRequest['status'];
-
+  status: LeaveRequest['status'];
   requiredApproverIds?: BackendId[];
   approvedByIds?: BackendId[];
   rejectedByIds?: BackendId[];
-
-  approvalHistory?:
-    LeaveRequest['approvalHistory'];
-
+  approvalHistory?: LeaveRequest['approvalHistory'];
   isAdminOnlyDecision?: boolean;
-
   isExtension?: boolean;
-
-  originalRequestId?:
-    string | null;
-
-  isPaidOverride?:
-    boolean | null;
-
+  originalRequestId?: string | null;
+  isPaidOverride?: boolean | null;
   isStopRequest?: boolean;
-
-  cancelledBy?:
-    string | null;
-
-  cancelledByName?:
-    string | null;
-
-  cancelledReason?:
-    string | null;
-
-  daysUsedBeforeCancel?:
-    number | null;
-
-  actualEndDate?:
-    string | null;
-
-  /*
-   * Private attachment metadata
-   */
+  cancelledBy?: string | null;
+  attachmentName?: string;
   hasAttachment?: boolean;
-
-  attachmentName?:
-    string | null;
-
   createdAt: string;
-}
-
-export interface CreateLeaveRequestPayload {
-  leaveType: string;
-
-  startDate: string;
-  endDate: string;
-
-  reason: string;
-
-  attachment?:
-    File | null;
-}
-
-export interface AttachmentUrlResponse {
-  url: string;
-
-  expiresAt: number;
-
-  expiresInSeconds: number;
-
-  name: string;
 }
 
 function getId(
   value: BackendId
 ): string {
-  if (!value) {
-    return '';
-  }
+  if (!value) return '';
 
   if (
-    typeof value === 'string'
+    typeof value ===
+    'string'
   ) {
     return value;
   }
@@ -121,14 +57,13 @@ function getId(
 }
 
 function dateOnly(
-  value?:
-    string | null
+  value?: string
 ): string {
-  if (!value) {
-    return '';
-  }
+  if (!value) return '';
 
-  return value.split('T')[0];
+  return value.split(
+    'T'
+  )[0];
 }
 
 export function mapBackendLeaveRequest(
@@ -141,146 +76,91 @@ export function mapBackendLeaveRequest(
       : null;
 
   return {
-    id:
-      leave._id,
-
+    id: leave._id,
     employeeId:
       getId(
         leave.employeeId
       ),
-
     employeeName:
       leave.employeeName ||
       employee?.fullName ||
       '',
-
     department:
       leave.department ||
       '',
-
     leaveType:
       leave.leaveType,
-
     startDate:
       dateOnly(
         leave.startDate
       ),
-
     endDate:
       dateOnly(
         leave.endDate
       ),
-
     totalDaysRequested:
       leave.totalDaysRequested ??
       0,
-
     totalWorkingDays:
       leave.totalWorkingDays ??
       0,
-
     excludedWeekendDates:
       leave.excludedWeekendDates ||
       [],
-
     reason:
-      leave.reason ||
-      '',
-
+      leave.reason || '',
     status:
       leave.status,
-
     requiredApproverIds:
       (
         leave.requiredApproverIds ||
         []
       ).map(getId),
-
     approvedByIds:
       (
         leave.approvedByIds ||
         []
       ).map(getId),
-
     rejectedByIds:
       (
         leave.rejectedByIds ||
         []
       ).map(getId),
-
     approvalHistory:
       leave.approvalHistory ||
       [],
-
     isAdminOnlyDecision:
       leave.isAdminOnlyDecision ??
       false,
-
     isExtension:
       leave.isExtension ??
       false,
-
     originalRequestId:
       leave.originalRequestId ||
       undefined,
-
     isPaidOverride:
       leave.isPaidOverride ??
       undefined,
-
     isStopRequest:
       leave.isStopRequest ??
       false,
-
     cancelledBy:
       leave.cancelledBy ||
       undefined,
-
-    cancelledByName:
-      leave.cancelledByName ||
-      undefined,
-
-    cancelledReason:
-      leave.cancelledReason ||
-      undefined,
-
-    daysUsedBeforeCancel:
-      leave.daysUsedBeforeCancel ??
-      undefined,
-
-    actualEndDate:
-      leave.actualEndDate
-        ? dateOnly(
-            leave.actualEndDate
-          )
-        : undefined,
-
-    /*
-     * IMPORTANT:
-     * No permanent Cloudinary URL
-     * comes to frontend.
-     */
-    hasAttachment:
-      leave.hasAttachment ??
-      false,
-
     attachmentName:
-      leave.attachmentName ||
-      undefined,
-
+      leave.attachmentName,
     createdAt:
       leave.createdAt,
-  } as LeaveRequest;
+    hasAttachment:
+      leave.hasAttachment,
+  } as LeaveRequest & {
+    hasAttachment?: boolean;
+  };
 }
 
-/*
-|--------------------------------------------------------------------------
-| GET LEAVE REQUESTS
-|--------------------------------------------------------------------------
-*/
-
-export async function getLeaveRequests():
-Promise<LeaveRequest[]> {
+export async function getLeaveRequests(): Promise<
+  LeaveRequest[]
+> {
   const response =
     await api.get(
       '/leave-requests',
@@ -301,19 +181,16 @@ Promise<LeaveRequest[]> {
   );
 }
 
-/*
-|--------------------------------------------------------------------------
-| CREATE LEAVE REQUEST
-|--------------------------------------------------------------------------
-|
-| Multipart is required because a
-| document can be attached.
-|
-*/
+export interface CreateLeaveRequestPayload {
+  leaveType: LeaveType;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  attachment?: File | null;
+}
 
 export async function createLeaveRequest(
-  payload:
-    CreateLeaveRequestPayload
+  payload: CreateLeaveRequestPayload
 ): Promise<LeaveRequest> {
   const formData =
     new FormData();
@@ -347,17 +224,16 @@ export async function createLeaveRequest(
     );
   }
 
-  /*
-   * Do not manually set
-   * Content-Type here.
-   *
-   * Browser/Axios automatically adds
-   * multipart boundary correctly.
-   */
   const response =
     await api.post(
       '/leave-requests',
-      formData
+      formData,
+      {
+        headers: {
+          'Content-Type':
+            'multipart/form-data',
+        },
+      }
     );
 
   return mapBackendLeaveRequest(
@@ -365,81 +241,18 @@ export async function createLeaveRequest(
   );
 }
 
-/*
-|--------------------------------------------------------------------------
-| GET TEMPORARY PRIVATE ATTACHMENT URL
-|--------------------------------------------------------------------------
-|
-| Backend checks authorization first.
-|
-| Allowed:
-| - Employee's own leave
-| - Required/assigned manager
-| - Admin
-|
-*/
-
 export async function getLeaveAttachmentUrl(
   leaveRequestId: string
-): Promise<AttachmentUrlResponse> {
+): Promise<{
+  url: string;
+  expiresAt: number;
+  expiresInSeconds: number;
+  name: string;
+}> {
   const response =
     await api.get(
       `/leave-requests/${leaveRequestId}/attachment-url`
     );
 
   return response.data.data;
-}
-
-/*
-|--------------------------------------------------------------------------
-| OPEN PRIVATE DOCUMENT
-|--------------------------------------------------------------------------
-*/
-
-export async function openLeaveAttachment(
-  leaveRequestId: string
-): Promise<void> {
-  /*
-   * Open blank tab first so popup
-   * blockers don't block the document
-   * after the async API request.
-   */
-  const newWindow =
-    window.open(
-      '',
-      '_blank'
-    );
-
-  try {
-    const attachment =
-      await getLeaveAttachmentUrl(
-        leaveRequestId
-      );
-
-    if (newWindow) {
-      newWindow.opener =
-        null;
-
-      newWindow.location.href =
-        attachment.url;
-
-      return;
-    }
-
-    /*
-     * Fallback if browser blocked
-     * the new tab.
-     */
-    window.location.href =
-      attachment.url;
-  } catch (error) {
-    /*
-     * Close empty tab if API failed.
-     */
-    if (newWindow) {
-      newWindow.close();
-    }
-
-    throw error;
-  }
 }

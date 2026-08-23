@@ -6,7 +6,15 @@ export type LeaveStatus =
   | 'rejected'
   | 'cancelled';
 
-export type LeaveType = string;
+export type LeaveType =
+  | 'annual'
+  | 'sick'
+  | 'casual'
+  | 'unpaid'
+  | 'maternity'
+  | 'paternity';
+
+export const CORE_LEAVE_TYPES: LeaveType[] = ['annual', 'sick', 'casual'];
 
 export interface User {
   id: string;
@@ -24,49 +32,34 @@ export interface User {
   managerId?: string;
   canApproveOtherDepartments?: boolean;
   profilePhotoUrl?: string;
-  detailsStatus?: 'complete' | 'pending';
-  pendingFields?: string[];
 }
 
 export interface Grade {
   id: string;
   name: string;
+  annualLeaveQuota: number;
+  sickLeaveQuota: number;
+  casualLeaveQuota: number;
+  carryForwardAllowed: boolean;
+  maxCarryForwardDays: number;
   description?: string;
-
-  // Kept optional only for backward compatibility with older local data.
-  // Leave entitlement no longer comes from Grade.
-  carryForwardAllowed?: boolean;
-  maxCarryForwardDays?: number;
-}
-
-export interface GradeQuota {
-  gradeId: string;
-  gradeName?: string;
-  yearlyQuota: number;
 }
 
 export interface LeavePolicy {
   id: string;
-  leaveType: LeaveType;
-  gradeQuotas: GradeQuota[];
-
-  requiresApprovalFrom: 'manager';
-
+  leaveType: string;
+  role?: string;
+  requiresApprovalFrom: 'manager' | 'admin';
   approvalRouting?: {
+    designation?: string;
+    department?: string;
+    grade?: string;
     approverIds: string[];
   };
-
   requiresDocumentUpload: boolean;
-  documentRequirement?:
-    | 'optional'
-    | 'required'
-    | 'not_required';
-
+  documentRequirement?: 'optional' | 'required' | 'not_required';
+  adminOnlyApproval?: boolean;
   finalApprovalMode?: boolean;
-
-  carryForwardAllowed?: boolean;
-  maxCarryForwardDays?: number;
-
   minDaysNoticeRequired: number;
   isPaid: boolean;
 }
@@ -85,7 +78,7 @@ export interface LeaveRequest {
   employeeId: string;
   employeeName: string;
   department: string;
-  leaveType: LeaveType;
+  leaveType: string;
   startDate: string;
   endDate: string;
   totalDaysRequested: number;
@@ -102,14 +95,16 @@ export interface LeaveRequest {
   originalRequestId?: string;
   isPaidOverride?: boolean;
   isStopRequest?: boolean;
+  isAdminOnlyDecision?: boolean;
   isPaid?: boolean;
   cancelledBy?: string;
   cancelledByName?: string;
   cancelledReason?: string;
   daysUsedBeforeCancel?: number;
   actualEndDate?: string;
-  hasAttachment?: boolean;
+  attachmentUrl?: string;
   attachmentName?: string;
+  hasAttachment?: boolean;
   createdAt: string;
 }
 
@@ -121,9 +116,7 @@ export interface Notification {
     | 'leave_approved'
     | 'leave_rejected'
     | 'leave_cancelled'
-    | 'leave_pending_approval'
-    | 'extension_requested'
-    | 'stop_requested';
+    | 'leave_pending_approval';
   message: string;
   relatedLeaveRequestId?: string;
   isRead: boolean;
@@ -135,7 +128,6 @@ export interface LeaveBalance {
   quota: number;
   used: number;
   remaining: number;
-  year?: number;
 }
 
 export interface AuditLog {
