@@ -37,6 +37,7 @@ interface BackendLeaveRequest {
   isStopRequest?: boolean;
   cancelledBy?: string | null;
   attachmentName?: string;
+  attachmentUrl?: string;
   hasAttachment?: boolean;
   createdAt: string;
 }
@@ -149,6 +150,8 @@ export function mapBackendLeaveRequest(
       undefined,
     attachmentName:
       leave.attachmentName,
+    attachmentUrl:
+      leave.attachmentUrl,
     createdAt:
       leave.createdAt,
     hasAttachment:
@@ -255,4 +258,45 @@ export async function getLeaveAttachmentUrl(
     );
 
   return response.data.data;
+}
+
+
+export async function extendLeaveRequest(
+  leaveRequestId: string,
+  newEndDate: string,
+  reason: string,
+  isPaidOverride?: boolean
+): Promise<LeaveRequest> {
+  const response =
+    await api.post(
+      `/leave-requests/${leaveRequestId}/extend`,
+      {
+        newEndDate,
+        reason,
+        isPaidOverride,
+      }
+    );
+
+  return mapBackendLeaveRequest(
+    response.data.data
+  );
+}
+
+export async function requestStopLeaveRequest(
+  leaveRequestId: string,
+  returnDate: string,
+  reason: string
+): Promise<LeaveRequest> {
+  const response =
+    await api.post(
+      `/leave-requests/${leaveRequestId}/request-stop`,
+      {
+        returnDate,
+        reason,
+      }
+    );
+
+  return mapBackendLeaveRequest(
+    response.data.data
+  );
 }

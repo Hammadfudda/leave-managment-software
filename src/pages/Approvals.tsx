@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
@@ -9,7 +9,6 @@ import Badge from '../components/ui/Badge';
 import { formatDate } from '../utils/formatDate';
 import { CORE_LEAVE_TYPES } from '../types';
 import type { LeaveRequest } from '../types';
-import LeaveAttachmentButton from '../components/leave/LeaveAttachmentButton';
 
 function getCurrentTurnApproverIds(req: LeaveRequest): string[] {
   if (req.status !== 'pending') return [];
@@ -47,6 +46,8 @@ export default function Approvals() {
     approveLeave,
     rejectLeave,
     cancelLeaveByAdmin,
+    refreshLeaveRequests,
+    refreshEmployees,
   } = useAppData();
 
   const [tab, setTab] =
@@ -64,6 +65,32 @@ export default function Approvals() {
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    const load = async () => {
+      try {
+        await Promise.all([
+          refreshLeaveRequests(),
+          refreshEmployees(),
+        ]);
+      } catch (error) {
+        console.error(
+          'Unable to refresh approvals:',
+          error
+        );
+      }
+    };
+
+    void load();
+  }, [
+    user?.id,
+    refreshLeaveRequests,
+    refreshEmployees,
+  ]);
 
   if (!user) return null;
 
@@ -811,17 +838,21 @@ export default function Approvals() {
               </p>
             </div>
 
-            {detail.hasAttachment && (
+            {detail.attachmentUrl && (
               <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
-                <p className="mb-2 text-gray-500">
+                <p className="text-gray-500">
                   Attached document
                 </p>
 
-                <LeaveAttachmentButton
-                  leaveRequestId={detail.id}
-                  hasAttachment={detail.hasAttachment}
-                  attachmentName={detail.attachmentName}
-                />
+                <a
+                  href={detail.attachmentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 inline-flex text-sm font-medium text-blue-700 hover:text-blue-800"
+                >
+                  {detail.attachmentName ||
+                    'View attachment'}
+                </a>
               </div>
             )}
 

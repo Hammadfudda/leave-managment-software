@@ -1,382 +1,337 @@
-import { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useAppData } from '../context/AppDataContext';
-import StatusBadge from '../components/ui/StatusBadge';
-import Modal from '../components/ui/Modal';
-import Button from '../components/ui/Button';
-import { formatDate } from '../utils/formatDate';
 import {
-  CheckCircle2,
-  XCircle,
-  Circle,
-  FileText,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
+import {
+  CalendarDays,
+  Clock3,
+  RotateCcw,
+  Square,
 } from 'lucide-react';
 
-import type {
-  LeaveStatus,
-  LeaveRequest,
-} from '../types';
+import { useAuth } from '../context/AuthContext';
+import { useAppData } from '../context/AppDataContext';
+import Modal from '../components/ui/Modal';
+import Button from '../components/ui/Button';
+import StatusBadge from '../components/ui/StatusBadge';
+import { formatDate } from '../utils/formatDate';
+import { getApiErrorMessage } from '../services/api';
+import type { LeaveRequest } from '../types';
 
-import {
-  openLeaveAttachment,
-} from '../services/leaveRequests';
+type ActionMode =
+  | 'extend'
+  | 'stop'
+  | null;
+
+function dateOnly(
+  value: string
+) {
+  return String(value || '')
+    .split('T')[0];
+}
+
+function addOneDay(
+  value: string
+) {
+  const date = new Date(
+    `${dateOnly(value)}T00:00:00`
+  );
+
+  date.setDate(
+    date.getDate() + 1
+  );
+
+  return date
+    .toISOString()
+    .split('T')[0];
+}
 
 export default function LeaveHistory() {
   const { user } = useAuth();
 
   const {
     leaveRequests,
-    getUserById,
+    refreshLeaveRequests,
     extendLeave,
     requestStopLeave,
   } = useAppData();
 
   const [
-    filter,
-    setFilter,
-  ] = useState<
-    LeaveStatus | 'all'
-  >('all');
+    loading,
+    setLoading,
+  ] = useState(true);
 
   const [
-    detailId,
-    setDetailId,
-  ] = useState<
-    string | null
-  >(null);
-
-  const [
-    actionForm,
-    setActionForm,
-  ] = useState<{
-    type:
-      | 'extend'
-      | 'stop';
-    request:
-      LeaveRequest;
-  } | null>(null);
-
-  const [
-    formDate,
-    setFormDate,
+    apiError,
+    setApiError,
   ] = useState('');
 
   const [
-    formReason,
-    setFormReason,
-  ] = useState('');
-
-  /*
-  |--------------------------------------------------------------------------
-  | PRIVATE ATTACHMENT STATE
-  |--------------------------------------------------------------------------
-  */
+    selected,
+    setSelected,
+  ] = useState<LeaveRequest | null>(
+    null
+  );
 
   const [
-    attachmentLoading,
-    setAttachmentLoading,
+    actionMode,
+    setActionMode,
+  ] = useState<ActionMode>(
+    null
+  );
+
+  const [
+    actionDate,
+    setActionDate,
+  ] = useState('');
+
+  const [
+    reason,
+    setReason,
+  ] = useState('');
+
+  const [
+    isPaid,
+    setIsPaid,
+  ] = useState(true);
+
+  const [
+    submitting,
+    setSubmitting,
   ] = useState(false);
 
-  const [
-    attachmentError,
-    setAttachmentError,
-  ] = useState<
-    string | null
-  >(null);
+  useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      setApiError('');
+
+      try {
+        await refreshLeaveRequests();
+      } catch (error) {
+        if (!cancelled) {
+          setApiError(
+            getApiErrorMessage(
+              error,
+              'Unable to load your leave requests.'
+            )
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    user?.id,
+    refreshLeaveRequests,
+  ]);
+
+  const myLeaves =
+    useMemo(() => {
+      if (!user) {
+        return [];
+      }
+
+      return leaveRequests
+        .filter(
+          (leave) =>
+            String(
+              leave.employeeId
+            ) ===
+            String(user.id)
+        )
+        .sort(
+          (a, b) =>
+            new Date(
+              b.createdAt
+            ).getTime() -
+            new Date(
+              a.createdAt
+            ).getTime()
+        );
+    }, [
+      leaveRequests,
+      user?.id,
+    ]);
+
+  const modificationState =
+    useMemo(() => {
+      const byOriginal =
+        new Map<
+          string,
+          {
+            extended: boolean;
+            stopped: boolean;
+          }
+        >();
+
+      for (const leave of myLeaves) {
+        if (
+          !leave.originalRequestId
+        ) {
+          continue;
+        }
+
+        const key =
+          String(
+            leave.originalRequestId
+          );
+
+        const current =
+          byOriginal.get(key) || {
+            extended: false,
+            stopped: false,
+          };
+
+        if (leave.isExtension) {
+          current.extended = true;
+        }
+
+        if (leave.isStopRequest) {
+          current.stopped = true;
+        }
+
+        byOriginal.set(
+          key,
+          current
+        );
+      }
+
+      return byOriginal;
+    }, [myLeaves]);
 
   if (!user) {
     return null;
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | EMPLOYEE LEAVES
-  |--------------------------------------------------------------------------
-  */
+  const closeAction =
+    () => {
+      if (submitting) {
+        return;
+      }
 
-  const myLeaves =
-    leaveRequests.filter(
-      (leave) =>
-        leave.employeeId ===
-        user.id
-    );
-
-  const filtered =
-    filter === 'all'
-      ? myLeaves
-      : myLeaves.filter(
-          (leave) =>
-            leave.status ===
-            filter
-        );
-
-  /*
-   * Derived directly from current
-   * leaveRequests so details always
-   * stay up to date.
-   */
-  const detail =
-    detailId
-      ? leaveRequests.find(
-          (leave) =>
-            leave.id ===
-            detailId
-        ) || null
-      : null;
-
-  const filters: {
-    value:
-      | LeaveStatus
-      | 'all';
-
-    label: string;
-  }[] = [
-    {
-      value: 'all',
-      label: 'All',
-    },
-    {
-      value: 'pending',
-      label: 'Pending',
-    },
-    {
-      value: 'approved',
-      label: 'Approved',
-    },
-    {
-      value: 'rejected',
-      label: 'Rejected',
-    },
-    {
-      value: 'cancelled',
-      label: 'Cancelled',
-    },
-  ];
-
-  /*
-  |--------------------------------------------------------------------------
-  | EXTEND / STOP
-  |--------------------------------------------------------------------------
-  */
+      setSelected(null);
+      setActionMode(null);
+      setActionDate('');
+      setReason('');
+      setIsPaid(true);
+    };
 
   const openExtend = (
-    request: LeaveRequest
+    leave: LeaveRequest
   ) => {
-    setFormDate('');
-    setFormReason('');
-
-    setActionForm({
-      type: 'extend',
-      request,
-    });
+    setSelected(leave);
+    setActionMode('extend');
+    setActionDate('');
+    setReason('');
+    setIsPaid(true);
+    setApiError('');
   };
 
   const openStop = (
-    request: LeaveRequest
+    leave: LeaveRequest
   ) => {
-    setFormDate('');
-    setFormReason('');
-
-    setActionForm({
-      type: 'stop',
-      request,
-    });
+    setSelected(leave);
+    setActionMode('stop');
+    setActionDate('');
+    setReason('');
+    setApiError('');
   };
 
-  const closeActionForm =
-    () => {
-      setActionForm(null);
-      setFormDate('');
-      setFormReason('');
-    };
-
-  const handleSubmitExtend =
-    () => {
-      if (
-        !actionForm ||
-        !user ||
-        !formDate ||
-        !formReason.trim()
-      ) {
-        return;
-      }
-
-      extendLeave(
-        actionForm.request,
-        user,
-        formDate,
-        formReason.trim(),
-        true
-      );
-
-      closeActionForm();
-    };
-
-  const handleSubmitStop =
-    () => {
-      if (
-        !actionForm ||
-        !user ||
-        !formDate ||
-        !formReason.trim()
-      ) {
-        return;
-      }
-
-      requestStopLeave(
-        actionForm.request,
-        user,
-        formDate,
-        formReason.trim()
-      );
-
-      closeActionForm();
-    };
-
-  /*
-  |--------------------------------------------------------------------------
-  | PRIVATE CLOUDINARY DOCUMENT
-  |--------------------------------------------------------------------------
-  */
-
-  const handleViewAttachment =
+  const submitAction =
     async () => {
-      if (!detail) {
+      if (
+        !selected ||
+        !actionMode ||
+        !actionDate ||
+        !reason.trim()
+      ) {
+        setApiError(
+          'Please enter the required date and reason.'
+        );
         return;
       }
+
+      setSubmitting(true);
+      setApiError('');
 
       try {
-        setAttachmentLoading(
-          true
-        );
-
-        setAttachmentError(
-          null
-        );
+        if (
+          actionMode ===
+          'extend'
+        ) {
+          await extendLeave(
+            selected,
+            user,
+            actionDate,
+            reason.trim(),
+            isPaid
+          );
+        } else {
+          await requestStopLeave(
+            selected,
+            user,
+            actionDate,
+            reason.trim()
+          );
+        }
 
         /*
-         * This does NOT directly
-         * open a permanent
-         * Cloudinary URL.
-         *
-         * Backend checks ownership
-         * first and then returns
-         * temporary signed URL.
+         * Read back from MongoDB after every mutation.
+         * My Leaves must always reflect the server,
+         * not a stale/local-only React array.
          */
-        await openLeaveAttachment(
-          detail.id
-        );
-      } catch (
-        error: any
-      ) {
-        const message =
-          error?.response
-            ?.data
-            ?.message ||
-          error?.response
-            ?.data
-            ?.error ||
-          'Unable to open the attached document.';
+        await refreshLeaveRequests();
 
-        setAttachmentError(
-          message
+        closeAction();
+      } catch (error) {
+        setApiError(
+          getApiErrorMessage(
+            error,
+            actionMode ===
+              'extend'
+              ? 'Unable to submit the extension request.'
+              : 'Unable to submit the stop-leave request.'
+          )
         );
       } finally {
-        setAttachmentLoading(
-          false
-        );
+        setSubmitting(false);
       }
-    };
-
-  /*
-  |--------------------------------------------------------------------------
-  | OPEN DETAILS
-  |--------------------------------------------------------------------------
-  */
-
-  const openDetails = (
-    id: string
-  ) => {
-    setAttachmentError(
-      null
-    );
-
-    setDetailId(id);
-  };
-
-  const closeDetails =
-    () => {
-      setDetailId(null);
-
-      setAttachmentError(
-        null
-      );
     };
 
   return (
     <div className="space-y-6">
-      {/* =========================================
-          HEADER
-      ========================================== */}
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-900">
+          My Leaves
+        </h1>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">
-            My Leaves
-          </h1>
-
-          <p className="mt-1 text-sm text-gray-500">
-            Track all your
-            leave requests.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-1.5">
-          {filters.map(
-            (item) => {
-              const count =
-                item.value ===
-                'all'
-                  ? myLeaves.length
-                  : myLeaves.filter(
-                      (
-                        leave
-                      ) =>
-                        leave.status ===
-                        item.value
-                    ).length;
-
-              return (
-                <button
-                  key={
-                    item.value
-                  }
-                  onClick={() =>
-                    setFilter(
-                      item.value
-                    )
-                  }
-                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                    filter ===
-                    item.value
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white text-gray-600 ring-1 ring-inset ring-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  {
-                    item.label
-                  }{' '}
-                  ({count})
-                </button>
-              );
-            }
-          )}
-        </div>
+        <p className="mt-1 text-sm text-gray-500">
+          View your leave requests and request one-time changes to an approved leave.
+        </p>
       </div>
 
-      {/* =========================================
-          TABLE
-      ========================================== */}
+      {apiError && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {apiError}
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
         <div className="overflow-x-auto">
@@ -386,27 +341,18 @@ export default function LeaveHistory() {
                 <th className="px-5 py-3 font-medium">
                   Type
                 </th>
-
                 <th className="px-5 py-3 font-medium">
-                  Start
+                  Dates
                 </th>
-
-                <th className="px-5 py-3 font-medium">
-                  End
-                </th>
-
                 <th className="px-5 py-3 font-medium">
                   Days
                 </th>
-
                 <th className="px-5 py-3 font-medium">
                   Status
                 </th>
-
                 <th className="px-5 py-3 font-medium">
-                  Document
+                  Reason
                 </th>
-
                 <th className="px-5 py-3 font-medium">
                   Action
                 </th>
@@ -414,762 +360,367 @@ export default function LeaveHistory() {
             </thead>
 
             <tbody className="divide-y divide-gray-50">
-              {filtered.length ===
-                0 && (
+              {loading && (
                 <tr>
                   <td
-                    colSpan={
-                      7
-                    }
+                    colSpan={6}
                     className="px-5 py-8 text-center text-gray-400"
                   >
-                    No leave
-                    requests
-                    found.
+                    Loading leave requests...
                   </td>
                 </tr>
               )}
 
-              {filtered.map(
-                (leave) => (
-                  <tr
-                    key={
-                      leave.id
-                    }
-                    className="animate-fade-in hover:bg-gray-50/50"
-                  >
-                    <td className="px-5 py-3 capitalize text-gray-900">
-                      {
-                        leave.leaveType
-                      }
-
-                      {leave.isExtension && (
-                        <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-indigo-700">
-                          Extend
-                        </span>
-                      )}
-
-                      {leave.isStopRequest && (
-                        <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-amber-700">
-                          Stop
-                        </span>
-                      )}
+              {!loading &&
+                myLeaves.length ===
+                  0 && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-5 py-8 text-center text-gray-400"
+                    >
+                      No leave requests yet.
                     </td>
+                  </tr>
+                )}
 
-                    <td className="px-5 py-3 text-gray-600">
-                      {formatDate(
-                        leave.startDate
-                      )}
-                    </td>
+              {!loading &&
+                myLeaves.map(
+                  (leave) => {
+                    const isOriginal =
+                      !leave.isExtension &&
+                      !leave.isStopRequest;
 
-                    <td className="px-5 py-3 text-gray-600">
-                      {formatDate(
-                        leave.actualEndDate ||
-                          leave.endDate
-                      )}
-                    </td>
+                    const modifications =
+                      modificationState.get(
+                        String(
+                          leave.id
+                        )
+                      );
 
-                    <td className="px-5 py-3 text-gray-600">
-                      {leave.daysUsedBeforeCancel !=
-                      null
-                        ? `${leave.daysUsedBeforeCancel} / ${leave.totalDaysRequested}`
-                        : leave.totalDaysRequested}
-                    </td>
+                    const hasExtended =
+                      Boolean(
+                        modifications
+                          ?.extended
+                      );
 
-                    <td className="px-5 py-3">
-                      <StatusBadge
-                        status={
-                          leave.status
-                        }
-                      />
-                    </td>
+                    const hasStopped =
+                      Boolean(
+                        modifications
+                          ?.stopped
+                      );
 
-                    {/* DOCUMENT INDICATOR */}
+                    const canModify =
+                      isOriginal &&
+                      leave.status ===
+                        'approved';
 
-                    <td className="px-5 py-3">
-                      {leave.hasAttachment ? (
-                        <div className="flex items-center gap-1.5 text-xs font-medium text-blue-600">
-                          <FileText
-                            size={
-                              15
+                    return (
+                      <tr
+                        key={leave.id}
+                        className="hover:bg-gray-50/50"
+                      >
+                        <td className="px-5 py-3 capitalize text-gray-700">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span>
+                              {String(
+                                leave.leaveType
+                              ).replace(
+                                /_/g,
+                                ' '
+                              )}
+                            </span>
+
+                            {leave.isExtension && (
+                              <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-indigo-700">
+                                Extend
+                              </span>
+                            )}
+
+                            {leave.isStopRequest && (
+                              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-amber-700">
+                                Stop
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-3 text-gray-600">
+                          {formatDate(
+                            leave.startDate
+                          )}{' '}
+                          →{' '}
+                          {formatDate(
+                            leave.actualEndDate ||
+                              leave.endDate
+                          )}
+                        </td>
+
+                        <td className="px-5 py-3 text-gray-600">
+                          {leave.isStopRequest
+                            ? '—'
+                            : leave.daysUsedBeforeCancel ??
+                              leave.totalWorkingDays ??
+                              leave.totalDaysRequested}
+                        </td>
+
+                        <td className="px-5 py-3">
+                          <StatusBadge
+                            status={
+                              leave.status
                             }
                           />
+                        </td>
 
-                          <span>
-                            Attached
+                        <td className="max-w-[280px] px-5 py-3 text-gray-600">
+                          <span className="line-clamp-2">
+                            {leave.reason ||
+                              '—'}
                           </span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-400">
-                          —
-                        </span>
-                      )}
-                    </td>
+                        </td>
 
-                    <td className="px-5 py-3">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <button
-                          onClick={() =>
-                            openDetails(
-                              leave.id
-                            )
-                          }
-                          className="text-sm font-medium text-blue-600 hover:text-blue-700"
-                        >
-                          View
-                        </button>
-
-                        {leave.status ===
-                          'approved' &&
-                          !leave.isExtension &&
-                          !leave.isStopRequest && (
-                            <>
+                        <td className="px-5 py-3">
+                          {canModify ? (
+                            <div className="flex flex-wrap gap-2">
                               <button
+                                type="button"
                                 onClick={() =>
                                   openExtend(
                                     leave
                                   )
                                 }
-                                className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                                disabled={
+                                  hasExtended
+                                }
+                                className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent"
+                                title={
+                                  hasExtended
+                                    ? 'This leave has already been extended once.'
+                                    : 'Extend leave'
+                                }
                               >
-                                Extend
+                                <RotateCcw
+                                  size={13}
+                                />
+                                {hasExtended
+                                  ? 'Extended'
+                                  : 'Extend'}
                               </button>
 
                               <button
+                                type="button"
                                 onClick={() =>
                                   openStop(
                                     leave
                                   )
                                 }
-                                className="text-sm font-medium text-amber-600 hover:text-amber-700"
+                                disabled={
+                                  hasStopped
+                                }
+                                className="inline-flex items-center gap-1 rounded-lg border border-amber-200 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent"
+                                title={
+                                  hasStopped
+                                    ? 'A stop request has already been submitted for this leave.'
+                                    : 'Stop leave early'
+                                }
                               >
-                                Stop
+                                <Square
+                                  size={13}
+                                />
+                                {hasStopped
+                                  ? 'Stop requested'
+                                  : 'Stop'}
                               </button>
-                            </>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">
+                              —
+                            </span>
                           )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              )}
+                        </td>
+                      </tr>
+                    );
+                  }
+                )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* =========================================
-          LEAVE DETAILS MODAL
-      ========================================== */}
+      <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs text-blue-700">
+        Each original approved leave can be extended only once and can have only one stop-leave request. The backend also enforces this rule.
+      </div>
 
       <Modal
         open={
-          !!detail &&
-          !actionForm
+          Boolean(
+            selected &&
+              actionMode
+          )
         }
-        onClose={
-          closeDetails
-        }
-        title="Leave Request Details"
-        size="md"
-      >
-        {detail && (
-          <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-gray-500">
-                  Type
-                </p>
-
-                <p className="font-medium capitalize text-gray-900">
-                  {
-                    detail.leaveType
-                  }
-
-                  {detail.isExtension && (
-                    <span className="ml-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-indigo-700">
-                      Extend
-                    </span>
-                  )}
-
-                  {detail.isStopRequest && (
-                    <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-amber-700">
-                      Stop
-                    </span>
-                  )}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-gray-500">
-                  Status
-                </p>
-
-                <StatusBadge
-                  status={
-                    detail.status
-                  }
-                />
-              </div>
-
-              <div>
-                <p className="text-gray-500">
-                  Start date
-                </p>
-
-                <p className="font-medium text-gray-900">
-                  {formatDate(
-                    detail.startDate
-                  )}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-gray-500">
-                  End date
-                </p>
-
-                <p className="font-medium text-gray-900">
-                  {formatDate(
-                    detail.actualEndDate ||
-                      detail.endDate
-                  )}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-gray-500">
-                  Total days
-                  requested
-                </p>
-
-                <p className="font-medium text-gray-900">
-                  {
-                    detail.totalDaysRequested
-                  }
-                </p>
-              </div>
-
-              <div>
-                <p className="text-gray-500">
-                  Days counted
-                </p>
-
-                <p className="font-medium text-gray-900">
-                  {detail.daysUsedBeforeCancel ??
-                    detail.totalWorkingDays}
-                </p>
-              </div>
-            </div>
-
-            {/* REASON */}
-
-            <div>
-              <p className="text-gray-500">
-                Reason
-              </p>
-
-              <p className="mt-1 text-gray-900">
-                {detail.reason}
-              </p>
-            </div>
-
-            {/* =====================================
-                PRIVATE CLOUDINARY ATTACHMENT
-            ====================================== */}
-
-            {detail.hasAttachment && (
-              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-lg bg-blue-100 p-2 text-blue-600">
-                      <FileText
-                        size={20}
-                      />
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-                        Supporting
-                        Document
-                      </p>
-
-                      <p className="mt-1 font-medium text-gray-900">
-                        {detail.attachmentName ||
-                          'Attached document'}
-                      </p>
-
-                      <p className="mt-0.5 text-xs text-gray-500">
-                        Private
-                        attachment
-                      </p>
-                    </div>
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={
-                      handleViewAttachment
-                    }
-                    disabled={
-                      attachmentLoading
-                    }
-                  >
-                    {attachmentLoading
-                      ? 'Opening...'
-                      : 'View Document'}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* =====================================
-                APPROVER CHAIN
-            ====================================== */}
-
-            {detail.requiredApproverIds &&
-              detail
-                .requiredApproverIds
-                .length >
-                0 && (
-                <div>
-                  <p className="mb-2 text-gray-500">
-                    Approvers
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    {detail.requiredApproverIds.map(
-                      (
-                        id,
-                        index
-                      ) => {
-                        const approver =
-                          getUserById(
-                            id
-                          );
-
-                        const isApproved =
-                          detail.approvedByIds?.includes(
-                            id
-                          );
-
-                        const isRejected =
-                          detail.rejectedByIds?.includes(
-                            id
-                          );
-
-                        return (
-                          <div
-                            key={
-                              id
-                            }
-                            className="flex items-center gap-2"
-                          >
-                            <div
-                              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs ${
-                                isApproved
-                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                  : isRejected
-                                    ? 'border-rose-200 bg-rose-50 text-rose-700'
-                                    : 'border-gray-200 bg-gray-50 text-gray-500'
-                              }`}
-                            >
-                              {isApproved ? (
-                                <CheckCircle2
-                                  size={
-                                    13
-                                  }
-                                />
-                              ) : isRejected ? (
-                                <XCircle
-                                  size={
-                                    13
-                                  }
-                                />
-                              ) : (
-                                <Circle
-                                  size={
-                                    13
-                                  }
-                                />
-                              )}
-
-                              <span>
-                                {approver?.fullName ||
-                                  'Unknown'}
-
-                                {approver?.designation ? (
-                                  <span className="opacity-60">
-                                    {' '}
-                                    —{' '}
-                                    {
-                                      approver.designation
-                                    }
-                                  </span>
-                                ) : null}
-                              </span>
-                            </div>
-
-                            {index <
-                              detail
-                                .requiredApproverIds!
-                                .length -
-                                1 && (
-                              <span className="text-gray-300">
-                                →
-                              </span>
-                            )}
-                          </div>
-                        );
-                      }
-                    )}
-                  </div>
-                </div>
-              )}
-
-            {/* =====================================
-                APPROVAL HISTORY
-            ====================================== */}
-
-            <div>
-              <p className="text-gray-500">
-                Approval notes
-              </p>
-
-              <div className="mt-2 space-y-2">
-                {detail
-                  .approvalHistory
-                  .length ===
-                  0 && (
-                  <p className="text-gray-400">
-                    No approvals
-                    yet.
-                  </p>
-                )}
-
-                {detail.approvalHistory.map(
-                  (
-                    history,
-                    index
-                  ) => (
-                    <div
-                      key={
-                        index
-                      }
-                      className="rounded-lg bg-gray-50 px-3 py-2"
-                    >
-                      <p className="font-medium text-gray-900">
-                        {
-                          history.approverName
-                        }{' '}
-
-                        <span className="text-xs font-normal text-gray-500">
-                          (
-                          {
-                            history.approverRole
-                          }
-                          )
-                        </span>
-                      </p>
-
-                      <p className="text-xs text-gray-500">
-                        {
-                          history.action
-                        }{' '}
-                        on{' '}
-                        {formatDate(
-                          history.actionDate
-                        )}{' '}
-
-                        {history.comment &&
-                          `— "${history.comment}"`}
-                      </p>
-                    </div>
-                  )
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* =========================================
-          EXTEND / STOP MODAL
-      ========================================== */}
-
-      <Modal
-        open={
-          !!actionForm
-        }
-        onClose={
-          closeActionForm
-        }
+        onClose={closeAction}
         title={
-          actionForm?.type ===
-          'extend'
-            ? 'Request Leave Extension'
-            : 'Request to Stop Leave Early'
+          actionMode === 'extend'
+            ? 'Extend Leave'
+            : 'Stop Leave Early'
         }
         footer={
           <>
             <Button
               variant="secondary"
-              onClick={
-                closeActionForm
-              }
+              onClick={closeAction}
+              disabled={submitting}
             >
               Cancel
             </Button>
 
-            {actionForm?.type ===
-            'extend' ? (
-              <Button
-                onClick={
-                  handleSubmitExtend
-                }
-                disabled={
-                  !formDate ||
-                  !formReason.trim()
-                }
-              >
-                Submit
-                Extension
-                Request
-              </Button>
-            ) : (
-              <Button
-                onClick={
-                  handleSubmitStop
-                }
-                disabled={
-                  !formDate ||
-                  !formReason.trim()
-                }
-              >
-                Submit Stop
-                Request
-              </Button>
-            )}
+            <Button
+              onClick={submitAction}
+              disabled={submitting}
+            >
+              {submitting
+                ? 'Submitting...'
+                : actionMode ===
+                    'extend'
+                  ? 'Submit Extension'
+                  : 'Submit Stop Request'}
+            </Button>
           </>
         }
       >
-        {actionForm?.type ===
-          'extend' && (
-          <div className="space-y-4 text-sm">
-            <p className="text-gray-600">
-              Requesting an
-              extension to your{' '}
-              {
-                actionForm
-                  .request
-                  .leaveType
-              }{' '}
-              leave, currently
-              approved through{' '}
-
-              <span className="font-medium">
-                {formatDate(
-                  actionForm
-                    .request
-                    .endDate
-                )}
-              </span>
-              .
-            </p>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Extend until
-              </label>
-
-              <input
-                type="date"
-                value={
-                  formDate
-                }
-                onChange={(
-                  event
-                ) =>
-                  setFormDate(
-                    event.target
-                      .value
-                  )
-                }
-                min={
-                  actionForm
-                    .request
-                    .endDate
-                }
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Reason
-              </label>
-
-              <textarea
-                value={
-                  formReason
-                }
-                onChange={(
-                  event
-                ) =>
-                  setFormReason(
-                    event.target
-                      .value
-                  )
-                }
-                rows={3}
-                placeholder="Why do you need to extend this leave?"
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                autoFocus
-              />
-            </div>
-          </div>
-        )}
-
-        {actionForm?.type ===
-          'stop' && (
-          <div className="space-y-4 text-sm">
-            <p className="text-gray-600">
-              Your{' '}
-              {
-                actionForm
-                  .request
-                  .leaveType
-              }{' '}
-              leave runs{' '}
-
-              <span className="font-medium">
-                {formatDate(
-                  actionForm
-                    .request
-                    .startDate
+        {selected && (
+          <div className="space-y-4">
+            <div className="rounded-xl bg-gray-50 p-4">
+              <p className="text-sm font-medium capitalize text-gray-900">
+                {String(
+                  selected.leaveType
+                ).replace(
+                  /_/g,
+                  ' '
                 )}{' '}
-                to{' '}
-                {formatDate(
-                  actionForm
-                    .request
-                    .endDate
-                )}
-              </span>
-              . Pick the date
-              you actually want
-              to return.
-            </p>
+                leave
+              </p>
 
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Returning on
-              </label>
-
-              <input
-                type="date"
-                value={
-                  formDate
-                }
-                onChange={(
-                  event
-                ) =>
-                  setFormDate(
-                    event.target
-                      .value
-                  )
-                }
-                min={
-                  actionForm
-                    .request
-                    .startDate
-                }
-                max={
-                  actionForm
-                    .request
-                    .endDate
-                }
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-
-              <p className="mt-1 text-xs text-gray-400">
-                Choose any date
-                between the
-                leave's start (
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-gray-500">
+                <CalendarDays
+                  size={14}
+                />
                 {formatDate(
-                  actionForm
-                    .request
-                    .startDate
-                )}
-                ) and its
-                original end
-                date (
+                  selected.startDate
+                )}{' '}
+                →{' '}
                 {formatDate(
-                  actionForm
-                    .request
-                    .endDate
+                  selected.actualEndDate ||
+                    selected.endDate
                 )}
-                ).
               </p>
             </div>
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Reason
+                {actionMode ===
+                'extend'
+                  ? 'New end date'
+                  : 'Return date'}
               </label>
 
-              <textarea
-                value={
-                  formReason
+              <input
+                type="date"
+                value={actionDate}
+                min={
+                  actionMode ===
+                  'extend'
+                    ? addOneDay(
+                        selected.actualEndDate ||
+                          selected.endDate
+                      )
+                    : dateOnly(
+                        selected.startDate
+                      )
+                }
+                max={
+                  actionMode ===
+                  'stop'
+                    ? dateOnly(
+                        selected.actualEndDate ||
+                          selected.endDate
+                      )
+                    : undefined
                 }
                 onChange={(
                   event
                 ) =>
-                  setFormReason(
+                  setActionDate(
                     event.target
                       .value
                   )
                 }
-                rows={3}
-                placeholder="Why are you ending this leave early?"
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
+
+              {actionMode ===
+                'stop' && (
+                <p className="mt-1 text-xs text-gray-400">
+                  Choose a date within the original leave period. The backend requires it to be before the current end date.
+                </p>
+              )}
+            </div>
+
+            {actionMode ===
+              'extend' && (
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={isPaid}
+                  onChange={(
+                    event
+                  ) =>
+                    setIsPaid(
+                      event.target
+                        .checked
+                    )
+                  }
+                  className="rounded border-gray-300"
+                />
+                Extension is paid
+              </label>
+            )}
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Reason
+              </label>
+
+              <textarea
+                rows={4}
+                value={reason}
+                onChange={(
+                  event
+                ) =>
+                  setReason(
+                    event.target
+                      .value
+                  )
+                }
+                placeholder={
+                  actionMode ===
+                  'extend'
+                    ? 'Why do you need to extend this leave?'
+                    : 'Why are you returning early?'
+                }
+                className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+
+            <div className="flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              <Clock3
+                size={14}
+                className="mt-0.5 shrink-0"
+              />
+              This action can be submitted only once for this original leave.
             </div>
           </div>
         )}
-      </Modal>
-
-      {/* =========================================
-          DOCUMENT ERROR POPUP
-      ========================================== */}
-
-      <Modal
-        open={
-          !!attachmentError
-        }
-        onClose={() =>
-          setAttachmentError(
-            null
-          )
-        }
-        title="Unable to Open Document"
-        size="sm"
-        footer={
-          <Button
-            onClick={() =>
-              setAttachmentError(
-                null
-              )
-            }
-          >
-            OK
-          </Button>
-        }
-      >
-        <p className="text-sm text-gray-600">
-          {
-            attachmentError
-          }
-        </p>
       </Modal>
     </div>
   );

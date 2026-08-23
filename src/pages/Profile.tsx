@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useAppData, getReportingChain } from '../context/AppDataContext';
+import { useAppData } from '../context/AppDataContext';
 import Badge from '../components/ui/Badge';
 import StatusBadge from '../components/ui/StatusBadge';
 import {
@@ -31,6 +31,15 @@ interface GradeObject {
   code?: string;
 }
 
+interface ManagerObject {
+  _id?: string;
+  fullName?: string;
+  email?: string;
+  designation?: string;
+  department?: string;
+  status?: string;
+}
+
 interface ProfileApiUser {
   _id?: string;
   id?: string;
@@ -46,6 +55,7 @@ interface ProfileApiUser {
   phone?: string;
   status?: 'active' | 'inactive';
   managerId?: string | null;
+  manager?: ManagerObject | null;
 
   gradeId?: string | GradeObject;
   grade?: string | GradeObject;
@@ -285,16 +295,27 @@ export default function Profile() {
         user.id
     );
 
-  const { manager } =
-    getReportingChain(
-      {
-        ...user,
-        managerId:
-          displayUser.managerId ||
-          undefined,
-      },
-      getUserById
-    );
+  /*
+   * Preferred source: /employees/me now returns a dedicated `manager`
+   * object. This avoids depending on the employees list being loaded
+   * before Profile renders.
+   *
+   * Fallback: if an older backend response is used, resolve managerId
+   * from AppDataContext when possible.
+   */
+  const managerFromList =
+    displayUser.managerId
+      ? getUserById(
+          String(
+            displayUser.managerId
+          )
+        )
+      : undefined;
+
+  const managerName =
+    profileData?.manager?.fullName ||
+    managerFromList?.fullName ||
+    '—';
 
   const fields = [
     {
@@ -359,8 +380,7 @@ export default function Profile() {
     {
       icon: UserCircle,
       label: 'Manager',
-      value:
-        manager?.fullName || '—',
+      value: managerName,
     },
   ];
 

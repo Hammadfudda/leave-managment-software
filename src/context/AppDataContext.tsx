@@ -1,1128 +1,826 @@
-    import {
-      createContext,
-      useContext,
-      useState,
-      useCallback,
-      type ReactNode,
-    } from 'react';
+  import {
+    createContext,
+    useContext,
+    useState,
+    useCallback,
+    type ReactNode,
+  } from 'react';
 
-    import type {
-      User,
-      Grade,
-      LeavePolicy,
-      LeaveRequest,
-      AuditLog,
-      LeaveBalance,
-      LeaveType,
-    } from '../types';
+  import type {
+    User,
+    Grade,
+    LeavePolicy,
+    LeaveRequest,
+    AuditLog,
+    LeaveBalance,
+    LeaveType,
+  } from '../types';
 
-    import { calcWorkingDays } from '../utils/formatDate';
+  import { calcWorkingDays } from '../utils/formatDate';
 
-    import api, {
-      getApiErrorMessage,
-    } from '../services/api';
+  import api, {
+    getApiErrorMessage,
+  } from '../services/api';
 
-    import {
-      getEmployees as apiGetEmployees,
-      createEmployee as apiCreateEmployee,
-      updateEmployee as apiUpdateEmployee,
-      removeEmployee as apiRemoveEmployee,
-      restoreEmployee as apiRestoreEmployee,
-      type CreateEmployeePayload,
-      type UpdateEmployeePayload,
-    } from '../services/employees';
+  import {
+    getEmployees as apiGetEmployees,
+    createEmployee as apiCreateEmployee,
+    updateEmployee as apiUpdateEmployee,
+    removeEmployee as apiRemoveEmployee,
+    restoreEmployee as apiRestoreEmployee,
+    type CreateEmployeePayload,
+    type UpdateEmployeePayload,
+  } from '../services/employees';
 
-    import {
-      getLeaveRequests as apiGetLeaveRequests,
-    } from '../services/leaveRequests';
+  import {
+    getLeaveRequests as apiGetLeaveRequests,
+    extendLeaveRequest as apiExtendLeaveRequest,
+    requestStopLeaveRequest as apiRequestStopLeaveRequest,
+  } from '../services/leaveRequests';
 
-    import {
-      getLeavePolicies as apiGetLeavePolicies,
-      createLeavePolicy as apiCreateLeavePolicy,
-      updateLeavePolicy as apiUpdateLeavePolicy,
-    } from '../services/leavePolicies';
+  import {
+    getLeavePolicies as apiGetLeavePolicies,
+    createLeavePolicy as apiCreateLeavePolicy,
+    updateLeavePolicy as apiUpdateLeavePolicy,
+  } from '../services/leavePolicies';
+
+  /* =========================================================
+    TYPES
+  ========================================================= */
+
+  interface AppDataContextType {
+    users: User[];
+    grades: Grade[];
+    designations: string[];
+    departments: string[];
+    roles: string[];
+
+    departmentSaturdayOff: Record<string, boolean>;
+
+    leavePolicies: LeavePolicy[];
+    leaveRequests: LeaveRequest[];
+    auditLogs: AuditLog[];
+
+    leaveBalances: Record<
+      string,
+      LeaveBalance[]
+    >;
+
+    employeesLoading: boolean;
+    employeeApiError: string;
+
+    refreshEmployees: () => Promise<void>;
+    refreshLookups: () => Promise<void>;
+    refreshLeaveRequests: () => Promise<void>;
+    refreshLeavePolicies: () => Promise<void>;
+
+    addUser: (
+      user: User
+    ) => Promise<User | undefined>;
+
+    updateUser: (
+      user: User
+    ) => Promise<User | undefined>;
+
+    removeUser: (
+      id: string
+    ) => Promise<boolean>;
+
+    restoreUser: (
+      id: string
+    ) => Promise<User | undefined>;
+
+    addDesignation: (
+      name: string
+    ) => Promise<void>;
+
+    addDepartment: (
+      name: string
+    ) => Promise<void>;
+
+    addRole: (
+      name: string
+    ) => Promise<void>;
+
+    updateDesignation: (
+      oldName: string,
+      newName: string
+    ) => Promise<void>;
+
+    deleteDesignation: (
+      name: string
+    ) => Promise<void>;
+
+    updateDepartment: (
+      oldName: string,
+      newName: string
+    ) => Promise<void>;
+
+    deleteDepartment: (
+      name: string
+    ) => Promise<void>;
+
+    updateRole: (
+      oldName: string,
+      newName: string
+    ) => Promise<void>;
+
+    deleteRole: (
+      name: string
+    ) => Promise<void>;
+
+    deleteGrade: (
+      id: string
+    ) => Promise<void>;
+
+    toggleDepartmentSaturday: (
+      department: string
+    ) => Promise<void>;
+
+    addGrade: (
+      grade: Grade
+    ) => Promise<void>;
+
+    updateGrade: (
+      grade: Grade
+    ) => Promise<void>;
+
+    addLeavePolicy: (
+      policy: LeavePolicy
+    ) => Promise<LeavePolicy | undefined>;
+
+    updateLeavePolicy: (
+      policy: LeavePolicy
+    ) => Promise<LeavePolicy | undefined>;
+
+    getUserById: (
+      id: string
+    ) => User | undefined;
+
+    getManager: (
+      user: User
+    ) => User | undefined;
+
+    getActiveLeaveTypes: () => LeaveType[];
+
+    cancelLeaveByAdmin: (
+      requestId: string,
+      cancelledBy: User,
+      reason: string,
+      returnDate: string
+    ) => void;
+
+    cancelPendingLeave: (
+      requestId: string,
+      userId: string
+    ) => void;
+
+    submitLeaveRequest: (
+      request: Omit<
+        LeaveRequest,
+        | 'id'
+        | 'createdAt'
+        | 'status'
+        | 'approvalHistory'
+      >
+    ) => void;
+
+    extendLeave: (
+      originalRequest: LeaveRequest,
+      initiator: User,
+      newEndDate: string,
+      reason: string,
+      isPaid: boolean
+    ) => Promise<void>;
+
+    requestStopLeave: (
+      originalRequest: LeaveRequest,
+      employee: User,
+      newReturnDate: string,
+      reason: string
+    ) => Promise<void>;
+
+    approveLeave: (
+      requestId: string,
+      approver: User,
+      comment?: string
+    ) => void;
+
+    rejectLeave: (
+      requestId: string,
+      approver: User,
+      comment?: string
+    ) => void;
+
+    actOnBehalf: (
+      requestId: string,
+      admin: User,
+      targetApproverId: string,
+      action: 'approved' | 'rejected',
+      comment?: string
+    ) => void;
+
+    addAuditLog: (
+      log: Omit<
+        AuditLog,
+        'id' | 'createdAt'
+      >
+    ) => void;
+  }
+
+  const AppDataContext =
+    createContext<
+      AppDataContextType | undefined
+    >(undefined);
+
+  /* =========================================================
+    PROVIDER
+  ========================================================= */
+
+  export function AppDataProvider({
+    children,
+  }: {
+    children: ReactNode;
+  }) {
+    /*
+     * Real client data starts empty and is populated only from backend APIs.
+     */
+
+    const [users, setUsers] =
+      useState<User[]>([]);
+
+    const [grades, setGrades] =
+      useState<Grade[]>([]);
+
+    const [
+      designations,
+      setDesignations,
+    ] = useState<string[]>([]);
+
+    const [
+      departments,
+      setDepartments,
+    ] = useState<string[]>([]);
+
+    const [roles, setRoles] =
+      useState<string[]>([]);
+
+    const [
+      departmentSaturdayOff,
+      setDepartmentSaturdayOff,
+    ] = useState<
+      Record<string, boolean>
+    >({});
+
+    const [
+      leavePolicies,
+      setLeavePolicies,
+    ] = useState<LeavePolicy[]>([]);
+
+    const [
+      leaveRequests,
+      setLeaveRequests,
+    ] = useState<LeaveRequest[]>([]);
+
+    const [auditLogs, setAuditLogs] =
+      useState<AuditLog[]>([]);
+
+    const [
+      leaveBalances,
+      setLeaveBalances,
+    ] = useState<
+      Record<string, LeaveBalance[]>
+    >({});
+
+    const [
+      employeesLoading,
+      setEmployeesLoading,
+    ] = useState(false);
+
+    const [
+      employeeApiError,
+      setEmployeeApiError,
+    ] = useState('');
 
     /* =========================================================
-      TYPES
+      EMPLOYEE API
     ========================================================= */
 
-    interface AppDataContextType {
-      users: User[];
-      grades: Grade[];
-      designations: string[];
-      departments: string[];
-      roles: string[];
+    const refreshEmployees =
+      useCallback(async () => {
+        setEmployeesLoading(true);
+        setEmployeeApiError('');
 
-      departmentSaturdayOff: Record<string, boolean>;
+        try {
+          const result =
+            await apiGetEmployees();
 
-      leavePolicies: LeavePolicy[];
-      leaveRequests: LeaveRequest[];
-      auditLogs: AuditLog[];
+          setUsers(result);
+        } catch (error) {
+          const message =
+            getApiErrorMessage(
+              error,
+              'Unable to load employees.'
+            );
 
-      leaveBalances: Record<
-        string,
-        LeaveBalance[]
-      >;
+          setEmployeeApiError(message);
 
-      employeesLoading: boolean;
-      employeeApiError: string;
-
-      refreshEmployees: () => Promise<void>;
-      refreshLookups: () => Promise<void>;
-      refreshLeaveRequests: () => Promise<void>;
-      refreshLeavePolicies: () => Promise<void>;
-
-      addUser: (
-        user: User
-      ) => Promise<User | undefined>;
-
-      updateUser: (
-        user: User
-      ) => Promise<User | undefined>;
-
-      removeUser: (
-        id: string
-      ) => Promise<boolean>;
-
-      restoreUser: (
-        id: string
-      ) => Promise<User | undefined>;
-
-      addDesignation: (
-        name: string
-      ) => Promise<void>;
-
-      addDepartment: (
-        name: string
-      ) => Promise<void>;
-
-      addRole: (
-        name: string
-      ) => Promise<void>;
-
-      updateDesignation: (
-        oldName: string,
-        newName: string
-      ) => Promise<void>;
-
-      deleteDesignation: (
-        name: string
-      ) => Promise<void>;
-
-      updateDepartment: (
-        oldName: string,
-        newName: string
-      ) => Promise<void>;
-
-      deleteDepartment: (
-        name: string
-      ) => Promise<void>;
-
-      updateRole: (
-        oldName: string,
-        newName: string
-      ) => Promise<void>;
-
-      deleteRole: (
-        name: string
-      ) => Promise<void>;
-
-      deleteGrade: (
-        id: string
-      ) => Promise<void>;
-
-      toggleDepartmentSaturday: (
-        department: string
-      ) => Promise<void>;
-
-      addGrade: (
-        grade: Grade
-      ) => Promise<void>;
-
-      updateGrade: (
-        grade: Grade
-      ) => Promise<void>;
-
-      addLeavePolicy: (
-        policy: LeavePolicy
-      ) => Promise<LeavePolicy | undefined>;
-
-      updateLeavePolicy: (
-        policy: LeavePolicy
-      ) => Promise<LeavePolicy | undefined>;
-
-      getUserById: (
-        id: string
-      ) => User | undefined;
-
-      getManager: (
-        user: User
-      ) => User | undefined;
-
-      getActiveLeaveTypes: () => LeaveType[];
-
-      cancelLeaveByAdmin: (
-        requestId: string,
-        cancelledBy: User,
-        reason: string,
-        returnDate: string
-      ) => void;
-
-      cancelPendingLeave: (
-        requestId: string,
-        userId: string
-      ) => void;
-
-      submitLeaveRequest: (
-        request: Omit<
-          LeaveRequest,
-          | 'id'
-          | 'createdAt'
-          | 'status'
-          | 'approvalHistory'
-        >
-      ) => void;
-
-      extendLeave: (
-        originalRequest: LeaveRequest,
-        initiator: User,
-        newEndDate: string,
-        reason: string,
-        isPaid: boolean
-      ) => void;
-
-      requestStopLeave: (
-        originalRequest: LeaveRequest,
-        employee: User,
-        newReturnDate: string,
-        reason: string
-      ) => void;
-
-      approveLeave: (
-        requestId: string,
-        approver: User,
-        comment?: string
-      ) => void;
-
-      rejectLeave: (
-        requestId: string,
-        approver: User,
-        comment?: string
-      ) => void;
-
-      actOnBehalf: (
-        requestId: string,
-        admin: User,
-        targetApproverId: string,
-        action: 'approved' | 'rejected',
-        comment?: string
-      ) => void;
-
-      addAuditLog: (
-        log: Omit<
-          AuditLog,
-          'id' | 'createdAt'
-        >
-      ) => void;
-    }
-
-    const AppDataContext =
-      createContext<
-        AppDataContextType | undefined
-      >(undefined);
+          throw error;
+        } finally {
+          setEmployeesLoading(false);
+        }
+      }, []);
 
     /* =========================================================
-      PROVIDER
+      LEAVE REQUEST API
     ========================================================= */
 
-    export function AppDataProvider({
-      children,
-    }: {
-      children: ReactNode;
-    }) {
-      /*
-      * Real client data starts empty and is populated only from backend APIs.
-      */
+    const refreshLeaveRequests =
+      useCallback(async () => {
+        try {
+          const requests =
+            await apiGetLeaveRequests();
 
-      const [users, setUsers] =
-        useState<User[]>([]);
+          setLeaveRequests(requests);
+        } catch (error) {
+          console.error(
+            'Unable to load leave requests:',
+            getApiErrorMessage(
+              error,
+              'Unable to load leave requests.'
+            )
+          );
 
-      const [grades, setGrades] =
-        useState<Grade[]>([]);
+          throw error;
+        }
+      }, []);
 
-      const [
-        designations,
-        setDesignations,
-      ] = useState<string[]>([]);
+    /* =========================================================
+      LEAVE POLICY API
+    ========================================================= */
 
-      const [
-        departments,
-        setDepartments,
-      ] = useState<string[]>([]);
+    const refreshLeavePolicies =
+      useCallback(async () => {
+        try {
+          const policies =
+            await apiGetLeavePolicies();
 
-      const [roles, setRoles] =
-        useState<string[]>([]);
+          setLeavePolicies(policies);
+        } catch (error) {
+          console.error(
+            'Unable to load leave policies:',
+            getApiErrorMessage(
+              error,
+              'Unable to load leave policies.'
+            )
+          );
 
-      const [
-        departmentSaturdayOff,
-        setDepartmentSaturdayOff,
-      ] = useState<
-        Record<string, boolean>
-      >({});
+          throw error;
+        }
+      }, []);
 
-      const [
-        leavePolicies,
-        setLeavePolicies,
-      ] = useState<LeavePolicy[]>([]);
+    /* =========================================================
+      LOOKUP / TAXONOMY API
+    ========================================================= */
 
-      const [
-        leaveRequests,
-        setLeaveRequests,
-      ] = useState<LeaveRequest[]>([]);
+    const refreshLookups =
+      useCallback(async () => {
+        try {
+          const [
+            gradeResponse,
+            departmentResponse,
+            designationResponse,
+            roleResponse,
+          ] = await Promise.all([
+            api.get('/grades'),
+            api.get('/departments'),
+            api.get('/designations'),
+            api.get('/roles'),
+          ]);
 
-      const [auditLogs, setAuditLogs] =
-        useState<AuditLog[]>([]);
+          const backendGrades =
+            gradeResponse.data?.data || [];
 
-      const [
-        leaveBalances,
-        setLeaveBalances,
-      ] = useState<
-        Record<string, LeaveBalance[]>
-      >({});
+          setGrades(
+            backendGrades.map(
+              (grade: any): Grade => ({
+                id: grade._id,
+                name: grade.name,
+carryForwardAllowed:
+                  Boolean(
+                    grade.carryForwardAllowed
+                  ),
 
-      const [
-        employeesLoading,
-        setEmployeesLoading,
-      ] = useState(false);
+                maxCarryForwardDays:
+                  grade.maxCarryForwardDays ??
+                  0,
 
-      const [
-        employeeApiError,
-        setEmployeeApiError,
-      ] = useState('');
+                description:
+                  grade.description,
+              })
+            )
+          );
 
-      /* =========================================================
-        EMPLOYEE API
-      ========================================================= */
+          const backendDepartments =
+            departmentResponse.data
+              ?.data || [];
 
-      const refreshEmployees =
-        useCallback(async () => {
-          setEmployeesLoading(true);
-          setEmployeeApiError('');
+          setDepartments(
+            backendDepartments.map(
+              (department: any) =>
+                department.name
+            )
+          );
 
-          try {
-            const result =
-              await apiGetEmployees();
-
-            setUsers(result);
-          } catch (error) {
-            const message =
-              getApiErrorMessage(
-                error,
-                'Unable to load employees.'
-              );
-
-            setEmployeeApiError(message);
-
-            throw error;
-          } finally {
-            setEmployeesLoading(false);
-          }
-        }, []);
-
-      /* =========================================================
-        LEAVE REQUEST API
-      ========================================================= */
-
-      const refreshLeaveRequests =
-        useCallback(async () => {
-          try {
-            const requests =
-              await apiGetLeaveRequests();
-
-            setLeaveRequests(requests);
-          } catch (error) {
-            console.error(
-              'Unable to load leave requests:',
-              getApiErrorMessage(
-                error,
-                'Unable to load leave requests.'
-              )
-            );
-
-            throw error;
-          }
-        }, []);
-
-      /* =========================================================
-        LEAVE POLICY API
-      ========================================================= */
-
-      const refreshLeavePolicies =
-        useCallback(async () => {
-          try {
-            const policies =
-              await apiGetLeavePolicies();
-
-            setLeavePolicies(policies);
-          } catch (error) {
-            console.error(
-              'Unable to load leave policies:',
-              getApiErrorMessage(
-                error,
-                'Unable to load leave policies.'
-              )
-            );
-
-            throw error;
-          }
-        }, []);
-
-      /* =========================================================
-        LOOKUP / TAXONOMY API
-      ========================================================= */
-
-      const refreshLookups =
-        useCallback(async () => {
-          try {
-            const [
-              gradeResponse,
-              departmentResponse,
-              designationResponse,
-              roleResponse,
-            ] = await Promise.all([
-              api.get('/grades'),
-              api.get('/departments'),
-              api.get('/designations'),
-              api.get('/roles'),
-            ]);
-
-            const backendGrades =
-              gradeResponse.data?.data || [];
-
-            setGrades(
-              backendGrades.map(
-                (grade: any): Grade => ({
-                  id: grade._id,
-                  name: grade.name,
-  carryForwardAllowed:
-                    Boolean(
-                      grade.carryForwardAllowed
-                    ),
-
-                  maxCarryForwardDays:
-                    grade.maxCarryForwardDays ??
-                    0,
-
-                  description:
-                    grade.description,
-                })
-              )
-            );
-
-            const backendDepartments =
-              departmentResponse.data
-                ?.data || [];
-
-            setDepartments(
+          setDepartmentSaturdayOff(
+            Object.fromEntries(
               backendDepartments.map(
-                (department: any) =>
-                  department.name
-              )
-            );
-
-            setDepartmentSaturdayOff(
-              Object.fromEntries(
-                backendDepartments.map(
-                  (department: any) => [
-                    department.name,
-                    Boolean(
-                      department.saturdayOff
-                    ),
-                  ]
-                )
-              )
-            );
-
-            setDesignations(
-              (
-                designationResponse.data
-                  ?.data || []
-              ).map(
-                (designation: any) =>
-                  designation.name
-              )
-            );
-
-            setRoles(
-              (
-                roleResponse.data?.data ||
-                []
-              ).map(
-                (role: any) =>
-                  role.name
-              )
-            );
-          } catch (error) {
-            console.error(
-              'Lookup data load failed:',
-              getApiErrorMessage(error)
-            );
-
-            throw error;
-          }
-        }, []);
-
-      /* =========================================================
-        BASIC HELPERS
-      ========================================================= */
-
-      const getUserById =
-        useCallback(
-          (id: string) =>
-            users.find(
-              (user) =>
-                user.id === id
-            ),
-          [users]
-        );
-
-      const getManager =
-        useCallback(
-          (user: User) => {
-            if (!user.managerId) {
-              return undefined;
-            }
-
-            return users.find(
-              (candidate) =>
-                candidate.id ===
-                user.managerId
-            );
-          },
-          [users]
-        );
-
-      const getActiveLeaveTypes =
-        useCallback((): LeaveType[] => {
-          return Array.from(
-            new Set(
-              leavePolicies.map(
-                (policy) =>
-                  policy.leaveType as LeaveType
-              )
-            )
-          );
-        }, [leavePolicies]);
-
-      /* =========================================================
-        AUDIT LOCAL STATE
-        Backend also creates its own audit logs.
-        This remains until Audit API phase.
-      ========================================================= */
-
-      const addAuditLog =
-        useCallback(
-          (
-            log: Omit<
-              AuditLog,
-              'id' | 'createdAt'
-            >
-          ) => {
-            const entry: AuditLog = {
-              ...log,
-
-              id: `al${Date.now()}`,
-
-              createdAt:
-                new Date().toISOString(),
-            };
-
-            setAuditLogs(
-              (previous) => [
-                entry,
-                ...previous,
-              ]
-            );
-          },
-          []
-        );
-
-      /* =========================================================
-        EMPLOYEE CREATE
-      ========================================================= */
-
-      const addUser = async (
-        user: User
-      ): Promise<User | undefined> => {
-        setEmployeeApiError('');
-
-        try {
-          const selectedGrade =
-            grades.find(
-              (grade) =>
-                grade.name ===
-                user.grade
-            );
-
-          if (!selectedGrade) {
-            throw new Error(
-              'Please select a valid grade.'
-            );
-          }
-
-          const payload: CreateEmployeePayload =
-            {
-              fullName:
-                user.fullName.trim(),
-
-              email:
-                user.email
-                  .trim()
-                  .toLowerCase(),
-
-              cnic:
-                user.cnic.trim(),
-
-              role:
-                user.role === 'manager'
-                  ? 'manager'
-                  : 'employee',
-
-              gradeId:
-                selectedGrade.id,
-
-              employeeId:
-                user.employeeId.trim(),
-
-              designation:
-                user.designation,
-
-              department:
-                user.department,
-
-              dateOfJoining:
-                user.dateOfJoining,
-
-              phone:
-                user.phone || undefined,
-
-              managerId:
-                user.managerId || null,
-
-              canApproveOtherDepartments:
-                Boolean(
-                  user.canApproveOtherDepartments
-                ),
-
-              profilePhotoUrl:
-                user.profilePhotoUrl,
-            };
-
-          const created =
-            await apiCreateEmployee(
-              payload
-            );
-
-          setUsers(
-            (previous) => [
-              ...previous.filter(
-                (existing) =>
-                  existing.id !==
-                  created.id
-              ),
-
-              created,
-            ]
-          );
-
-          return created;
-        } catch (error) {
-          const message =
-            getApiErrorMessage(
-              error,
-              'Unable to create employee.'
-            );
-
-          setEmployeeApiError(message);
-
-          throw error;
-        }
-      };
-
-      /* =========================================================
-        EMPLOYEE UPDATE
-      ========================================================= */
-
-      const updateUser = async (
-        user: User
-      ): Promise<User | undefined> => {
-        setEmployeeApiError('');
-
-        try {
-          const selectedGrade =
-            grades.find(
-              (grade) =>
-                grade.name ===
-                user.grade
-            );
-
-          const payload: UpdateEmployeePayload =
-            {
-              fullName:
-                user.fullName.trim(),
-
-              email:
-                user.email
-                  .trim()
-                  .toLowerCase(),
-
-              role:
-                user.role,
-
-              gradeId:
-                selectedGrade?.id,
-
-              managerId:
-                user.managerId || null,
-
-              canApproveOtherDepartments:
-                Boolean(
-                  user.canApproveOtherDepartments
-                ),
-
-              employeeId:
-                user.employeeId.trim(),
-
-              designation:
-                user.designation,
-
-              department:
-                user.department,
-
-              phone:
-                user.phone || '',
-
-              dateOfJoining:
-                user.dateOfJoining,
-
-              status:
-                user.status,
-
-              profilePhotoUrl:
-                user.profilePhotoUrl,
-            };
-
-          const updated =
-            await apiUpdateEmployee(
-              user.id,
-              payload
-            );
-
-          setUsers(
-            (previous) =>
-              previous.map(
-                (existing) =>
-                  existing.id ===
-                  updated.id
-                    ? updated
-                    : existing
-              )
-          );
-
-          return updated;
-        } catch (error) {
-          const message =
-            getApiErrorMessage(
-              error,
-              'Unable to update employee.'
-            );
-
-          setEmployeeApiError(message);
-
-          throw error;
-        }
-      };
-
-      /* =========================================================
-        EMPLOYEE SOFT REMOVE
-      ========================================================= */
-
-      const removeUser = async (
-        id: string
-      ): Promise<boolean> => {
-        setEmployeeApiError('');
-
-        try {
-          await apiRemoveEmployee(id);
-
-          setUsers(
-            (previous) =>
-              previous.filter(
-                (user) =>
-                  user.id !== id
-              )
-          );
-
-          return true;
-        } catch (error) {
-          const message =
-            getApiErrorMessage(
-              error,
-              'Unable to remove employee.'
-            );
-
-          setEmployeeApiError(message);
-
-          throw error;
-        }
-      };
-
-      /* =========================================================
-        RESTORE EMPLOYEE
-      ========================================================= */
-
-      const restoreUser = async (
-        id: string
-      ): Promise<User | undefined> => {
-        try {
-          const restored =
-            await apiRestoreEmployee(id);
-
-          setUsers(
-            (previous) => [
-              ...previous.filter(
-                (user) =>
-                  user.id !==
-                  restored.id
-              ),
-
-              restored,
-            ]
-          );
-
-          return restored;
-        } catch (error) {
-          setEmployeeApiError(
-            getApiErrorMessage(
-              error,
-              'Unable to restore employee.'
-            )
-          );
-
-          throw error;
-        }
-      };
-
-      /* =========================================================
-        DESIGNATIONS
-      ========================================================= */
-
-      const addDesignation =
-        async (
-          name: string
-        ) => {
-          const trimmed =
-            name.trim();
-
-          if (!trimmed) return;
-
-          const response =
-            await api.post(
-              '/designations',
-              {
-                name: trimmed,
-              }
-            );
-
-          const savedName =
-            response.data.data.name;
-
-          setDesignations(
-            (previous) =>
-              Array.from(
-                new Set([
-                  ...previous,
-                  savedName,
-                ])
-              ).sort()
-          );
-        };
-
-      const updateDesignation =
-        async (
-          oldName: string,
-          newName: string
-        ) => {
-          const trimmed =
-            newName.trim();
-
-          if (!trimmed) return;
-
-          const listResponse =
-            await api.get(
-              '/designations'
-            );
-
-          const current =
-            listResponse.data.data.find(
-              (item: any) =>
-                item.name === oldName
-            );
-
-          if (!current) {
-            throw new Error(
-              'Designation not found.'
-            );
-          }
-
-          await api.patch(
-            `/designations/${current._id}`,
-            {
-              name: trimmed,
-            }
-          );
-
-          setDesignations(
-            (previous) =>
-              previous
-                .map((item) =>
-                  item === oldName
-                    ? trimmed
-                    : item
-                )
-                .sort()
-          );
-        };
-
-      const deleteDesignation =
-        async (
-          name: string
-        ) => {
-          const response =
-            await api.get(
-              '/designations'
-            );
-
-          const current =
-            response.data.data.find(
-              (item: any) =>
-                item.name === name
-            );
-
-          if (!current) return;
-
-          await api.delete(
-            `/designations/${current._id}`
-          );
-
-          setDesignations(
-            (previous) =>
-              previous.filter(
-                (item) =>
-                  item !== name
-              )
-          );
-        };
-
-      /* =========================================================
-        DEPARTMENTS
-      ========================================================= */
-
-      const addDepartment =
-        async (
-          name: string
-        ) => {
-          const trimmed =
-            name.trim();
-
-          if (!trimmed) return;
-
-          const response =
-            await api.post(
-              '/departments',
-              {
-                name: trimmed,
-                saturdayOff: true,
-              }
-            );
-
-          const department =
-            response.data.data;
-
-          setDepartments(
-            (previous) =>
-              Array.from(
-                new Set([
-                  ...previous,
+                (department: any) => [
                   department.name,
-                ])
-              ).sort()
+                  Boolean(
+                    department.saturdayOff
+                  ),
+                ]
+              )
+            )
           );
 
-          setDepartmentSaturdayOff(
-            (previous) => ({
-              ...previous,
-
-              [department.name]:
-                Boolean(
-                  department.saturdayOff
-                ),
-            })
+          setDesignations(
+            (
+              designationResponse.data
+                ?.data || []
+            ).map(
+              (designation: any) =>
+                designation.name
+            )
           );
-        };
 
-      const updateDepartment =
-        async (
-          oldName: string,
-          newName: string
-        ) => {
-          const trimmed =
-            newName.trim();
+          setRoles(
+            (
+              roleResponse.data?.data ||
+              []
+            ).map(
+              (role: any) =>
+                role.name
+            )
+          );
+        } catch (error) {
+          console.error(
+            'Lookup data load failed:',
+            getApiErrorMessage(error)
+          );
 
-          if (!trimmed) return;
+          throw error;
+        }
+      }, []);
 
-          const response =
-            await api.get(
-              '/departments'
-            );
+    /* =========================================================
+      BASIC HELPERS
+    ========================================================= */
 
-          const current =
-            response.data.data.find(
-              (item: any) =>
-                item.name === oldName
-            );
+    const getUserById =
+      useCallback(
+        (id: string) =>
+          users.find(
+            (user) =>
+              user.id === id
+          ),
+        [users]
+      );
 
-          if (!current) {
-            throw new Error(
-              'Department not found.'
-            );
+    const getManager =
+      useCallback(
+        (user: User) => {
+          if (!user.managerId) {
+            return undefined;
           }
 
-          await api.patch(
-            `/departments/${current._id}`,
-            {
-              name: trimmed,
-            }
+          return users.find(
+            (candidate) =>
+              candidate.id ===
+              user.managerId
           );
+        },
+        [users]
+      );
 
-          setDepartments(
-            (previous) =>
-              previous
-                .map((item) =>
-                  item === oldName
-                    ? trimmed
-                    : item
-                )
-                .sort()
-          );
+    const getActiveLeaveTypes =
+      useCallback((): LeaveType[] => {
+        return Array.from(
+          new Set(
+            leavePolicies.map(
+              (policy) =>
+                policy.leaveType as LeaveType
+            )
+          )
+        );
+      }, [leavePolicies]);
 
-          setDepartmentSaturdayOff(
-            (previous) => {
-              const next = {
-                ...previous,
-              };
+    /* =========================================================
+      AUDIT LOCAL STATE
+      Backend also creates its own audit logs.
+      This remains until Audit API phase.
+    ========================================================= */
 
-              const value =
-                next[oldName] ?? true;
-
-              delete next[oldName];
-
-              next[trimmed] =
-                value;
-
-              return next;
-            }
-          );
-        };
-
-      const deleteDepartment =
-        async (
-          name: string
+    const addAuditLog =
+      useCallback(
+        (
+          log: Omit<
+            AuditLog,
+            'id' | 'createdAt'
+          >
         ) => {
-          const response =
-            await api.get(
-              '/departments'
-            );
+          const entry: AuditLog = {
+            ...log,
 
-          const current =
-            response.data.data.find(
-              (item: any) =>
-                item.name === name
-            );
+            id: `al${Date.now()}`,
 
-          if (!current) return;
+            createdAt:
+              new Date().toISOString(),
+          };
 
-          await api.delete(
-            `/departments/${current._id}`
-          );
-
-          setDepartments(
-            (previous) =>
-              previous.filter(
-                (item) =>
-                  item !== name
-              )
-          );
-
-          setDepartmentSaturdayOff(
-            (previous) => {
-              const next = {
-                ...previous,
-              };
-
-              delete next[name];
-
-              return next;
-            }
-          );
-        };
-
-      const toggleDepartmentSaturday =
-        async (
-          department: string
-        ) => {
-          const response =
-            await api.get(
-              '/departments'
-            );
-
-          const current =
-            response.data.data.find(
-              (item: any) =>
-                item.name ===
-                department
-            );
-
-          if (!current) return;
-
-          const newValue =
-            !Boolean(
-              current.saturdayOff
-            );
-
-          await api.patch(
-            `/departments/${current._id}`,
-            {
-              saturdayOff:
-                newValue,
-            }
-          );
-
-          setDepartmentSaturdayOff(
-            (previous) => ({
+          setAuditLogs(
+            (previous) => [
+              entry,
               ...previous,
-
-              [department]:
-                newValue,
-            })
+            ]
           );
-        };
+        },
+        []
+      );
 
-      /* =========================================================
-        ROLE LABELS
-      ========================================================= */
+    /* =========================================================
+      EMPLOYEE CREATE
+    ========================================================= */
 
-      const addRole = async (
+    const addUser = async (
+      user: User
+    ): Promise<User | undefined> => {
+      setEmployeeApiError('');
+
+      try {
+        const selectedGrade =
+          grades.find(
+            (grade) =>
+              grade.name ===
+              user.grade
+          );
+
+        if (!selectedGrade) {
+          throw new Error(
+            'Please select a valid grade.'
+          );
+        }
+
+        const payload: CreateEmployeePayload =
+          {
+            fullName:
+              user.fullName.trim(),
+
+            email:
+              user.email
+                .trim()
+                .toLowerCase(),
+
+            cnic:
+              user.cnic.trim(),
+
+            role:
+              user.role === 'manager'
+                ? 'manager'
+                : 'employee',
+
+            gradeId:
+              selectedGrade.id,
+
+            employeeId:
+              user.employeeId.trim(),
+
+            designation:
+              user.designation,
+
+            department:
+              user.department,
+
+            dateOfJoining:
+              user.dateOfJoining,
+
+            phone:
+              user.phone || undefined,
+
+            managerId:
+              user.managerId || null,
+
+            canApproveOtherDepartments:
+              Boolean(
+                user.canApproveOtherDepartments
+              ),
+
+            profilePhotoUrl:
+              user.profilePhotoUrl,
+          };
+
+        const created =
+          await apiCreateEmployee(
+            payload
+          );
+
+        setUsers(
+          (previous) => [
+            ...previous.filter(
+              (existing) =>
+                existing.id !==
+                created.id
+            ),
+
+            created,
+          ]
+        );
+
+        return created;
+      } catch (error) {
+        const message =
+          getApiErrorMessage(
+            error,
+            'Unable to create employee.'
+          );
+
+        setEmployeeApiError(message);
+
+        throw error;
+      }
+    };
+
+    /* =========================================================
+      EMPLOYEE UPDATE
+    ========================================================= */
+
+    const updateUser = async (
+      user: User
+    ): Promise<User | undefined> => {
+      setEmployeeApiError('');
+
+      try {
+        const selectedGrade =
+          grades.find(
+            (grade) =>
+              grade.name ===
+              user.grade
+          );
+
+        const payload: UpdateEmployeePayload =
+          {
+            fullName:
+              user.fullName.trim(),
+
+            email:
+              user.email
+                .trim()
+                .toLowerCase(),
+
+            role:
+              user.role,
+
+            gradeId:
+              selectedGrade?.id,
+
+            managerId:
+              user.managerId || null,
+
+            canApproveOtherDepartments:
+              Boolean(
+                user.canApproveOtherDepartments
+              ),
+
+            employeeId:
+              user.employeeId.trim(),
+
+            designation:
+              user.designation,
+
+            department:
+              user.department,
+
+            phone:
+              user.phone || '',
+
+            dateOfJoining:
+              user.dateOfJoining,
+
+            status:
+              user.status,
+
+            profilePhotoUrl:
+              user.profilePhotoUrl,
+          };
+
+        const updated =
+          await apiUpdateEmployee(
+            user.id,
+            payload
+          );
+
+        setUsers(
+          (previous) =>
+            previous.map(
+              (existing) =>
+                existing.id ===
+                updated.id
+                  ? updated
+                  : existing
+            )
+        );
+
+        return updated;
+      } catch (error) {
+        const message =
+          getApiErrorMessage(
+            error,
+            'Unable to update employee.'
+          );
+
+        setEmployeeApiError(message);
+
+        throw error;
+      }
+    };
+
+    /* =========================================================
+      EMPLOYEE SOFT REMOVE
+    ========================================================= */
+
+    const removeUser = async (
+      id: string
+    ): Promise<boolean> => {
+      setEmployeeApiError('');
+
+      try {
+        await apiRemoveEmployee(id);
+
+        setUsers(
+          (previous) =>
+            previous.filter(
+              (user) =>
+                user.id !== id
+            )
+        );
+
+        return true;
+      } catch (error) {
+        const message =
+          getApiErrorMessage(
+            error,
+            'Unable to remove employee.'
+          );
+
+        setEmployeeApiError(message);
+
+        throw error;
+      }
+    };
+
+    /* =========================================================
+      RESTORE EMPLOYEE
+    ========================================================= */
+
+    const restoreUser = async (
+      id: string
+    ): Promise<User | undefined> => {
+      try {
+        const restored =
+          await apiRestoreEmployee(id);
+
+        setUsers(
+          (previous) => [
+            ...previous.filter(
+              (user) =>
+                user.id !==
+                restored.id
+            ),
+
+            restored,
+          ]
+        );
+
+        return restored;
+      } catch (error) {
+        setEmployeeApiError(
+          getApiErrorMessage(
+            error,
+            'Unable to restore employee.'
+          )
+        );
+
+        throw error;
+      }
+    };
+
+    /* =========================================================
+      DESIGNATIONS
+    ========================================================= */
+
+    const addDesignation =
+      async (
         name: string
       ) => {
         const trimmed =
@@ -1132,24 +830,28 @@
 
         const response =
           await api.post(
-            '/roles',
+            '/designations',
             {
               name: trimmed,
             }
           );
 
-        setRoles(
+        const savedName =
+          response.data.data.name;
+
+        setDesignations(
           (previous) =>
             Array.from(
               new Set([
                 ...previous,
-                response.data.data.name,
+                savedName,
               ])
-            )
+            ).sort()
         );
       };
 
-      const updateRole = async (
+    const updateDesignation =
+      async (
         oldName: string,
         newName: string
       ) => {
@@ -1158,40 +860,50 @@
 
         if (!trimmed) return;
 
-        const response =
-          await api.get('/roles');
+        const listResponse =
+          await api.get(
+            '/designations'
+          );
 
         const current =
-          response.data.data.find(
+          listResponse.data.data.find(
             (item: any) =>
               item.name === oldName
           );
 
-        if (!current) return;
+        if (!current) {
+          throw new Error(
+            'Designation not found.'
+          );
+        }
 
         await api.patch(
-          `/roles/${current._id}`,
+          `/designations/${current._id}`,
           {
             name: trimmed,
           }
         );
 
-        setRoles(
+        setDesignations(
           (previous) =>
-            previous.map(
-              (item) =>
+            previous
+              .map((item) =>
                 item === oldName
                   ? trimmed
                   : item
-            )
+              )
+              .sort()
         );
       };
 
-      const deleteRole = async (
+    const deleteDesignation =
+      async (
         name: string
       ) => {
         const response =
-          await api.get('/roles');
+          await api.get(
+            '/designations'
+          );
 
         const current =
           response.data.data.find(
@@ -1202,10 +914,10 @@
         if (!current) return;
 
         await api.delete(
-          `/roles/${current._id}`
+          `/designations/${current._id}`
         );
 
-        setRoles(
+        setDesignations(
           (previous) =>
             previous.filter(
               (item) =>
@@ -1214,1391 +926,1490 @@
         );
       };
 
-      /* =========================================================
-        GRADES
-      ========================================================= */
+    /* =========================================================
+      DEPARTMENTS
+    ========================================================= */
 
-      const addGrade = async (
-        grade: Grade
+    const addDepartment =
+      async (
+        name: string
       ) => {
+        const trimmed =
+          name.trim();
+
+        if (!trimmed) return;
+
         const response =
           await api.post(
-            '/grades',
+            '/departments',
             {
-              name: grade.name,
-  carryForwardAllowed:
-                grade.carryForwardAllowed,
-
-              maxCarryForwardDays:
-                grade.maxCarryForwardDays,
-
-              description:
-                grade.description,
+              name: trimmed,
+              saturdayOff: true,
             }
           );
 
-        const saved =
+        const department =
           response.data.data;
 
-        setGrades(
-          (previous) => [
+        setDepartments(
+          (previous) =>
+            Array.from(
+              new Set([
+                ...previous,
+                department.name,
+              ])
+            ).sort()
+        );
+
+        setDepartmentSaturdayOff(
+          (previous) => ({
             ...previous,
 
-            {
-              ...grade,
-              id: saved._id,
-            },
-          ]
-        );
-      };
-
-      const updateGrade = async (
-        grade: Grade
-      ) => {
-        const response =
-          await api.patch(
-            `/grades/${grade.id}`,
-            {
-              name: grade.name,
-  carryForwardAllowed:
-                grade.carryForwardAllowed,
-
-              maxCarryForwardDays:
-                grade.maxCarryForwardDays,
-
-              description:
-                grade.description,
-            }
-          );
-
-        const saved =
-          response.data.data;
-
-        setGrades(
-          (previous) =>
-            previous.map(
-              (item) =>
-                item.id === grade.id
-                  ? {
-                      ...grade,
-                      id: saved._id,
-                    }
-                  : item
-            )
-        );
-      };
-
-      const deleteGrade = async (
-        id: string
-      ) => {
-        await api.delete(
-          `/grades/${id}`
-        );
-
-        setGrades(
-          (previous) =>
-            previous.filter(
-              (grade) =>
-                grade.id !== id
-            )
-        );
-      };
-
-      /* =========================================================
-        LEAVE POLICY API CRUD
-      ========================================================= */
-
-      const addLeavePolicy = async (
-        policy: LeavePolicy
-      ): Promise<LeavePolicy | undefined> => {
-        try {
-          const created =
-            await apiCreateLeavePolicy(
-              policy
-            );
-
-          setLeavePolicies(
-            (previous) => [
-              ...previous.filter(
-                (item) =>
-                  item.id !==
-                  created.id
+            [department.name]:
+              Boolean(
+                department.saturdayOff
               ),
-              created,
-            ]
-          );
-
-          return created;
-        } catch (error) {
-          console.error(
-            'Unable to create leave policy:',
-            getApiErrorMessage(
-              error,
-              'Unable to create leave policy.'
-            )
-          );
-
-          throw error;
-        }
+          })
+        );
       };
 
-      const updateLeavePolicy = async (
-        policy: LeavePolicy
-      ): Promise<LeavePolicy | undefined> => {
-        try {
-          const updated =
-            await apiUpdateLeavePolicy(
-              policy
-            );
-
-          setLeavePolicies(
-            (previous) =>
-              previous.map(
-                (item) =>
-                  item.id ===
-                  updated.id
-                    ? updated
-                    : item
-              )
-          );
-
-          return updated;
-        } catch (error) {
-          console.error(
-            'Unable to update leave policy:',
-            getApiErrorMessage(
-              error,
-              'Unable to update leave policy.'
-            )
-          );
-
-          throw error;
-        }
-      };
-
-      /* =========================================================
-        LEAVE BALANCE TEMP LOCAL LOGIC
-      ========================================================= */
-
-      const updateBalanceUsed = (
-        employeeId: string,
-        leaveType: LeaveType,
-        daysToAdd: number
+    const updateDepartment =
+      async (
+        oldName: string,
+        newName: string
       ) => {
-        setLeaveBalances(
+        const trimmed =
+          newName.trim();
+
+        if (!trimmed) return;
+
+        const response =
+          await api.get(
+            '/departments'
+          );
+
+        const current =
+          response.data.data.find(
+            (item: any) =>
+              item.name === oldName
+          );
+
+        if (!current) {
+          throw new Error(
+            'Department not found.'
+          );
+        }
+
+        await api.patch(
+          `/departments/${current._id}`,
+          {
+            name: trimmed,
+          }
+        );
+
+        setDepartments(
+          (previous) =>
+            previous
+              .map((item) =>
+                item === oldName
+                  ? trimmed
+                  : item
+              )
+              .sort()
+        );
+
+        setDepartmentSaturdayOff(
           (previous) => {
-            const balances =
-              previous[employeeId];
-
-            if (!balances) {
-              return previous;
-            }
-
-            return {
+            const next = {
               ...previous,
-
-              [employeeId]:
-                balances.map(
-                  (balance) => {
-                    if (
-                      balance.leaveType !==
-                      leaveType
-                    ) {
-                      return balance;
-                    }
-
-                    const used =
-                      balance.used +
-                      daysToAdd;
-
-                    return {
-                      ...balance,
-
-                      used,
-
-                      remaining:
-                        Math.max(
-                          0,
-                          balance.quota -
-                            used
-                        ),
-                    };
-                  }
-                ),
             };
+
+            const value =
+              next[oldName] ?? true;
+
+            delete next[oldName];
+
+            next[trimmed] =
+              value;
+
+            return next;
           }
         );
       };
 
-      /* =========================================================
-        CANCEL PENDING
-      ========================================================= */
-
-      const cancelPendingLeave = (
-        requestId: string,
-        userId: string
+    const deleteDepartment =
+      async (
+        name: string
       ) => {
-        setLeaveRequests(
+        const response =
+          await api.get(
+            '/departments'
+          );
+
+        const current =
+          response.data.data.find(
+            (item: any) =>
+              item.name === name
+          );
+
+        if (!current) return;
+
+        await api.delete(
+          `/departments/${current._id}`
+        );
+
+        setDepartments(
           (previous) =>
-            previous.map(
-              (request) =>
-                request.id ===
-                  requestId &&
-                request.employeeId ===
-                  userId &&
-                request.status ===
-                  'pending'
-                  ? {
-                      ...request,
-
-                      status:
-                        'cancelled' as const,
-
-                      cancelledReason:
-                        'Cancelled by employee',
-                    }
-                  : request
+            previous.filter(
+              (item) =>
+                item !== name
             )
+        );
+
+        setDepartmentSaturdayOff(
+          (previous) => {
+            const next = {
+              ...previous,
+            };
+
+            delete next[name];
+
+            return next;
+          }
         );
       };
 
-      /* =========================================================
-        APPROVER RESOLUTION
-      ========================================================= */
+    const toggleDepartmentSaturday =
+      async (
+        department: string
+      ) => {
+        const response =
+          await api.get(
+            '/departments'
+          );
 
-      const resolvePolicyApproverIds =
-        (
-          policy:
-            | LeavePolicy
-            | undefined,
+        const current =
+          response.data.data.find(
+            (item: any) =>
+              item.name ===
+              department
+          );
 
-          employeeId: string
-        ): string[] => {
-          if (!policy) {
+        if (!current) return;
+
+        const newValue =
+          !Boolean(
+            current.saturdayOff
+          );
+
+        await api.patch(
+          `/departments/${current._id}`,
+          {
+            saturdayOff:
+              newValue,
+          }
+        );
+
+        setDepartmentSaturdayOff(
+          (previous) => ({
+            ...previous,
+
+            [department]:
+              newValue,
+          })
+        );
+      };
+
+    /* =========================================================
+      ROLE LABELS
+    ========================================================= */
+
+    const addRole = async (
+      name: string
+    ) => {
+      const trimmed =
+        name.trim();
+
+      if (!trimmed) return;
+
+      const response =
+        await api.post(
+          '/roles',
+          {
+            name: trimmed,
+          }
+        );
+
+      setRoles(
+        (previous) =>
+          Array.from(
+            new Set([
+              ...previous,
+              response.data.data.name,
+            ])
+          )
+      );
+    };
+
+    const updateRole = async (
+      oldName: string,
+      newName: string
+    ) => {
+      const trimmed =
+        newName.trim();
+
+      if (!trimmed) return;
+
+      const response =
+        await api.get('/roles');
+
+      const current =
+        response.data.data.find(
+          (item: any) =>
+            item.name === oldName
+        );
+
+      if (!current) return;
+
+      await api.patch(
+        `/roles/${current._id}`,
+        {
+          name: trimmed,
+        }
+      );
+
+      setRoles(
+        (previous) =>
+          previous.map(
+            (item) =>
+              item === oldName
+                ? trimmed
+                : item
+          )
+      );
+    };
+
+    const deleteRole = async (
+      name: string
+    ) => {
+      const response =
+        await api.get('/roles');
+
+      const current =
+        response.data.data.find(
+          (item: any) =>
+            item.name === name
+        );
+
+      if (!current) return;
+
+      await api.delete(
+        `/roles/${current._id}`
+      );
+
+      setRoles(
+        (previous) =>
+          previous.filter(
+            (item) =>
+              item !== name
+          )
+      );
+    };
+
+    /* =========================================================
+      GRADES
+    ========================================================= */
+
+    const addGrade = async (
+      grade: Grade
+    ) => {
+      const response =
+        await api.post(
+          '/grades',
+          {
+            name: grade.name,
+carryForwardAllowed:
+              grade.carryForwardAllowed,
+
+            maxCarryForwardDays:
+              grade.maxCarryForwardDays,
+
+            description:
+              grade.description,
+          }
+        );
+
+      const saved =
+        response.data.data;
+
+      setGrades(
+        (previous) => [
+          ...previous,
+
+          {
+            ...grade,
+            id: saved._id,
+          },
+        ]
+      );
+    };
+
+    const updateGrade = async (
+      grade: Grade
+    ) => {
+      const response =
+        await api.patch(
+          `/grades/${grade.id}`,
+          {
+            name: grade.name,
+carryForwardAllowed:
+              grade.carryForwardAllowed,
+
+            maxCarryForwardDays:
+              grade.maxCarryForwardDays,
+
+            description:
+              grade.description,
+          }
+        );
+
+      const saved =
+        response.data.data;
+
+      setGrades(
+        (previous) =>
+          previous.map(
+            (item) =>
+              item.id === grade.id
+                ? {
+                    ...grade,
+                    id: saved._id,
+                  }
+                : item
+          )
+      );
+    };
+
+    const deleteGrade = async (
+      id: string
+    ) => {
+      await api.delete(
+        `/grades/${id}`
+      );
+
+      setGrades(
+        (previous) =>
+          previous.filter(
+            (grade) =>
+              grade.id !== id
+          )
+      );
+    };
+
+    /* =========================================================
+      LEAVE POLICY API CRUD
+    ========================================================= */
+
+    const addLeavePolicy = async (
+      policy: LeavePolicy
+    ): Promise<LeavePolicy | undefined> => {
+      try {
+        const created =
+          await apiCreateLeavePolicy(
+            policy
+          );
+
+        setLeavePolicies(
+          (previous) => [
+            ...previous.filter(
+              (item) =>
+                item.id !==
+                created.id
+            ),
+            created,
+          ]
+        );
+
+        return created;
+      } catch (error) {
+        console.error(
+          'Unable to create leave policy:',
+          getApiErrorMessage(
+            error,
+            'Unable to create leave policy.'
+          )
+        );
+
+        throw error;
+      }
+    };
+
+    const updateLeavePolicy = async (
+      policy: LeavePolicy
+    ): Promise<LeavePolicy | undefined> => {
+      try {
+        const updated =
+          await apiUpdateLeavePolicy(
+            policy
+          );
+
+        setLeavePolicies(
+          (previous) =>
+            previous.map(
+              (item) =>
+                item.id ===
+                updated.id
+                  ? updated
+                  : item
+            )
+        );
+
+        return updated;
+      } catch (error) {
+        console.error(
+          'Unable to update leave policy:',
+          getApiErrorMessage(
+            error,
+            'Unable to update leave policy.'
+          )
+        );
+
+        throw error;
+      }
+    };
+
+    /* =========================================================
+      LEAVE BALANCE TEMP LOCAL LOGIC
+    ========================================================= */
+
+    const updateBalanceUsed = (
+      employeeId: string,
+      leaveType: LeaveType,
+      daysToAdd: number
+    ) => {
+      setLeaveBalances(
+        (previous) => {
+          const balances =
+            previous[employeeId];
+
+          if (!balances) {
+            return previous;
+          }
+
+          return {
+            ...previous,
+
+            [employeeId]:
+              balances.map(
+                (balance) => {
+                  if (
+                    balance.leaveType !==
+                    leaveType
+                  ) {
+                    return balance;
+                  }
+
+                  const used =
+                    balance.used +
+                    daysToAdd;
+
+                  return {
+                    ...balance,
+
+                    used,
+
+                    remaining:
+                      Math.max(
+                        0,
+                        balance.quota -
+                          used
+                      ),
+                  };
+                }
+              ),
+          };
+        }
+      );
+    };
+
+    /* =========================================================
+      CANCEL PENDING
+    ========================================================= */
+
+    const cancelPendingLeave = (
+      requestId: string,
+      userId: string
+    ) => {
+      setLeaveRequests(
+        (previous) =>
+          previous.map(
+            (request) =>
+              request.id ===
+                requestId &&
+              request.employeeId ===
+                userId &&
+              request.status ===
+                'pending'
+                ? {
+                    ...request,
+
+                    status:
+                      'cancelled' as const,
+
+                    cancelledReason:
+                      'Cancelled by employee',
+                  }
+                : request
+          )
+      );
+    };
+
+    /* =========================================================
+      APPROVER RESOLUTION
+    ========================================================= */
+
+    const resolvePolicyApproverIds =
+      (
+        policy:
+          | LeavePolicy
+          | undefined,
+
+        employeeId: string
+      ): string[] => {
+        if (!policy) {
+          return [];
+        }
+
+        if (
+          policy.finalApprovalMode
+        ) {
+          const employee =
+            users.find(
+              (user) =>
+                user.id ===
+                employeeId
+            );
+
+          if (
+            !employee?.managerId
+          ) {
             return [];
           }
 
+          const manager =
+            users.find(
+              (candidate) =>
+                candidate.id ===
+                employee.managerId
+            );
+
           if (
-            policy.finalApprovalMode
+            !manager ||
+            manager.role !==
+              'manager' ||
+            manager.status !==
+              'active'
           ) {
-            const employee =
-              users.find(
-                (user) =>
-                  user.id ===
-                  employeeId
-              );
-
-            if (
-              !employee?.managerId
-            ) {
-              return [];
-            }
-
-            const manager =
-              users.find(
-                (candidate) =>
-                  candidate.id ===
-                  employee.managerId
-              );
-
-            if (
-              !manager ||
-              manager.role !==
-                'manager' ||
-              manager.status !==
-                'active'
-            ) {
-              return [];
-            }
-
-            return [manager.id];
+            return [];
           }
 
-          return (
-            policy
-              .approvalRouting
-              ?.approverIds || []
-          );
+          return [manager.id];
+        }
+
+        return (
+          policy
+            .approvalRouting
+            ?.approverIds || []
+        );
+      };
+
+    /* =========================================================
+      SUBMIT LEAVE
+      Temporary local implementation.
+    ========================================================= */
+
+    const submitLeaveRequest = (
+      request: Omit<
+        LeaveRequest,
+        | 'id'
+        | 'createdAt'
+        | 'status'
+        | 'approvalHistory'
+      >
+    ) => {
+      const policy =
+        leavePolicies.find(
+          (item) =>
+            item.leaveType ===
+            request.leaveType
+        );
+
+      const requiredApproverIds =
+        resolvePolicyApproverIds(
+          policy,
+          request.employeeId
+        );
+
+      if (
+        policy?.finalApprovalMode &&
+        requiredApproverIds.length ===
+          0
+      ) {
+        console.error(
+          `Cannot submit ${request.leaveType} leave: ${request.employeeName} does not have an active assigned Manager.`
+        );
+
+        return;
+      }
+
+      const newRequest: LeaveRequest =
+        {
+          ...request,
+
+          id: `lr${Date.now()}`,
+
+          createdAt:
+            new Date().toISOString(),
+
+          status: 'pending',
+
+          approvalHistory: [],
+
+          totalWorkingDays:
+            request.totalWorkingDays ||
+            request.totalDaysRequested,
+
+          requiredApproverIds,
+
+          approvedByIds: [],
+
+          rejectedByIds: [],
+
+          currentApproverRole:
+            'manager',
         };
 
-      /* =========================================================
-        SUBMIT LEAVE
-        Temporary local implementation.
-      ========================================================= */
+      setLeaveRequests(
+        (previous) => [
+          newRequest,
+          ...previous,
+        ]
+      );
 
-      const submitLeaveRequest = (
-        request: Omit<
-          LeaveRequest,
-          | 'id'
-          | 'createdAt'
-          | 'status'
-          | 'approvalHistory'
-        >
-      ) => {
-        const policy =
-          leavePolicies.find(
-            (item) =>
-              item.leaveType ===
-              request.leaveType
+      addAuditLog({
+        actorId:
+          request.employeeId,
+
+        actorName:
+          request.employeeName,
+
+        action:
+          'SUBMIT_LEAVE',
+
+        targetType:
+          'LeaveRequest',
+
+        targetId:
+          newRequest.id,
+
+        details:
+          `Submitted ${request.leaveType} leave request`,
+
+        affectedPerson:
+          request.employeeName,
+
+        department:
+          request.department,
+
+        leaveType:
+          request.leaveType,
+
+        comment:
+          request.reason,
+      });
+    };
+
+    /* =========================================================
+      EXTEND LEAVE
+      Real backend implementation.
+    ========================================================= */
+
+    const extendLeave = async (
+      originalRequest: LeaveRequest,
+      _initiator: User,
+      newEndDate: string,
+      reason: string,
+      isPaid: boolean
+    ): Promise<void> => {
+      try {
+        const created =
+          await apiExtendLeaveRequest(
+            originalRequest.id,
+            newEndDate,
+            reason.trim(),
+            isPaid
           );
 
-        const requiredApproverIds =
-          resolvePolicyApproverIds(
-            policy,
-            request.employeeId
-          );
-
-        if (
-          policy?.finalApprovalMode &&
-          requiredApproverIds.length ===
-            0
-        ) {
-          console.error(
-            `Cannot submit ${request.leaveType} leave: ${request.employeeName} does not have an active assigned Manager.`
-          );
-
-          return;
-        }
-
-        const newRequest: LeaveRequest =
-          {
-            ...request,
-
-            id: `lr${Date.now()}`,
-
-            createdAt:
-              new Date().toISOString(),
-
-            status: 'pending',
-
-            approvalHistory: [],
-
-            totalWorkingDays:
-              request.totalWorkingDays ||
-              request.totalDaysRequested,
-
-            requiredApproverIds,
-
-            approvedByIds: [],
-
-            rejectedByIds: [],
-
-            currentApproverRole:
-              'manager',
-          };
-
+        /*
+         * Use the backend-created request immediately so My Leaves
+         * updates without waiting for another page load.
+         */
         setLeaveRequests(
           (previous) => [
-            newRequest,
-            ...previous,
+            created,
+            ...previous.filter(
+              (item) =>
+                item.id !== created.id
+            ),
           ]
         );
 
-        addAuditLog({
-          actorId:
-            request.employeeId,
+        await refreshLeaveRequests();
 
-          actorName:
-            request.employeeName,
-
-          action:
-            'SUBMIT_LEAVE',
-
-          targetType:
-            'LeaveRequest',
-
-          targetId:
-            newRequest.id,
-
-          details:
-            `Submitted ${request.leaveType} leave request`,
-
-          affectedPerson:
-            request.employeeName,
-
-          department:
-            request.department,
-
-          leaveType:
-            request.leaveType,
-
-          comment:
-            request.reason,
-        });
-      };
-
-      /* =========================================================
-        EXTEND LEAVE
-      ========================================================= */
-
-      const extendLeave = (
-        originalRequest:
-          LeaveRequest,
-
-        initiator: User,
-
-        newEndDate: string,
-
-        reason: string,
-
-        isPaid: boolean
-      ) => {
-        const policy =
-          leavePolicies.find(
-            (item) =>
-              item.leaveType ===
-              originalRequest.leaveType
-          );
-
-        const requiredApproverIds =
-          resolvePolicyApproverIds(
-            policy,
-            originalRequest.employeeId
-          );
-
-        if (
-          policy?.finalApprovalMode &&
-          requiredApproverIds.length ===
-            0
-        ) {
-          return;
-        }
-
-        const extensionStart =
-          new Date(
-            originalRequest.endDate
-          );
-
-        extensionStart.setDate(
-          extensionStart.getDate() +
-            1
+        await refreshLeaveRequests();
+      } catch (error) {
+        console.error(
+          'Unable to extend leave:',
+          getApiErrorMessage(
+            error,
+            'Unable to submit leave extension.'
+          )
         );
 
-        const startDateStr =
-          extensionStart
-            .toISOString()
-            .split('T')[0];
+        throw error;
+      }
+    };
 
-        const workingDays =
-          calcWorkingDays(
-            startDateStr,
-            newEndDate
+    /* =========================================================
+      STOP LEAVE REQUEST
+      Real backend implementation.
+    ========================================================= */
+
+    const requestStopLeave = async (
+      originalRequest: LeaveRequest,
+      _employee: User,
+      newReturnDate: string,
+      reason: string
+    ): Promise<void> => {
+      try {
+        const created =
+          await apiRequestStopLeaveRequest(
+            originalRequest.id,
+            newReturnDate,
+            reason.trim()
           );
 
-        const newRequest: LeaveRequest =
-          {
-            id: `lr${Date.now()}`,
-
-            createdAt:
-              new Date().toISOString(),
-
-            employeeId:
-              originalRequest.employeeId,
-
-            employeeName:
-              originalRequest.employeeName,
-
-            department:
-              originalRequest.department,
-
-            leaveType:
-              originalRequest.leaveType,
-
-            startDate:
-              startDateStr,
-
-            endDate:
-              newEndDate,
-
-            totalDaysRequested:
-              workingDays,
-
-            totalWorkingDays:
-              workingDays,
-
-            reason,
-
-            status: 'pending',
-
-            requiredApproverIds,
-
-            approvedByIds: [],
-
-            rejectedByIds: [],
-
-            approvalHistory: [],
-
-            isExtension: true,
-
-            originalRequestId:
-              originalRequest.id,
-
-            isPaidOverride:
-              isPaid,
-
-            currentApproverRole:
-              policy?.finalApprovalMode
-                ? 'manager'
-                : policy
-                      ?.requiresApprovalFrom ===
-                    'admin'
-                  ? 'admin'
-                  : 'manager',
-          };
-
+        /*
+         * The old implementation only created a temporary local object.
+         * This version uses POST /:id/request-stop, so the request is
+         * persisted in MongoDB and returned with the real approval chain.
+         */
         setLeaveRequests(
           (previous) => [
-            newRequest,
-            ...previous,
+            created,
+            ...previous.filter(
+              (item) =>
+                item.id !== created.id
+            ),
           ]
         );
-
-        addAuditLog({
-          actorId:
-            initiator.id,
-
-          actorName:
-            initiator.fullName,
-
-          action:
-            'EXTEND_LEAVE',
-
-          targetType:
-            'LeaveRequest',
-
-          targetId:
-            newRequest.id,
-
-          details:
-            `Extended ${originalRequest.employeeName}'s ${originalRequest.leaveType} leave through ${newEndDate} (${isPaid ? 'paid' : 'unpaid'})`,
-
-          affectedPerson:
-            originalRequest.employeeName,
-
-          department:
-            originalRequest.department,
-
-          leaveType:
-            originalRequest.leaveType,
-
-          comment: reason,
-        });
-      };
-
-      /* =========================================================
-        STOP LEAVE REQUEST
-      ========================================================= */
-
-      const requestStopLeave = (
-        originalRequest:
-          LeaveRequest,
-
-        employee: User,
-
-        newReturnDate: string,
-
-        reason: string
-      ) => {
-        const policy =
-          leavePolicies.find(
-            (item) =>
-              item.leaveType ===
-              originalRequest.leaveType
-          );
-
-        const requiredApproverIds =
-          resolvePolicyApproverIds(
-            policy,
-            originalRequest.employeeId
-          );
-
-        if (
-          policy?.finalApprovalMode &&
-          requiredApproverIds.length ===
-            0
-        ) {
-          return;
-        }
-
-        const newRequest: LeaveRequest =
-          {
-            id: `lr${Date.now()}`,
-
-            createdAt:
-              new Date().toISOString(),
-
-            employeeId:
-              originalRequest.employeeId,
-
-            employeeName:
-              originalRequest.employeeName,
-
-            department:
-              originalRequest.department,
-
-            leaveType:
-              originalRequest.leaveType,
-
-            startDate:
-              originalRequest.startDate,
-
-            endDate:
-              newReturnDate,
-
-            totalDaysRequested: 0,
-
-            totalWorkingDays: 0,
-
-            reason,
-
-            status: 'pending',
-
-            requiredApproverIds,
-
-            approvedByIds: [],
-
-            rejectedByIds: [],
-
-            approvalHistory: [],
-
-            isStopRequest: true,
-
-            originalRequestId:
-              originalRequest.id,
-
-            currentApproverRole:
-              policy?.finalApprovalMode
-                ? 'manager'
-                : policy
-                      ?.requiresApprovalFrom ===
-                    'admin'
-                  ? 'admin'
-                  : 'manager',
-          };
-
-        setLeaveRequests(
-          (previous) => [
-            newRequest,
-            ...previous,
-          ]
+      } catch (error) {
+        console.error(
+          'Unable to request stop leave:',
+          getApiErrorMessage(
+            error,
+            'Unable to submit stop-leave request.'
+          )
         );
 
-        addAuditLog({
-          actorId:
-            employee.id,
+        throw error;
+      }
+    };
 
-          actorName:
-            employee.fullName,
+    /* =========================================================
+      ADMIN CANCEL APPROVED LEAVE
+    ========================================================= */
 
-          action:
-            'REQUEST_STOP_LEAVE',
+    const cancelLeaveByAdmin = (
+      requestId: string,
+      cancelledBy: User,
+      reason: string,
+      returnDate: string
+    ) => {
+      const request =
+        leaveRequests.find(
+          (item) =>
+            item.id ===
+            requestId
+        );
 
-          targetType:
-            'LeaveRequest',
+      if (
+        !request ||
+        request.status !==
+          'approved'
+      ) {
+        return;
+      }
 
-          targetId:
-            newRequest.id,
+      const daysUsed =
+        calcWorkingDays(
+          request.startDate,
+          returnDate
+        );
 
-          details:
-            `Requested to end ${originalRequest.leaveType} leave early, returning ${newReturnDate}`,
+      const entry = {
+        approverId:
+          cancelledBy.id,
 
-          affectedPerson:
-            employee.fullName,
+        approverName:
+          cancelledBy.fullName,
 
-          department:
-            originalRequest.department,
+        approverRole:
+          cancelledBy.role,
 
-          leaveType:
-            originalRequest.leaveType,
+        action:
+          'cancelled' as const,
 
-          comment: reason,
-        });
+        comment: reason,
+
+        actionDate:
+          new Date().toISOString(),
       };
 
-      /* =========================================================
-        ADMIN CANCEL APPROVED LEAVE
-      ========================================================= */
-
-      const cancelLeaveByAdmin = (
-        requestId: string,
-        cancelledBy: User,
-        reason: string,
-        returnDate: string
-      ) => {
-        const request =
-          leaveRequests.find(
+      setLeaveRequests(
+        (previous) =>
+          previous.map(
             (item) =>
               item.id ===
               requestId
-          );
+                ? {
+                    ...item,
 
-        if (
-          !request ||
-          request.status !==
-            'approved'
-        ) {
-          return;
-        }
+                    status:
+                      'cancelled' as const,
 
-        const daysUsed =
-          calcWorkingDays(
-            request.startDate,
-            returnDate
-          );
+                    cancelledBy:
+                      cancelledBy.id,
 
-        const entry = {
-          approverId:
-            cancelledBy.id,
+                    cancelledByName:
+                      cancelledBy.fullName,
 
-          approverName:
-            cancelledBy.fullName,
+                    cancelledReason:
+                      reason,
 
-          approverRole:
-            cancelledBy.role,
+                    daysUsedBeforeCancel:
+                      daysUsed,
 
-          action:
-            'cancelled' as const,
+                    actualEndDate:
+                      returnDate,
 
-          comment: reason,
+                    approvalHistory:
+                      [
+                        ...item.approvalHistory,
+                        entry,
+                      ],
+                  }
+                : item
+          )
+      );
 
-          actionDate:
-            new Date().toISOString(),
-        };
+      if (daysUsed > 0) {
+        updateBalanceUsed(
+          request.employeeId,
+          request.leaveType as LeaveType,
+          daysUsed
+        );
+      }
+    };
 
-        setLeaveRequests(
-          (previous) =>
-            previous.map(
-              (item) =>
-                item.id ===
-                requestId
-                  ? {
-                      ...item,
+    /* =========================================================
+      LEAVE STATUS
+    ========================================================= */
 
-                      status:
-                        'cancelled' as const,
+    const computeLeaveStatus = (
+      requiredApproverIds:
+        string[],
 
-                      cancelledBy:
-                        cancelledBy.id,
+      approvedByIds:
+        string[],
 
-                      cancelledByName:
-                        cancelledBy.fullName,
+      rejectedByIds:
+        string[]
+    ): LeaveRequest['status'] => {
+      if (
+        requiredApproverIds.length ===
+        0
+      ) {
+        return 'approved';
+      }
 
-                      cancelledReason:
-                        reason,
+      const gatekeeperId =
+        requiredApproverIds[0];
 
-                      daysUsedBeforeCancel:
-                        daysUsed,
+      const restIds =
+        requiredApproverIds.slice(1);
 
-                      actualEndDate:
-                        returnDate,
+      if (
+        rejectedByIds.includes(
+          gatekeeperId
+        )
+      ) {
+        return 'rejected';
+      }
 
-                      approvalHistory:
-                        [
-                          ...item.approvalHistory,
-                          entry,
-                        ],
-                    }
-                  : item
-            )
+      if (
+        !approvedByIds.includes(
+          gatekeeperId
+        )
+      ) {
+        return 'pending';
+      }
+
+      if (
+        restIds.length === 0
+      ) {
+        return 'approved';
+      }
+
+      const allRestApproved =
+        restIds.every((id) =>
+          approvedByIds.includes(id)
         );
 
-        if (daysUsed > 0) {
+      return allRestApproved
+        ? 'approved'
+        : 'pending';
+    };
+
+    /* =========================================================
+      APPROVE LEAVE
+    ========================================================= */
+
+    const approveLeave = (
+      requestId: string,
+      approver: User,
+      comment?: string
+    ) => {
+      const request =
+        leaveRequests.find(
+          (item) =>
+            item.id ===
+            requestId
+        );
+
+      if (!request) return;
+
+      const required =
+        request.requiredApproverIds ||
+        [];
+
+      if (
+        !required.includes(
+          approver.id
+        )
+      ) {
+        return;
+      }
+
+      if (
+        request.employeeId ===
+        approver.id
+      ) {
+        return;
+      }
+
+      const entry = {
+        approverId:
+          approver.id,
+
+        approverName:
+          approver.fullName,
+
+        approverRole:
+          approver.role,
+
+        action:
+          'approved' as const,
+
+        comment,
+
+        actionDate:
+          new Date().toISOString(),
+      };
+
+      const updatedApprovedByIds =
+        Array.from(
+          new Set([
+            ...(request.approvedByIds ||
+              []),
+
+            approver.id,
+          ])
+        );
+
+      const rejectedByIds =
+        request.rejectedByIds ||
+        [];
+
+      const newStatus =
+        computeLeaveStatus(
+          required,
+          updatedApprovedByIds,
+          rejectedByIds
+        );
+
+      setLeaveRequests(
+        (previous) =>
+          previous.map(
+            (item) =>
+              item.id ===
+              requestId
+                ? {
+                    ...item,
+
+                    status:
+                      newStatus,
+
+                    approvedByIds:
+                      updatedApprovedByIds,
+
+                    approvalHistory:
+                      [
+                        ...item.approvalHistory,
+                        entry,
+                      ],
+                  }
+                : item
+          )
+      );
+
+      if (
+        newStatus ===
+        'approved'
+      ) {
+        if (
+          request.isStopRequest &&
+          request.originalRequestId
+        ) {
+          const original =
+            leaveRequests.find(
+              (item) =>
+                item.id ===
+                request.originalRequestId
+            );
+
+          if (original) {
+            const daysActuallyUsed =
+              calcWorkingDays(
+                original.startDate,
+                request.endDate
+              );
+
+            const daysRestored =
+              Math.max(
+                0,
+                original.totalWorkingDays -
+                  daysActuallyUsed
+              );
+
+            if (
+              daysRestored > 0
+            ) {
+              updateBalanceUsed(
+                original.employeeId,
+                original.leaveType as LeaveType,
+                -daysRestored
+              );
+            }
+          }
+        } else if (
+          request.totalWorkingDays >
+          0
+        ) {
           updateBalanceUsed(
             request.employeeId,
             request.leaveType as LeaveType,
-            daysUsed
+            request.totalWorkingDays
           );
         }
-      };
+      }
+    };
 
-      /* =========================================================
-        LEAVE STATUS
-      ========================================================= */
+    /* =========================================================
+      REJECT LEAVE
+    ========================================================= */
 
-      const computeLeaveStatus = (
-        requiredApproverIds:
-          string[],
-
-        approvedByIds:
-          string[],
-
-        rejectedByIds:
-          string[]
-      ): LeaveRequest['status'] => {
-        if (
-          requiredApproverIds.length ===
-          0
-        ) {
-          return 'approved';
-        }
-
-        const gatekeeperId =
-          requiredApproverIds[0];
-
-        const restIds =
-          requiredApproverIds.slice(1);
-
-        if (
-          rejectedByIds.includes(
-            gatekeeperId
-          )
-        ) {
-          return 'rejected';
-        }
-
-        if (
-          !approvedByIds.includes(
-            gatekeeperId
-          )
-        ) {
-          return 'pending';
-        }
-
-        if (
-          restIds.length === 0
-        ) {
-          return 'approved';
-        }
-
-        const allRestApproved =
-          restIds.every((id) =>
-            approvedByIds.includes(id)
-          );
-
-        return allRestApproved
-          ? 'approved'
-          : 'pending';
-      };
-
-      /* =========================================================
-        APPROVE LEAVE
-      ========================================================= */
-
-      const approveLeave = (
-        requestId: string,
-        approver: User,
-        comment?: string
-      ) => {
-        const request =
-          leaveRequests.find(
-            (item) =>
-              item.id ===
-              requestId
-          );
-
-        if (!request) return;
-
-        const required =
-          request.requiredApproverIds ||
-          [];
-
-        if (
-          !required.includes(
-            approver.id
-          )
-        ) {
-          return;
-        }
-
-        if (
-          request.employeeId ===
-          approver.id
-        ) {
-          return;
-        }
-
-        const entry = {
-          approverId:
-            approver.id,
-
-          approverName:
-            approver.fullName,
-
-          approverRole:
-            approver.role,
-
-          action:
-            'approved' as const,
-
-          comment,
-
-          actionDate:
-            new Date().toISOString(),
-        };
-
-        const updatedApprovedByIds =
-          Array.from(
-            new Set([
-              ...(request.approvedByIds ||
-                []),
-
-              approver.id,
-            ])
-          );
-
-        const rejectedByIds =
-          request.rejectedByIds ||
-          [];
-
-        const newStatus =
-          computeLeaveStatus(
-            required,
-            updatedApprovedByIds,
-            rejectedByIds
-          );
-
-        setLeaveRequests(
-          (previous) =>
-            previous.map(
-              (item) =>
-                item.id ===
-                requestId
-                  ? {
-                      ...item,
-
-                      status:
-                        newStatus,
-
-                      approvedByIds:
-                        updatedApprovedByIds,
-
-                      approvalHistory:
-                        [
-                          ...item.approvalHistory,
-                          entry,
-                        ],
-                    }
-                  : item
-            )
+    const rejectLeave = (
+      requestId: string,
+      approver: User,
+      comment?: string
+    ) => {
+      const request =
+        leaveRequests.find(
+          (item) =>
+            item.id ===
+            requestId
         );
 
-        if (
-          newStatus ===
-          'approved'
-        ) {
-          if (
-            request.isStopRequest &&
-            request.originalRequestId
-          ) {
-            const original =
-              leaveRequests.find(
-                (item) =>
-                  item.id ===
-                  request.originalRequestId
-              );
+      if (!request) return;
 
-            if (original) {
-              const daysActuallyUsed =
-                calcWorkingDays(
-                  original.startDate,
-                  request.endDate
-                );
+      const required =
+        request.requiredApproverIds ||
+        [];
 
-              const daysRestored =
-                Math.max(
-                  0,
-                  original.totalWorkingDays -
-                    daysActuallyUsed
-                );
-
-              if (
-                daysRestored > 0
-              ) {
-                updateBalanceUsed(
-                  original.employeeId,
-                  original.leaveType as LeaveType,
-                  -daysRestored
-                );
-              }
-            }
-          } else if (
-            request.totalWorkingDays >
-            0
-          ) {
-            updateBalanceUsed(
-              request.employeeId,
-              request.leaveType as LeaveType,
-              request.totalWorkingDays
-            );
-          }
-        }
-      };
-
-      /* =========================================================
-        REJECT LEAVE
-      ========================================================= */
-
-      const rejectLeave = (
-        requestId: string,
-        approver: User,
-        comment?: string
-      ) => {
-        const request =
-          leaveRequests.find(
-            (item) =>
-              item.id ===
-              requestId
-          );
-
-        if (!request) return;
-
-        const required =
-          request.requiredApproverIds ||
-          [];
-
-        if (
-          !required.includes(
-            approver.id
-          )
-        ) {
-          return;
-        }
-
-        if (
-          request.employeeId ===
+      if (
+        !required.includes(
           approver.id
-        ) {
-          return;
-        }
+        )
+      ) {
+        return;
+      }
 
-        const entry = {
-          approverId:
-            approver.id,
+      if (
+        request.employeeId ===
+        approver.id
+      ) {
+        return;
+      }
 
-          approverName:
-            approver.fullName,
+      const entry = {
+        approverId:
+          approver.id,
 
-          approverRole:
-            approver.role,
+        approverName:
+          approver.fullName,
 
-          action:
-            'rejected' as const,
+        approverRole:
+          approver.role,
 
-          comment,
-
-          actionDate:
-            new Date().toISOString(),
-        };
-
-        const updatedRejectedByIds =
-          Array.from(
-            new Set([
-              ...(request.rejectedByIds ||
-                []),
-
-              approver.id,
-            ])
-          );
-
-        const approvedByIds =
-          request.approvedByIds ||
-          [];
-
-        const newStatus =
-          computeLeaveStatus(
-            required,
-            approvedByIds,
-            updatedRejectedByIds
-          );
-
-        setLeaveRequests(
-          (previous) =>
-            previous.map(
-              (item) =>
-                item.id ===
-                requestId
-                  ? {
-                      ...item,
-
-                      status:
-                        newStatus,
-
-                      rejectedByIds:
-                        updatedRejectedByIds,
-
-                      approvalHistory:
-                        [
-                          ...item.approvalHistory,
-                          entry,
-                        ],
-                    }
-                  : item
-            )
-        );
-      };
-
-      /* =========================================================
-        ACT ON BEHALF
-      ========================================================= */
-
-      const actOnBehalf = (
-        requestId: string,
-        admin: User,
-        targetApproverId: string,
         action:
-          | 'approved'
-          | 'rejected',
-        comment?: string
-      ) => {
-        const request =
-          leaveRequests.find(
+          'rejected' as const,
+
+        comment,
+
+        actionDate:
+          new Date().toISOString(),
+      };
+
+      const updatedRejectedByIds =
+        Array.from(
+          new Set([
+            ...(request.rejectedByIds ||
+              []),
+
+            approver.id,
+          ])
+        );
+
+      const approvedByIds =
+        request.approvedByIds ||
+        [];
+
+      const newStatus =
+        computeLeaveStatus(
+          required,
+          approvedByIds,
+          updatedRejectedByIds
+        );
+
+      setLeaveRequests(
+        (previous) =>
+          previous.map(
             (item) =>
               item.id ===
               requestId
-          );
+                ? {
+                    ...item,
 
-        if (!request) return;
+                    status:
+                      newStatus,
 
-        if (
-          admin.role !== 'admin'
-        ) {
-          return;
-        }
+                    rejectedByIds:
+                      updatedRejectedByIds,
 
-        const required =
-          request.requiredApproverIds ||
-          [];
-
-        if (
-          !required.includes(
-            targetApproverId
+                    approvalHistory:
+                      [
+                        ...item.approvalHistory,
+                        entry,
+                      ],
+                  }
+                : item
           )
-        ) {
-          return;
-        }
+      );
+    };
 
-        const targetApprover =
-          getUserById(
-            targetApproverId
-          );
+    /* =========================================================
+      ACT ON BEHALF
+    ========================================================= */
 
-        const entry = {
-          approverId:
-            targetApproverId,
-
-          approverName:
-            targetApprover?.fullName ||
-            'Unknown',
-
-          approverRole:
-            targetApprover?.role ||
-            'manager',
-
-          action,
-
-          comment,
-
-          actionDate:
-            new Date().toISOString(),
-        };
-
-        const approved =
-          action === 'approved'
-            ? Array.from(
-                new Set([
-                  ...(request.approvedByIds ||
-                    []),
-
-                  targetApproverId,
-                ])
-              )
-            : request.approvedByIds ||
-              [];
-
-        const rejected =
-          action === 'rejected'
-            ? Array.from(
-                new Set([
-                  ...(request.rejectedByIds ||
-                    []),
-
-                  targetApproverId,
-                ])
-              )
-            : request.rejectedByIds ||
-              [];
-
-        const newStatus =
-          computeLeaveStatus(
-            required,
-            approved,
-            rejected
-          );
-
-        setLeaveRequests(
-          (previous) =>
-            previous.map(
-              (item) =>
-                item.id ===
-                requestId
-                  ? {
-                      ...item,
-
-                      status:
-                        newStatus,
-
-                      approvedByIds:
-                        approved,
-
-                      rejectedByIds:
-                        rejected,
-
-                      approvalHistory:
-                        [
-                          ...item.approvalHistory,
-                          entry,
-                        ],
-                    }
-                  : item
-            )
+    const actOnBehalf = (
+      requestId: string,
+      admin: User,
+      targetApproverId: string,
+      action:
+        | 'approved'
+        | 'rejected',
+      comment?: string
+    ) => {
+      const request =
+        leaveRequests.find(
+          (item) =>
+            item.id ===
+            requestId
         );
+
+      if (!request) return;
+
+      if (
+        admin.role !== 'admin'
+      ) {
+        return;
+      }
+
+      const required =
+        request.requiredApproverIds ||
+        [];
+
+      if (
+        !required.includes(
+          targetApproverId
+        )
+      ) {
+        return;
+      }
+
+      const targetApprover =
+        getUserById(
+          targetApproverId
+        );
+
+      const entry = {
+        approverId:
+          targetApproverId,
+
+        approverName:
+          targetApprover?.fullName ||
+          'Unknown',
+
+        approverRole:
+          targetApprover?.role ||
+          'manager',
+
+        action,
+
+        comment,
+
+        actionDate:
+          new Date().toISOString(),
       };
 
-      /* =========================================================
-        PROVIDER
-      ========================================================= */
+      const approved =
+        action === 'approved'
+          ? Array.from(
+              new Set([
+                ...(request.approvedByIds ||
+                  []),
 
-      return (
-        <AppDataContext.Provider
-          value={{
-            users,
+                targetApproverId,
+              ])
+            )
+          : request.approvedByIds ||
+            [];
 
-            grades,
+      const rejected =
+        action === 'rejected'
+          ? Array.from(
+              new Set([
+                ...(request.rejectedByIds ||
+                  []),
 
-            designations,
+                targetApproverId,
+              ])
+            )
+          : request.rejectedByIds ||
+            [];
 
-            departments,
+      const newStatus =
+        computeLeaveStatus(
+          required,
+          approved,
+          rejected
+        );
 
-            roles,
+      setLeaveRequests(
+        (previous) =>
+          previous.map(
+            (item) =>
+              item.id ===
+              requestId
+                ? {
+                    ...item,
 
-            departmentSaturdayOff,
+                    status:
+                      newStatus,
 
-            leavePolicies,
+                    approvedByIds:
+                      approved,
 
-            leaveRequests,
+                    rejectedByIds:
+                      rejected,
 
-            auditLogs,
+                    approvalHistory:
+                      [
+                        ...item.approvalHistory,
+                        entry,
+                      ],
+                  }
+                : item
+          )
+      );
+    };
 
-            leaveBalances,
+    /* =========================================================
+      PROVIDER
+    ========================================================= */
 
-            employeesLoading,
+    return (
+      <AppDataContext.Provider
+        value={{
+          users,
 
-            employeeApiError,
+          grades,
 
-            refreshEmployees,
+          designations,
 
-            refreshLookups,
+          departments,
 
-            refreshLeaveRequests,
+          roles,
 
-            refreshLeavePolicies,
+          departmentSaturdayOff,
 
-            addUser:
+          leavePolicies,
 
-            updateUser,
+          leaveRequests,
 
-            removeUser,
+          auditLogs,
 
-            restoreUser,
+          leaveBalances,
 
-            addDesignation,
+          employeesLoading,
 
-            addDepartment,
+          employeeApiError,
 
-            addRole,
+          refreshEmployees,
 
-            updateDesignation,
+          refreshLookups,
 
-            deleteDesignation,
+          refreshLeaveRequests,
 
-            updateDepartment,
+          refreshLeavePolicies,
 
-            deleteDepartment,
+          addUser:
 
-            updateRole,
+          updateUser,
 
-            deleteRole,
+          removeUser,
 
-            deleteGrade,
+          restoreUser,
 
-            toggleDepartmentSaturday,
+          addDesignation,
 
-            addGrade,
+          addDepartment,
 
-            updateGrade,
+          addRole,
 
-            addLeavePolicy,
+          updateDesignation,
 
-            updateLeavePolicy,
+          deleteDesignation,
 
-            getUserById,
+          updateDepartment,
 
-            getManager,
+          deleteDepartment,
 
-            getActiveLeaveTypes,
+          updateRole,
 
-            cancelLeaveByAdmin,
+          deleteRole,
 
-            cancelPendingLeave,
+          deleteGrade,
 
-            submitLeaveRequest,
+          toggleDepartmentSaturday,
 
-            extendLeave,
+          addGrade,
 
-            requestStopLeave,
+          updateGrade,
 
-            approveLeave,
+          addLeavePolicy,
 
-            rejectLeave,
+          updateLeavePolicy,
 
-            actOnBehalf,
+          getUserById,
 
-            addAuditLog,
-          }}
-        >
-          {children}
-        </AppDataContext.Provider>
+          getManager,
+
+          getActiveLeaveTypes,
+
+          cancelLeaveByAdmin,
+
+          cancelPendingLeave,
+
+          submitLeaveRequest,
+
+          extendLeave,
+
+          requestStopLeave,
+
+          approveLeave,
+
+          rejectLeave,
+
+          actOnBehalf,
+
+          addAuditLog,
+        }}
+      >
+        {children}
+      </AppDataContext.Provider>
+    );
+  }
+
+  /* =========================================================
+    HOOK
+  ========================================================= */
+
+  export function useAppData() {
+    const context =
+      useContext(
+        AppDataContext
+      );
+
+    if (!context) {
+      throw new Error(
+        'useAppData must be used within AppDataProvider'
       );
     }
 
-    /* =========================================================
-      HOOK
-    ========================================================= */
+    return context;
+  }
 
-    export function useAppData() {
-      const context =
-        useContext(
-          AppDataContext
-        );
+  /* =========================================================
+    REPORTING CHAIN
+  ========================================================= */
 
-      if (!context) {
-        throw new Error(
-          'useAppData must be used within AppDataProvider'
-        );
-      }
+  export function getReportingChain(
+    user: User,
 
-      return context;
-    }
+    getUserById: (
+      id: string
+    ) => User | undefined
+  ) {
+    const manager =
+      user.managerId
+        ? getUserById(
+            user.managerId
+          )
+        : undefined;
 
-    /* =========================================================
-      REPORTING CHAIN
-    ========================================================= */
-
-    export function getReportingChain(
-      user: User,
-
-      getUserById: (
-        id: string
-      ) => User | undefined
-    ) {
-      const manager =
-        user.managerId
-          ? getUserById(
-              user.managerId
-            )
-          : undefined;
-
-      return {
-        manager,
-      };
-    }
+    return {
+      manager,
+    };
+  }

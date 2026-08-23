@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAppData } from '../context/AppDataContext';
 import StatusBadge from '../components/ui/StatusBadge';
 import { formatDate } from '../utils/formatDate';
+import api from '../services/api';
 import {
   Activity,
   Building2,
@@ -49,7 +50,6 @@ export default function Dashboard() {
   const { user } = useAuth();
   const {
     leaveRequests,
-    leaveBalances,
     users,
     auditLogs,
     refreshEmployees,
@@ -63,15 +63,116 @@ export default function Dashboard() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  const [
+    profileBalances,
+    setProfileBalances,
+  ] = useState<
+    Array<{
+      leaveType: string;
+      quota: number;
+      used: number;
+      remaining: number;
+    }>
+  >([]);
+
   useEffect(() => {
     if (!user) return;
 
     const loadDashboard = async () => {
       try {
-        await Promise.all([
+        const jobs: Promise<unknown>[] = [
           refreshEmployees(),
           refreshLeaveRequests(),
-        ]);
+        ];
+
+        if (user.role !== 'admin') {
+          jobs.push(
+            api
+              .get('/employees/me')
+              .then((response) => {
+                const raw =
+                  response.data?.data
+                    ?.balances || {};
+
+                const normalized =
+                  Array.isArray(raw)
+                    ? raw.map((balance: any) => ({
+                        leaveType:
+                          String(
+                            balance.leaveType ||
+                              ''
+                          ),
+                        quota:
+                          Number(
+                            balance.quota ||
+                              0
+                          ),
+                        used:
+                          Number(
+                            balance.used ||
+                              0
+                          ),
+                        remaining:
+                          Number(
+                            balance.remaining ??
+                              Math.max(
+                                0,
+                                Number(
+                                  balance.quota ||
+                                    0
+                                ) -
+                                  Number(
+                                    balance.used ||
+                                      0
+                                  )
+                              )
+                          ),
+                      }))
+                    : Object.entries(raw).map(
+                        ([
+                          leaveType,
+                          value,
+                        ]) => {
+                          const balance =
+                            value as any;
+
+                          const quota =
+                            Number(
+                              balance?.quota ||
+                                0
+                            );
+
+                          const used =
+                            Number(
+                              balance?.used ||
+                                0
+                            );
+
+                          return {
+                            leaveType,
+                            quota,
+                            used,
+                            remaining:
+                              Number(
+                                balance?.remaining ??
+                                  Math.max(
+                                    0,
+                                    quota -
+                                      used
+                                  )
+                              ),
+                          };
+                        }
+                      );
+
+                setProfileBalances(
+                  normalized
+                );
+              })
+          );
+        }
+
+        await Promise.all(jobs);
       } catch (error) {
         console.error('Dashboard data load failed:', error);
       }
@@ -523,10 +624,9 @@ export default function Dashboard() {
     );
   }
 
-  // Existing Employee / Manager dashboard behavior is kept separate.
-  const balances = (leaveBalances[user.id] || []).filter((b) =>
-    ['annual', 'sick', 'casual'].includes(b.leaveType)
-  );
+  // Employee / Manager balances come from the real /employees/me API.
+  // This supports every configured leave type, not only annual/sick/casual.
+  const balances = profileBalances;
 
   const myLeaves = leaveRequests.filter((l) => l.employeeId === user.id);
 

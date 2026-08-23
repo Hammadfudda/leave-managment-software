@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
+import { useAppData } from '../context/AppDataContext';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 
@@ -90,6 +91,7 @@ function normalizeBalances(data: unknown): LeaveBalance[] {
 
 export default function ApplyLeave() {
   const { user } = useAuth();
+  const { refreshLeaveRequests } = useAppData();
   const navigate = useNavigate();
 
   const [
@@ -402,6 +404,14 @@ export default function ApplyLeave() {
         reason: reason.trim(),
         attachment: selectedFile,
       });
+
+      /*
+       * Keep AppDataContext in sync with the real backend before
+       * navigating to My Leaves. Without this refresh, the request
+       * is saved in MongoDB but My Leaves can still render the old
+       * in-memory leaveRequests array.
+       */
+      await refreshLeaveRequests();
 
       setSuccessMessage(
         'Leave request submitted successfully.'
