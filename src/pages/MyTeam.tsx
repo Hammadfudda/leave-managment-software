@@ -163,6 +163,16 @@ export default function MyTeam() {
     setRejectRequestId,
   ] = useState<string | null>(null);
 
+  /*
+   * When Admin rejects on behalf of a Manager/approver, the same
+   * rejection modal is used as the Manager flow. This stores whose
+   * approval slot the Admin is filling.
+   */
+  const [
+    adminRejectTargetApproverId,
+    setAdminRejectTargetApproverId,
+  ] = useState<string | null>(null);
+
   const [
     rejectionReason,
     setRejectionReason,
@@ -504,11 +514,18 @@ export default function MyTeam() {
   };
 
   const openRejectModal = (
-    requestId: string
+    requestId: string,
+    adminTargetApproverId?: string
   ) => {
     setRejectRequestId(
       requestId
     );
+
+    setAdminRejectTargetApproverId(
+      adminTargetApproverId ||
+        null
+    );
+
     setRejectionReason('');
     setActionError('');
   };
@@ -519,6 +536,9 @@ export default function MyTeam() {
     }
 
     setRejectRequestId(null);
+    setAdminRejectTargetApproverId(
+      null
+    );
     setRejectionReason('');
   };
 
@@ -548,14 +568,28 @@ export default function MyTeam() {
         );
         setActionError('');
 
-        await rejectLeaveRequest(
-          rejectRequestId,
-          comment
-        );
+        if (
+          adminRejectTargetApproverId
+        ) {
+          await actOnBehalfOfApprover(
+            rejectRequestId,
+            adminRejectTargetApproverId,
+            'rejected',
+            comment
+          );
+        } else {
+          await rejectLeaveRequest(
+            rejectRequestId,
+            comment
+          );
+        }
 
         await refreshLeaveRequests();
 
         setRejectRequestId(
+          null
+        );
+        setAdminRejectTargetApproverId(
           null
         );
         setRejectionReason('');
@@ -1397,6 +1431,11 @@ export default function MyTeam() {
 
                                             <button
                                               type="button"
+                                              disabled={
+                                                actionLoading &&
+                                                actionRequestId ===
+                                                  request.id
+                                              }
                                               onClick={() =>
                                                 void handleActOnBehalf(
                                                   request.id,
@@ -1404,21 +1443,29 @@ export default function MyTeam() {
                                                   'approved'
                                                 )
                                               }
-                                              className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
+                                              className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                                             >
-                                              Approve
+                                              {actionLoading &&
+                                              actionRequestId ===
+                                                request.id
+                                                ? 'Approving...'
+                                                : 'Approve'}
                                             </button>
 
                                             <button
                                               type="button"
+                                              disabled={
+                                                actionLoading &&
+                                                actionRequestId ===
+                                                  request.id
+                                              }
                                               onClick={() =>
-                                                void handleActOnBehalf(
+                                                openRejectModal(
                                                   request.id,
-                                                  id,
-                                                  'rejected'
+                                                  id
                                                 )
                                               }
-                                              className="rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-rose-700"
+                                              className="rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
                                             >
                                               Reject
                                             </button>
@@ -1476,7 +1523,9 @@ export default function MyTeam() {
       >
         <div className="space-y-3">
           <p className="text-sm text-gray-600">
-            Enter the reason for rejecting this leave request.
+            {adminRejectTargetApproverId
+              ? 'Enter the reason for rejecting this leave request on behalf of the selected approver.'
+              : 'Enter the reason for rejecting this leave request.'}
           </p>
 
           <textarea

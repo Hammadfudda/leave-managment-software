@@ -1,11 +1,30 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 
-import { useAuth } from '../context/AuthContext';
-import { useAppData } from '../context/AppDataContext';
+import {
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+} from 'lucide-react';
+
+import {
+  useAuth,
+} from '../context/AuthContext';
+
+import {
+  useAppData,
+} from '../context/AppDataContext';
 
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
+
+import {
+  getApiErrorMessage,
+} from '../services/api';
 
 import {
   createLeavePolicy,
@@ -23,8 +42,16 @@ type ApprovalMode =
   | 'manager_approval'
   | 'manual_chain';
 
+interface PopupMessage {
+  open: boolean;
+  title: string;
+  message: string;
+}
+
 export default function Policies() {
-  const { user } = useAuth();
+  const {
+    user,
+  } = useAuth();
 
   const {
     grades,
@@ -33,23 +60,113 @@ export default function Policies() {
     users,
   } = useAppData();
 
-  const [policies, setPolicies] = useState<LeavePolicy[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<LeavePolicy | null>(null);
-  const [error, setError] = useState('');
+  const [
+    policies,
+    setPolicies,
+  ] = useState<
+    LeavePolicy[]
+  >([]);
 
-  const [leaveType, setLeaveType] = useState('');
-  const [role, setRole] = useState('All Employees');
-  const [department, setDepartment] = useState('All Departments');
-  const [designation, setDesignation] = useState('All Designations');
-  const [isPaid, setIsPaid] = useState(true);
-  const [documentRequirement, setDocumentRequirement] =
-    useState<'optional' | 'required' | 'not_required'>('optional');
-  const [approvalMode, setApprovalMode] =
-    useState<ApprovalMode>('assigned_manager_final');
-  const [approverIds, setApproverIds] = useState<string[]>([]);
+  const [
+    showForm,
+    setShowForm,
+  ] = useState(false);
 
-  const [gradeRows, setGradeRows] = useState<
+  const [
+    editing,
+    setEditing,
+  ] = useState<
+    LeavePolicy | null
+  >(null);
+
+  /*
+   * `error` is kept for form validation errors.
+   * Backend/API errors are shown in a proper popup below.
+   */
+  const [
+    error,
+    setError,
+  ] = useState('');
+
+  const [
+    saving,
+    setSaving,
+  ] = useState(false);
+
+  const [
+    deletingPolicyId,
+    setDeletingPolicyId,
+  ] = useState<
+    string | null
+  >(null);
+
+  const [
+    popup,
+    setPopup,
+  ] = useState<PopupMessage>({
+    open: false,
+    title: '',
+    message: '',
+  });
+
+  const [
+    leaveType,
+    setLeaveType,
+  ] = useState('');
+
+  const [
+    role,
+    setRole,
+  ] = useState(
+    'All Employees'
+  );
+
+  const [
+    department,
+    setDepartment,
+  ] = useState(
+    'All Departments'
+  );
+
+  const [
+    designation,
+    setDesignation,
+  ] = useState(
+    'All Designations'
+  );
+
+  const [
+    isPaid,
+    setIsPaid,
+  ] = useState(true);
+
+  const [
+    documentRequirement,
+    setDocumentRequirement,
+  ] = useState<
+    | 'optional'
+    | 'required'
+    | 'not_required'
+  >('optional');
+
+  const [
+    approvalMode,
+    setApprovalMode,
+  ] = useState<ApprovalMode>(
+    'assigned_manager_final'
+  );
+
+  const [
+    approverIds,
+    setApproverIds,
+  ] = useState<
+    string[]
+  >([]);
+
+  const [
+    gradeRows,
+    setGradeRows,
+  ] = useState<
     Array<{
       gradeId: string;
       selected: boolean;
@@ -57,24 +174,51 @@ export default function Policies() {
     }>
   >([]);
 
-  const managers = useMemo(
-    () =>
-      users.filter(
-        (item) =>
-          item.role === 'manager' &&
-          item.status === 'active'
-      ),
-    [users]
-  );
+  const managers =
+    useMemo(
+      () =>
+        users.filter(
+          (item) =>
+            item.role ===
+              'manager' &&
+            item.status ===
+              'active'
+        ),
+      [users]
+    );
+
+  const showPopup = (
+    title: string,
+    message: string
+  ) => {
+    setPopup({
+      open: true,
+      title,
+      message,
+    });
+  };
+
+  const closePopup = () => {
+    setPopup(
+      (previous) => ({
+        ...previous,
+        open: false,
+      })
+    );
+  };
 
   const load = async () => {
     try {
-      setPolicies(await getLeavePolicies());
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to load leave policies.'
+      setPolicies(
+        await getLeavePolicies()
+      );
+    } catch (requestError) {
+      showPopup(
+        'Unable to Load Leave Policies',
+        getApiErrorMessage(
+          requestError,
+          'Unable to load leave policies.'
+        )
       );
     }
   };
@@ -83,241 +227,497 @@ export default function Policies() {
     void load();
   }, []);
 
-
   /*
   |--------------------------------------------------------------------------
   | Keep grade rows synced with asynchronously loaded Master Data
   |--------------------------------------------------------------------------
-  | The modal can open before grades finish loading. In that case reset()
-  | creates an empty gradeRows array and the Grades & Yearly Quota section
-  | appears blank until the modal is reopened. This effect repairs that race
-  | without overwriting selections while the user is editing the form.
+  |
+  | The modal can open before grades finish loading. Preserve existing
+  | selections while adding any grades that arrived later.
+  |
   */
   useEffect(() => {
-    if (!showForm || grades.length === 0) {
+    if (
+      !showForm ||
+      grades.length === 0
+    ) {
       return;
     }
 
-    setGradeRows((previous) => {
-      const previousById = new Map(
-        previous.map((row) => [row.gradeId, row])
-      );
-
-      return grades.map((grade) => {
-        const existing = previousById.get(grade.id);
-
-        if (existing) {
-          return existing;
-        }
-
-        if (editing) {
-          const policyQuota = editing.gradeQuotas.find(
-            (item) => item.gradeId === grade.id
+    setGradeRows(
+      (previous) => {
+        const previousById =
+          new Map(
+            previous.map(
+              (row) => [
+                row.gradeId,
+                row,
+              ]
+            )
           );
 
-          return {
-            gradeId: grade.id,
-            selected: Boolean(policyQuota),
-            yearlyQuota: policyQuota
-              ? String(policyQuota.yearlyQuota)
-              : '',
-          };
-        }
+        return grades.map(
+          (grade) => {
+            const existing =
+              previousById.get(
+                grade.id
+              );
 
-        return {
-          gradeId: grade.id,
-          selected: false,
-          yearlyQuota: '',
-        };
-      });
-    });
-  }, [grades, showForm, editing]);
+            if (existing) {
+              return existing;
+            }
+
+            if (editing) {
+              const policyQuota =
+                editing.gradeQuotas.find(
+                  (item) =>
+                    item.gradeId ===
+                    grade.id
+                );
+
+              return {
+                gradeId:
+                  grade.id,
+
+                selected:
+                  Boolean(
+                    policyQuota
+                  ),
+
+                yearlyQuota:
+                  policyQuota
+                    ? String(
+                        policyQuota.yearlyQuota
+                      )
+                    : '',
+              };
+            }
+
+            return {
+              gradeId:
+                grade.id,
+              selected:
+                false,
+              yearlyQuota:
+                '',
+            };
+          }
+        );
+      }
+    );
+  }, [
+    grades,
+    showForm,
+    editing,
+  ]);
 
   const reset = () => {
     setEditing(null);
     setLeaveType('');
-    setRole('All Employees');
-    setDepartment('All Departments');
-    setDesignation('All Designations');
-    setIsPaid(true);
-    setDocumentRequirement('optional');
-    setApprovalMode('assigned_manager_final');
-    setApproverIds([]);
-    setGradeRows(
-      grades.map((grade) => ({
-        gradeId: grade.id,
-        selected: false,
-        yearlyQuota: '',
-      }))
+    setRole(
+      'All Employees'
     );
+    setDepartment(
+      'All Departments'
+    );
+    setDesignation(
+      'All Designations'
+    );
+    setIsPaid(true);
+    setDocumentRequirement(
+      'optional'
+    );
+    setApprovalMode(
+      'assigned_manager_final'
+    );
+    setApproverIds([]);
+
+    setGradeRows(
+      grades.map(
+        (grade) => ({
+          gradeId:
+            grade.id,
+          selected:
+            false,
+          yearlyQuota:
+            '',
+        })
+      )
+    );
+
     setError('');
   };
 
-  const openCreate = () => {
-    reset();
-    setShowForm(true);
-  };
+  const openCreate =
+    () => {
+      reset();
+      setShowForm(true);
+    };
 
-  const openEdit = (policy: LeavePolicy) => {
-    setEditing(policy);
-    setLeaveType(policy.leaveType.replace(/_/g, ' '));
-    setRole(policy.role || 'All Employees');
+  const openEdit = (
+    policy:
+      LeavePolicy
+  ) => {
+    setEditing(
+      policy
+    );
+
+    setLeaveType(
+      policy.leaveType.replace(
+        /_/g,
+        ' '
+      )
+    );
+
+    setRole(
+      policy.role ||
+      'All Employees'
+    );
+
     setDepartment(
-      policy.approvalRouting?.department ||
+      policy.approvalRouting
+        ?.department ||
         'All Departments'
     );
+
     setDesignation(
-      policy.approvalRouting?.designation ||
+      policy.approvalRouting
+        ?.designation ||
         'All Designations'
     );
-    setIsPaid(policy.isPaid);
+
+    setIsPaid(
+      policy.isPaid
+    );
+
     setDocumentRequirement(
-      policy.documentRequirement || 'optional'
+      policy.documentRequirement ||
+        'optional'
     );
 
     const ids =
-      policy.approvalRouting?.approverIds || [];
+      policy
+        .approvalRouting
+        ?.approverIds ||
+      [];
 
     setApprovalMode(
       policy.finalApprovalMode
         ? 'assigned_manager_final'
-        : ids.length === 1
+        : ids.length ===
+            1
           ? 'manager_approval'
           : 'manual_chain'
     );
 
-    setApproverIds(ids);
+    setApproverIds(
+      ids
+    );
 
     setGradeRows(
-      grades.map((grade) => {
-        const current =
-          policy.gradeQuotas.find(
-            (item) => item.gradeId === grade.id
-          );
+      grades.map(
+        (grade) => {
+          const current =
+            policy.gradeQuotas.find(
+              (item) =>
+                item.gradeId ===
+                grade.id
+            );
 
-        return {
-          gradeId: grade.id,
-          selected: Boolean(current),
-          yearlyQuota: current
-            ? String(current.yearlyQuota)
-            : '',
-        };
-      })
+          return {
+            gradeId:
+              grade.id,
+
+            selected:
+              Boolean(
+                current
+              ),
+
+            yearlyQuota:
+              current
+                ? String(
+                    current.yearlyQuota
+                  )
+                : '',
+          };
+        }
+      )
     );
 
     setError('');
     setShowForm(true);
   };
 
-  const save = async () => {
-    const selected =
-      gradeRows.filter((row) => row.selected);
-
-    if (!leaveType.trim()) {
-      setError('Leave type is required.');
-      return;
-    }
-
-    if (selected.length === 0) {
-      setError('Select at least one grade.');
-      return;
-    }
-
-    if (
-      selected.some(
-        (row) =>
-          Number(row.yearlyQuota) <= 0
-      )
-    ) {
-      setError('Every selected grade needs a yearly quota greater than 0.');
-      return;
-    }
-
-    if (
-      approvalMode === 'manager_approval' &&
-      approverIds.length !== 1
-    ) {
-      setError('Manager Approval requires exactly one manager.');
-      return;
-    }
-
-    if (
-      approvalMode === 'manual_chain' &&
-      approverIds.length === 0
-    ) {
-      setError('Manual Approval Chain requires at least one manager.');
-      return;
-    }
-
-    const finalApprovalMode =
-      approvalMode === 'assigned_manager_final';
-
-    const payload: LeavePolicy = {
-      id: editing?.id || '',
-      leaveType: leaveType
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, '_'),
-      role,
-      gradeQuotas: selected.map((row) => ({
-        gradeId: row.gradeId,
-        yearlyQuota: Number(row.yearlyQuota),
-      })),
-      requiresApprovalFrom: 'manager',
-      approvalRouting: {
-        department:
-          department === 'All Departments'
-            ? undefined
-            : department,
-        designation:
-          designation === 'All Designations'
-            ? undefined
-            : designation,
-        approverIds:
-          finalApprovalMode
-            ? []
-            : approverIds,
-      },
-      requiresDocumentUpload:
-        documentRequirement === 'required',
-      documentRequirement,
-      finalApprovalMode,
-      minDaysNoticeRequired: 0,
-      isPaid,
-    };
-
-    try {
-      if (editing) {
-        await updateLeavePolicy(payload);
-      } else {
-        await createLeavePolicy(payload);
+  const closeForm =
+    () => {
+      if (saving) {
+        return;
       }
 
       setShowForm(false);
-      await load();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to save leave policy.'
-      );
-    }
-  };
+      setError('');
+    };
 
-  const removePolicy = async (
-    policy: LeavePolicy
-  ) => {
-    try {
-      await deleteLeavePolicy(policy.id);
-      await load();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to delete leave policy.'
+  const save =
+    async () => {
+      if (saving) {
+        return;
+      }
+
+      const selected =
+        gradeRows.filter(
+          (row) =>
+            row.selected
+        );
+
+      if (
+        !leaveType.trim()
+      ) {
+        setError(
+          'Leave type is required.'
+        );
+        return;
+      }
+
+      if (
+        selected.length ===
+        0
+      ) {
+        setError(
+          'Select at least one grade.'
+        );
+        return;
+      }
+
+      if (
+        selected.some(
+          (row) =>
+            Number(
+              row.yearlyQuota
+            ) <= 0
+        )
+      ) {
+        setError(
+          'Every selected grade needs a yearly quota greater than 0.'
+        );
+        return;
+      }
+
+      if (
+        approvalMode ===
+          'manager_approval' &&
+        approverIds.length !==
+          1
+      ) {
+        setError(
+          'Manager Approval requires exactly one manager.'
+        );
+        return;
+      }
+
+      if (
+        approvalMode ===
+          'manual_chain' &&
+        approverIds.length ===
+          0
+      ) {
+        setError(
+          'Manual Approval Chain requires at least one manager.'
+        );
+        return;
+      }
+
+      const finalApprovalMode =
+        approvalMode ===
+        'assigned_manager_final';
+
+      const payload:
+        LeavePolicy = {
+        id:
+          editing?.id ||
+          '',
+
+        leaveType:
+          leaveType
+            .trim()
+            .toLowerCase()
+            .replace(
+              /\s+/g,
+              '_'
+            ),
+
+        role,
+
+        gradeQuotas:
+          selected.map(
+            (row) => ({
+              gradeId:
+                row.gradeId,
+
+              yearlyQuota:
+                Number(
+                  row.yearlyQuota
+                ),
+            })
+          ),
+
+        requiresApprovalFrom:
+          'manager',
+
+        approvalRouting: {
+          department:
+            department ===
+            'All Departments'
+              ? undefined
+              : department,
+
+          designation:
+            designation ===
+            'All Designations'
+              ? undefined
+              : designation,
+
+          approverIds:
+            finalApprovalMode
+              ? []
+              : approverIds,
+        },
+
+        requiresDocumentUpload:
+          documentRequirement ===
+          'required',
+
+        documentRequirement,
+
+        finalApprovalMode,
+
+        minDaysNoticeRequired:
+          0,
+
+        isPaid,
+      };
+
+      setSaving(true);
+      setError('');
+
+      try {
+        if (editing) {
+          await updateLeavePolicy(
+            payload
+          );
+        } else {
+          await createLeavePolicy(
+            payload
+          );
+        }
+
+        const wasEditing =
+          Boolean(
+            editing
+          );
+
+        setShowForm(false);
+        reset();
+
+        await load();
+
+        showPopup(
+          wasEditing
+            ? 'Policy Updated'
+            : 'Policy Created',
+
+          wasEditing
+            ? 'Leave policy has been updated successfully.'
+            : 'Leave policy has been created successfully.'
+        );
+      } catch (
+        requestError
+      ) {
+        const message =
+          getApiErrorMessage(
+            requestError,
+            editing
+              ? 'Unable to update leave policy.'
+              : 'Unable to create leave policy.'
+          );
+
+        const duplicate =
+          message
+            .toLowerCase()
+            .includes(
+              'already exists'
+            ) ||
+          message
+            .toLowerCase()
+            .includes(
+              'already uses this leave type'
+            );
+
+        /*
+         * API errors are shown as a real popup instead of raw red text.
+         * Keep the Create/Edit form open so the user can correct it.
+         */
+        showPopup(
+          duplicate
+            ? 'Policy Already Exists'
+            : editing
+              ? 'Unable to Update Policy'
+              : 'Unable to Create Policy',
+
+          duplicate
+            ? `${message} Please edit the existing policy instead of creating another one.`
+            : message
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
+
+  const removePolicy =
+    async (
+      policy:
+        LeavePolicy
+    ) => {
+      if (
+        deletingPolicyId
+      ) {
+        return;
+      }
+
+      setDeletingPolicyId(
+        policy.id
       );
-    }
-  };
+
+      try {
+        await deleteLeavePolicy(
+          policy.id
+        );
+
+        await load();
+
+        showPopup(
+          'Policy Deleted',
+          `${policy.leaveType.replace(
+            /_/g,
+            ' '
+          )} policy has been deleted successfully.`
+        );
+      } catch (
+        requestError
+      ) {
+        showPopup(
+          'Unable to Delete Policy',
+          getApiErrorMessage(
+            requestError,
+            'Unable to delete leave policy.'
+          )
+        );
+      } finally {
+        setDeletingPolicyId(
+          null
+        );
+      }
+    };
 
   const inputClass =
     'w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20';
@@ -335,95 +735,193 @@ export default function Policies() {
           </p>
         </div>
 
-        {user?.role === 'admin' && (
-          <Button onClick={openCreate}>
-            <Plus size={16} />
+        {user?.role ===
+          'admin' && (
+          <Button
+            onClick={
+              openCreate
+            }
+            disabled={
+              saving ||
+              Boolean(
+                deletingPolicyId
+              )
+            }
+          >
+            <Plus
+              size={16}
+            />
             Add Leave Policy
           </Button>
         )}
       </div>
 
-      {error && !showForm && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {policies.map((policy) => (
-          <div
-            key={policy.id}
-            className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="font-semibold capitalize text-gray-900">
-                  {policy.leaveType.replace(/_/g, ' ')}
-                </h3>
+        {policies.map(
+          (policy) => {
+            const isDeleting =
+              deletingPolicyId ===
+              policy.id;
 
-                <div className="mt-2 space-y-1 text-xs text-gray-500">
-                  {policy.gradeQuotas.map((row) => (
-                    <div key={row.gradeId}>
-                      {row.gradeName ||
-                        grades.find(
-                          (grade) =>
-                            grade.id === row.gradeId
-                        )?.name ||
-                        'Grade'}
-                      {' — '}
-                      {row.yearlyQuota} days/year
+            return (
+              <div
+                key={
+                  policy.id
+                }
+                className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold capitalize text-gray-900">
+                      {policy.leaveType.replace(
+                        /_/g,
+                        ' '
+                      )}
+                    </h3>
+
+                    <div className="mt-2 space-y-1 text-xs text-gray-500">
+                      {policy.gradeQuotas.map(
+                        (
+                          row
+                        ) => (
+                          <div
+                            key={
+                              row.gradeId
+                            }
+                          >
+                            {row.gradeName ||
+                              grades.find(
+                                (
+                                  grade
+                                ) =>
+                                  grade.id ===
+                                  row.gradeId
+                              )
+                                ?.name ||
+                              'Grade'}
+                            {' — '}
+                            {
+                              row.yearlyQuota
+                            }{' '}
+                            days/year
+                          </div>
+                        )
+                      )}
                     </div>
-                  ))}
+                  </div>
+
+                  {user?.role ===
+                    'admin' && (
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        disabled={
+                          isDeleting ||
+                          saving
+                        }
+                        onClick={() =>
+                          openEdit(
+                            policy
+                          )
+                        }
+                        className="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label={`Edit ${policy.leaveType}`}
+                      >
+                        <Pencil
+                          size={
+                            15
+                          }
+                        />
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={
+                          Boolean(
+                            deletingPolicyId
+                          ) ||
+                          saving
+                        }
+                        onClick={() =>
+                          void removePolicy(
+                            policy
+                          )
+                        }
+                        className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label={`Delete ${policy.leaveType}`}
+                      >
+                        {isDeleting ? (
+                          <Loader2
+                            size={
+                              15
+                            }
+                            className="animate-spin text-rose-600"
+                          />
+                        ) : (
+                          <Trash2
+                            size={
+                              15
+                            }
+                          />
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
-
-              {user?.role === 'admin' && (
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => openEdit(policy)}
-                    className="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-blue-600"
-                  >
-                    <Pencil size={15} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => void removePolicy(policy)}
-                    className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
+            );
+          }
+        )}
       </div>
 
       <Modal
         open={showForm}
-        onClose={() => setShowForm(false)}
-        title={editing ? 'Edit Leave Policy' : 'Create Leave Policy'}
+        onClose={
+          closeForm
+        }
+        title={
+          editing
+            ? 'Edit Leave Policy'
+            : 'Create Leave Policy'
+        }
         size="lg"
         footer={
           <>
             <Button
               variant="secondary"
-              onClick={() => setShowForm(false)}
+              disabled={
+                saving
+              }
+              onClick={
+                closeForm
+              }
             >
               Cancel
             </Button>
 
-            <Button onClick={() => void save()}>
-              {editing ? 'Save Changes' : 'Create Policy'}
+            <Button
+              loading={
+                saving
+              }
+              loadingText={
+                editing
+                  ? 'Saving...'
+                  : 'Creating...'
+              }
+              onClick={() =>
+                void save()
+              }
+            >
+              {editing
+                ? 'Save Changes'
+                : 'Create Policy'}
             </Button>
           </>
         }
       >
         <div className="max-h-[70vh] space-y-5 overflow-y-auto">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
               {error}
             </div>
           )}
@@ -434,9 +932,24 @@ export default function Policies() {
             </label>
 
             <input
-              value={leaveType}
-              onChange={(e) => setLeaveType(e.target.value)}
-              className={inputClass}
+              value={
+                leaveType
+              }
+              disabled={
+                saving
+              }
+              onChange={(
+                event
+              ) =>
+                setLeaveType(
+                  event
+                    .target
+                    .value
+                )
+              }
+              className={
+                inputClass
+              }
               placeholder="e.g. Annual"
             />
           </div>
@@ -447,157 +960,313 @@ export default function Policies() {
             </label>
 
             <div className="space-y-2 rounded-xl border border-gray-200 p-3">
-              {grades.length === 0 && (
+              {grades.length ===
+                0 && (
                 <div className="py-2 text-sm text-gray-500">
                   Loading grades...
                 </div>
               )}
 
-              {grades.length > 0 && gradeRows.length === 0 && (
-                <div className="py-2 text-sm text-gray-500">
-                  Preparing grade quotas...
-                </div>
-              )}
-
-              {gradeRows.map((row) => {
-                const grade =
-                  grades.find(
-                    (item) =>
-                      item.id === row.gradeId
-                  );
-
-                return (
-                  <div
-                    key={row.gradeId}
-                    className="grid grid-cols-[auto_1fr_140px] items-center gap-3"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={row.selected}
-                      onChange={() =>
-                        setGradeRows((previous) =>
-                          previous.map((item) =>
-                            item.gradeId === row.gradeId
-                              ? {
-                                  ...item,
-                                  selected: !item.selected,
-                                  yearlyQuota: item.selected
-                                    ? ''
-                                    : item.yearlyQuota,
-                                }
-                              : item
-                          )
-                        )
-                      }
-                    />
-
-                    <span className="text-sm text-gray-700">
-                      {grade?.name || 'Grade'}
-                    </span>
-
-                    <input
-                      type="number"
-                      min="0.5"
-                      step="0.5"
-                      disabled={!row.selected}
-                      value={row.yearlyQuota}
-                      onChange={(e) =>
-                        setGradeRows((previous) =>
-                          previous.map((item) =>
-                            item.gradeId === row.gradeId
-                              ? {
-                                  ...item,
-                                  yearlyQuota: e.target.value,
-                                }
-                              : item
-                          )
-                        )
-                      }
-                      placeholder="Days/year"
-                      className={inputClass}
-                    />
+              {grades.length >
+                0 &&
+                gradeRows.length ===
+                  0 && (
+                  <div className="py-2 text-sm text-gray-500">
+                    Preparing grade quotas...
                   </div>
-                );
-              })}
+                )}
+
+              {gradeRows.map(
+                (row) => {
+                  const grade =
+                    grades.find(
+                      (
+                        item
+                      ) =>
+                        item.id ===
+                        row.gradeId
+                    );
+
+                  return (
+                    <div
+                      key={
+                        row.gradeId
+                      }
+                      className="grid grid-cols-[auto_1fr_140px] items-center gap-3"
+                    >
+                      <input
+                        type="checkbox"
+                        disabled={
+                          saving
+                        }
+                        checked={
+                          row.selected
+                        }
+                        onChange={() =>
+                          setGradeRows(
+                            (
+                              previous
+                            ) =>
+                              previous.map(
+                                (
+                                  item
+                                ) =>
+                                  item.gradeId ===
+                                  row.gradeId
+                                    ? {
+                                        ...item,
+
+                                        selected:
+                                          !item.selected,
+
+                                        yearlyQuota:
+                                          item.selected
+                                            ? ''
+                                            : item.yearlyQuota,
+                                      }
+                                    : item
+                              )
+                          )
+                        }
+                      />
+
+                      <span className="text-sm text-gray-700">
+                        {grade?.name ||
+                          'Grade'}
+                      </span>
+
+                      <input
+                        type="number"
+                        min="0.5"
+                        step="0.5"
+                        disabled={
+                          saving ||
+                          !row.selected
+                        }
+                        value={
+                          row.yearlyQuota
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setGradeRows(
+                            (
+                              previous
+                            ) =>
+                              previous.map(
+                                (
+                                  item
+                                ) =>
+                                  item.gradeId ===
+                                  row.gradeId
+                                    ? {
+                                        ...item,
+
+                                        yearlyQuota:
+                                          event
+                                            .target
+                                            .value,
+                                      }
+                                    : item
+                              )
+                          )
+                        }
+                        placeholder="Days/year"
+                        className={
+                          inputClass
+                        }
+                      />
+                    </div>
+                  );
+                }
+              )}
             </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <select
               value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className={inputClass}
-            >
-              <option value="All Employees">All Employees</option>
-              <option value="employee">Employee</option>
-              <option value="manager">Manager</option>
-              <option value="admin">Admin</option>
-            </select>
-
-            <select
-              value={isPaid ? 'paid' : 'unpaid'}
-              onChange={(e) =>
-                setIsPaid(e.target.value === 'paid')
+              disabled={
+                saving
               }
-              className={inputClass}
+              onChange={(
+                event
+              ) =>
+                setRole(
+                  event
+                    .target
+                    .value
+                )
+              }
+              className={
+                inputClass
+              }
             >
-              <option value="paid">Paid</option>
-              <option value="unpaid">Unpaid</option>
+              <option value="All Employees">
+                All Employees
+              </option>
+              <option value="employee">
+                Employee
+              </option>
+              <option value="manager">
+                Manager
+              </option>
+              <option value="admin">
+                Admin
+              </option>
             </select>
 
             <select
-              value={department}
-              onChange={(e) => setDepartment(e.target.value)}
-              className={inputClass}
+              value={
+                isPaid
+                  ? 'paid'
+                  : 'unpaid'
+              }
+              disabled={
+                saving
+              }
+              onChange={(
+                event
+              ) =>
+                setIsPaid(
+                  event
+                    .target
+                    .value ===
+                    'paid'
+                )
+              }
+              className={
+                inputClass
+              }
+            >
+              <option value="paid">
+                Paid
+              </option>
+              <option value="unpaid">
+                Unpaid
+              </option>
+            </select>
+
+            <select
+              value={
+                department
+              }
+              disabled={
+                saving
+              }
+              onChange={(
+                event
+              ) =>
+                setDepartment(
+                  event
+                    .target
+                    .value
+                )
+              }
+              className={
+                inputClass
+              }
             >
               <option value="All Departments">
                 All Departments
               </option>
 
-              {departments.map((item) => (
-                <option
-                  key={item}
-                  value={item}
-                >
-                  {item}
-                </option>
-              ))}
+              {departments.map(
+                (
+                  item
+                ) => (
+                  <option
+                    key={
+                      item
+                    }
+                    value={
+                      item
+                    }
+                  >
+                    {
+                      item
+                    }
+                  </option>
+                )
+              )}
             </select>
 
             <select
-              value={designation}
-              onChange={(e) => setDesignation(e.target.value)}
-              className={inputClass}
+              value={
+                designation
+              }
+              disabled={
+                saving
+              }
+              onChange={(
+                event
+              ) =>
+                setDesignation(
+                  event
+                    .target
+                    .value
+                )
+              }
+              className={
+                inputClass
+              }
             >
               <option value="All Designations">
                 All Designations
               </option>
 
-              {designations.map((item) => (
-                <option
-                  key={item}
-                  value={item}
-                >
-                  {item}
-                </option>
-              ))}
+              {designations.map(
+                (
+                  item
+                ) => (
+                  <option
+                    key={
+                      item
+                    }
+                    value={
+                      item
+                    }
+                  >
+                    {
+                      item
+                    }
+                  </option>
+                )
+              )}
             </select>
 
             <select
-              value={documentRequirement}
-              onChange={(e) =>
+              value={
+                documentRequirement
+              }
+              disabled={
+                saving
+              }
+              onChange={(
+                event
+              ) =>
                 setDocumentRequirement(
-                  e.target.value as
+                  event
+                    .target
+                    .value as
                     | 'optional'
                     | 'required'
                     | 'not_required'
                 )
               }
-              className={inputClass}
+              className={
+                inputClass
+              }
             >
-              <option value="optional">Document Optional</option>
-              <option value="required">Document Required</option>
-              <option value="not_required">Document Not Required</option>
+              <option value="optional">
+                Document Optional
+              </option>
+              <option value="required">
+                Document Required
+              </option>
+              <option value="not_required">
+                Document Not Required
+              </option>
             </select>
           </div>
 
@@ -609,39 +1278,78 @@ export default function Policies() {
             <div className="space-y-2">
               {(
                 [
-                  ['assigned_manager_final', 'Assigned Manager Final'],
-                  ['manager_approval', 'Manager Approval'],
-                  ['manual_chain', 'Manual Approval Chain'],
+                  [
+                    'assigned_manager_final',
+                    'Assigned Manager Final',
+                  ],
+                  [
+                    'manager_approval',
+                    'Manager Approval',
+                  ],
+                  [
+                    'manual_chain',
+                    'Manual Approval Chain',
+                  ],
                 ] as const
-              ).map(([value, label]) => (
-                <label
-                  key={value}
-                  className="flex items-center gap-2 text-sm text-gray-700"
-                >
-                  <input
-                    type="radio"
-                    checked={approvalMode === value}
-                    onChange={() => {
-                      setApprovalMode(value);
-
-                      if (value === 'assigned_manager_final') {
-                        setApproverIds([]);
-                      } else if (
-                        value === 'manager_approval' &&
-                        approverIds.length > 1
-                      ) {
-                        setApproverIds(approverIds.slice(0, 1));
+              ).map(
+                ([
+                  value,
+                  label,
+                ]) => (
+                  <label
+                    key={
+                      value
+                    }
+                    className="flex items-center gap-2 text-sm text-gray-700"
+                  >
+                    <input
+                      type="radio"
+                      disabled={
+                        saving
                       }
-                    }}
-                  />
+                      checked={
+                        approvalMode ===
+                        value
+                      }
+                      onChange={() => {
+                        setApprovalMode(
+                          value
+                        );
 
-                  {label}
-                </label>
-              ))}
+                        if (
+                          value ===
+                          'assigned_manager_final'
+                        ) {
+                          setApproverIds(
+                            []
+                          );
+                        } else if (
+                          value ===
+                            'manager_approval' &&
+                          approverIds.length >
+                            1
+                        ) {
+                          setApproverIds(
+                            approverIds.slice(
+                              0,
+                              1
+                            )
+                          );
+                        }
+                      }}
+                    />
+
+                    {
+                      label
+                    }
+                  </label>
+                )
+              )}
             </div>
           </div>
 
-          {approvalMode !== 'assigned_manager_final' && (
+          {approvalMode !==
+            'assigned_manager_final' && (
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
                 Select Manager
@@ -649,23 +1357,44 @@ export default function Policies() {
 
               <select
                 value=""
-                onChange={(e) => {
-                  const id = e.target.value;
+                disabled={
+                  saving
+                }
+                onChange={(
+                  event
+                ) => {
+                  const id =
+                    event
+                      .target
+                      .value;
 
                   if (!id) {
                     return;
                   }
 
-                  if (approvalMode === 'manager_approval') {
-                    setApproverIds([id]);
-                  } else if (!approverIds.includes(id)) {
-                    setApproverIds([
-                      ...approverIds,
-                      id,
-                    ]);
+                  if (
+                    approvalMode ===
+                    'manager_approval'
+                  ) {
+                    setApproverIds(
+                      [id]
+                    );
+                  } else if (
+                    !approverIds.includes(
+                      id
+                    )
+                  ) {
+                    setApproverIds(
+                      [
+                        ...approverIds,
+                        id,
+                      ]
+                    );
                   }
                 }}
-                className={inputClass}
+                className={
+                  inputClass
+                }
               >
                 <option value="">
                   Select active manager
@@ -673,52 +1402,121 @@ export default function Policies() {
 
                 {managers
                   .filter(
-                    (manager) =>
-                      !approverIds.includes(manager.id)
+                    (
+                      manager
+                    ) =>
+                      !approverIds.includes(
+                        manager.id
+                      )
                   )
-                  .map((manager) => (
-                    <option
-                      key={manager.id}
-                      value={manager.id}
-                    >
-                      {manager.fullName} — {manager.department}
-                    </option>
-                  ))}
+                  .map(
+                    (
+                      manager
+                    ) => (
+                      <option
+                        key={
+                          manager.id
+                        }
+                        value={
+                          manager.id
+                        }
+                      >
+                        {
+                          manager.fullName
+                        }{' '}
+                        —{' '}
+                        {
+                          manager.department
+                        }
+                      </option>
+                    )
+                  )}
               </select>
 
               <div className="mt-2 flex flex-wrap gap-2">
-                {approverIds.map((id, index) => {
-                  const manager =
-                    managers.find(
-                      (item) =>
-                        item.id === id
-                    );
+                {approverIds.map(
+                  (
+                    id,
+                    index
+                  ) => {
+                    const manager =
+                      managers.find(
+                        (
+                          item
+                        ) =>
+                          item.id ===
+                          id
+                      );
 
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() =>
-                        setApproverIds(
-                          approverIds.filter(
-                            (item) =>
-                              item !== id
+                    return (
+                      <button
+                        key={
+                          id
+                        }
+                        type="button"
+                        disabled={
+                          saving
+                        }
+                        onClick={() =>
+                          setApproverIds(
+                            approverIds.filter(
+                              (
+                                item
+                              ) =>
+                                item !==
+                                id
+                            )
                           )
-                        )
-                      }
-                      className="rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs text-blue-700"
-                    >
-                      {approvalMode === 'manual_chain'
-                        ? `${index + 1}. `
-                        : ''}
-                      {manager?.fullName || 'Manager'} ×
-                    </button>
-                  );
-                })}
+                        }
+                        className="rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {approvalMode ===
+                        'manual_chain'
+                          ? `${
+                              index +
+                              1
+                            }. `
+                          : ''}
+                        {manager
+                          ?.fullName ||
+                          'Manager'}{' '}
+                        ×
+                      </button>
+                    );
+                  }
+                )}
               </div>
             </div>
           )}
         </div>
+      </Modal>
+
+      <Modal
+        open={
+          popup.open
+        }
+        onClose={
+          closePopup
+        }
+        title={
+          popup.title
+        }
+        size="sm"
+        footer={
+          <Button
+            onClick={
+              closePopup
+            }
+          >
+            OK
+          </Button>
+        }
+      >
+        <p className="whitespace-pre-line text-sm text-gray-600">
+          {
+            popup.message
+          }
+        </p>
       </Modal>
     </div>
   );
