@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useState,
   type FormEvent,
   type ReactNode,
@@ -10,9 +11,14 @@ import {
   Eye,
   EyeOff,
   LogOut,
+  Mail,
+  MessageSquareText,
+  Pencil,
   Plus,
   RefreshCw,
+  Send,
   ShieldCheck,
+  Trash2,
   UserRoundCog,
 } from 'lucide-react';
 
@@ -45,6 +51,33 @@ interface Organization {
   } | null;
 }
 
+type DashboardTab =
+  | 'clients'
+  | 'feedback'
+  | 'broadcast';
+
+type FeedbackStatus =
+  | 'new'
+  | 'reviewing'
+  | 'resolved';
+
+interface FeedbackItem {
+  id: string;
+  organizationId?: string | null;
+  organizationName: string;
+  submittedByName: string;
+  submittedByEmail: string;
+  type:
+    | 'feedback'
+    | 'change_request'
+    | 'issue';
+  subject: string;
+  message: string;
+  status: FeedbackStatus;
+  superAdminNote: string;
+  createdAt: string;
+}
+
 const emptyClient = {
   companyName: '',
   adminName: '',
@@ -57,10 +90,15 @@ export default function SuperAdminApp() {
     useState<SuperAdminUser | null>(null);
 
   const [loading, setLoading] =
-    useState(Boolean(getSuperAdminToken()));
+    useState(
+      Boolean(
+        getSuperAdminToken()
+      )
+    );
 
   useEffect(() => {
-    const token = getSuperAdminToken();
+    const token =
+      getSuperAdminToken();
 
     if (!token) {
       setLoading(false);
@@ -70,7 +108,9 @@ export default function SuperAdminApp() {
     superAdminApi
       .get('/super-admin/me')
       .then((response) => {
-        setUser(response.data.user);
+        setUser(
+          response.data.user
+        );
       })
       .catch(() => {
         clearSuperAdminToken();
@@ -111,9 +151,13 @@ export default function SuperAdminApp() {
 function Login({
   onSuccess,
 }: {
-  onSuccess: (user: SuperAdminUser) => void;
+  onSuccess: (
+    user: SuperAdminUser
+  ) => void;
 }) {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] =
+    useState('');
+
   const [password, setPassword] =
     useState('');
 
@@ -131,7 +175,10 @@ function Login({
   ) => {
     event.preventDefault();
 
-    if (!email.trim() || !password) {
+    if (
+      !email.trim() ||
+      !password
+    ) {
       setError(
         'Email and password are required.'
       );
@@ -146,7 +193,8 @@ function Login({
         await superAdminApi.post(
           '/super-admin/login',
           {
-            email: email.trim(),
+            email:
+              email.trim(),
             password,
           }
         );
@@ -261,12 +309,11 @@ function Login({
 
             <Button
               type="submit"
-              disabled={saving}
+              loading={saving}
+              loadingText="Signing in..."
               className="w-full"
             >
-              {saving
-                ? 'Signing in...'
-                : 'Sign in'}
+              Sign in
             </Button>
           </div>
         </form>
@@ -282,6 +329,9 @@ function Dashboard({
   user: SuperAdminUser;
   onLogout: () => void;
 }) {
+  const [tab, setTab] =
+    useState<DashboardTab>('clients');
+
   const [organizations, setOrganizations] =
     useState<Organization[]>([]);
 
@@ -300,6 +350,9 @@ function Dashboard({
   const [error, setError] =
     useState('');
 
+  const [notice, setNotice] =
+    useState('');
+
   const [credentials, setCredentials] =
     useState<{
       email: string;
@@ -314,6 +367,69 @@ function Dashboard({
 
   const [newPassword, setNewPassword] =
     useState('');
+
+  const [editTarget, setEditTarget] =
+    useState<Organization | null>(
+      null
+    );
+
+  const [editCompanyName, setEditCompanyName] =
+    useState('');
+
+  const [editAdminName, setEditAdminName] =
+    useState('');
+
+  const [editAdminEmail, setEditAdminEmail] =
+    useState('');
+
+  const [deleteTarget, setDeleteTarget] =
+    useState<Organization | null>(
+      null
+    );
+
+  const [
+    deleteConfirmation,
+    setDeleteConfirmation,
+  ] = useState('');
+
+  const [
+    deletingOrganizationId,
+    setDeletingOrganizationId,
+  ] = useState<string | null>(
+    null
+  );
+
+  const [feedback, setFeedback] =
+    useState<FeedbackItem[]>([]);
+
+  const [feedbackLoading, setFeedbackLoading] =
+    useState(false);
+
+  const [
+    feedbackTarget,
+    setFeedbackTarget,
+  ] = useState<FeedbackItem | null>(
+    null
+  );
+
+  const [
+    feedbackStatus,
+    setFeedbackStatus,
+  ] = useState<FeedbackStatus>('new');
+
+  const [
+    feedbackNote,
+    setFeedbackNote,
+  ] = useState('');
+
+  const [broadcastSubject, setBroadcastSubject] =
+    useState('');
+
+  const [broadcastMessage, setBroadcastMessage] =
+    useState('');
+
+  const [broadcastSending, setBroadcastSending] =
+    useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -340,9 +456,42 @@ function Dashboard({
     }
   };
 
+  const loadFeedback = async () => {
+    setFeedbackLoading(true);
+    setError('');
+
+    try {
+      const response =
+        await superAdminApi.get(
+          '/super-admin/feedback'
+        );
+
+      setFeedback(
+        response.data.data || []
+      );
+    } catch (requestError) {
+      setError(
+        getSuperAdminError(
+          requestError,
+          'Unable to load client feedback.'
+        )
+      );
+    } finally {
+      setFeedbackLoading(false);
+    }
+  };
+
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    if (
+      tab === 'feedback'
+    ) {
+      void loadFeedback();
+    }
+  }, [tab]);
 
   const createClient = async (
     event: FormEvent<HTMLFormElement>
@@ -400,6 +549,9 @@ function Dashboard({
         ? 'suspended'
         : 'active';
 
+    setSaving(true);
+    setError('');
+
     try {
       await superAdminApi.patch(
         `/super-admin/organizations/${organization.id}/status`,
@@ -414,6 +566,8 @@ function Dashboard({
           'Unable to update client status.'
         )
       );
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -429,6 +583,7 @@ function Dashboard({
     }
 
     setSaving(true);
+    setError('');
 
     try {
       const response =
@@ -458,11 +613,250 @@ function Dashboard({
     }
   };
 
+  const openEdit = (
+    organization: Organization
+  ) => {
+    setEditTarget(
+      organization
+    );
+
+    setEditCompanyName(
+      organization.name
+    );
+
+    setEditAdminName(
+      organization.admin
+        ?.fullName || ''
+    );
+
+    setEditAdminEmail(
+      organization.admin
+        ?.email || ''
+    );
+
+    setError('');
+  };
+
+  const saveEdit = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
+    if (!editTarget) {
+      return;
+    }
+
+    if (
+      !editCompanyName.trim() ||
+      !editAdminName.trim() ||
+      !editAdminEmail.trim()
+    ) {
+      setError(
+        'Company name, Client Admin name and email are required.'
+      );
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    try {
+      await superAdminApi.patch(
+        `/super-admin/organizations/${editTarget.id}`,
+        {
+          companyName:
+            editCompanyName.trim(),
+          adminName:
+            editAdminName.trim(),
+          adminEmail:
+            editAdminEmail.trim(),
+        }
+      );
+
+      setEditTarget(null);
+      await load();
+
+      setNotice(
+        'Client organization updated successfully.'
+      );
+    } catch (requestError) {
+      setError(
+        getSuperAdminError(
+          requestError,
+          'Unable to update client.'
+        )
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteClient = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    if (
+      deleteConfirmation.trim() !==
+      deleteTarget.name
+    ) {
+      setError(
+        `Type "${deleteTarget.name}" exactly to confirm permanent deletion.`
+      );
+      return;
+    }
+
+    setDeletingOrganizationId(
+      deleteTarget.id
+    );
+
+    setError('');
+    setNotice('');
+
+    try {
+      const response =
+        await superAdminApi.delete(
+          `/super-admin/organizations/${deleteTarget.id}`
+        );
+
+      setNotice(
+        response.data.message ||
+          'Client and all tenant users/data were deleted.'
+      );
+
+      setDeleteTarget(null);
+      setDeleteConfirmation('');
+
+      await load();
+    } catch (requestError) {
+      setError(
+        getSuperAdminError(
+          requestError,
+          'Unable to delete this client.'
+        )
+      );
+    } finally {
+      setDeletingOrganizationId(
+        null
+      );
+    }
+  };
+
+  const openFeedback = (
+    item: FeedbackItem
+  ) => {
+    setFeedbackTarget(item);
+    setFeedbackStatus(
+      item.status
+    );
+    setFeedbackNote(
+      item.superAdminNote || ''
+    );
+  };
+
+  const saveFeedback = async () => {
+    if (!feedbackTarget) {
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    setNotice('');
+
+    try {
+      const response =
+        await superAdminApi.patch(
+          `/super-admin/feedback/${feedbackTarget.id}`,
+          {
+            status:
+              feedbackStatus,
+            superAdminNote:
+              feedbackNote,
+          }
+        );
+
+      setNotice(
+        response.data.emailSent
+          ? 'Feedback updated and reply email sent to the Client Admin.'
+          : 'Feedback updated. Reply email could not be sent.'
+      );
+
+      setFeedbackTarget(null);
+      await loadFeedback();
+    } catch (requestError) {
+      setError(
+        getSuperAdminError(
+          requestError,
+          'Unable to update feedback.'
+        )
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendBroadcast = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
+    if (
+      !broadcastSubject.trim() ||
+      !broadcastMessage.trim()
+    ) {
+      setError(
+        'Subject and message are required.'
+      );
+      return;
+    }
+
+    setBroadcastSending(true);
+    setError('');
+    setNotice('');
+
+    try {
+      const response =
+        await superAdminApi.post(
+          '/super-admin/broadcast',
+          {
+            subject:
+              broadcastSubject.trim(),
+            message:
+              broadcastMessage.trim(),
+          }
+        );
+
+      const data =
+        response.data.data || {};
+
+      setNotice(
+        `Update sent. Sent: ${data.sent ?? 0}, Failed: ${data.failed ?? 0}, Total active Client Admins: ${data.total ?? 0}.`
+      );
+
+      setBroadcastSubject('');
+      setBroadcastMessage('');
+    } catch (requestError) {
+      setError(
+        getSuperAdminError(
+          requestError,
+          'Unable to send software update.'
+        )
+      );
+    } finally {
+      setBroadcastSending(false);
+    }
+  };
+
   const active =
-    organizations.filter(
-      (item) =>
-        item.status === 'active'
-    ).length;
+    useMemo(
+      () =>
+        organizations.filter(
+          (item) =>
+            item.status ===
+            'active'
+        ).length,
+      [organizations]
+    );
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -493,22 +887,75 @@ function Dashboard({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-2xl font-semibold">
-              Clients
+              Super Admin
             </h2>
 
             <p className="mt-1 text-sm text-slate-400">
-              Create Client Organizations and Admin credentials.
+              Manage client organizations, support requests and software updates.
             </p>
           </div>
 
-          <Button
+          {tab ===
+            'clients' && (
+            <Button
+              onClick={() =>
+                setShowCreate(true)
+              }
+            >
+              <Plus size={16} />
+              Create Client
+            </Button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-800 bg-slate-900 p-2">
+          <TopTab
+            active={
+              tab === 'clients'
+            }
             onClick={() =>
-              setShowCreate(true)
+              setTab('clients')
+            }
+            icon={
+              <Building2
+                size={16}
+              />
             }
           >
-            <Plus size={16} />
-            Create Client
-          </Button>
+            Clients
+          </TopTab>
+
+          <TopTab
+            active={
+              tab === 'feedback'
+            }
+            onClick={() =>
+              setTab('feedback')
+            }
+            icon={
+              <MessageSquareText
+                size={16}
+              />
+            }
+          >
+            Client Feedback
+          </TopTab>
+
+          <TopTab
+            active={
+              tab === 'broadcast'
+            }
+            onClick={() =>
+              setTab('broadcast')
+            }
+            icon={
+              <Mail
+                size={16}
+              />
+            }
+          >
+            Software Update
+          </TopTab>
         </div>
 
         {error && (
@@ -517,171 +964,405 @@ function Dashboard({
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Metric
-            label="Total Clients"
-            value={
-              organizations.length
-            }
-          />
-
-          <Metric
-            label="Active"
-            value={active}
-          />
-
-          <Metric
-            label="Suspended"
-            value={
-              organizations.length -
-              active
-            }
-          />
-        </div>
-
-        <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
-          <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-            <div className="flex items-center gap-2">
-              <Building2
-                size={18}
-                className="text-blue-400"
-              />
-              <h3 className="font-semibold">
-                Organizations
-              </h3>
-            </div>
-
-            <button
-              type="button"
-              onClick={() =>
-                void load()
-              }
-              className="rounded-lg p-2 text-slate-400 hover:bg-slate-800"
-            >
-              <RefreshCw size={16} />
-            </button>
+        {notice && (
+          <div className="rounded-lg border border-emerald-900 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-300">
+            {notice}
           </div>
+        )}
 
-          {loading ? (
-            <div className="p-10 text-center text-sm text-slate-400">
-              Loading clients...
+        {tab ===
+          'clients' && (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Metric
+                label="Total Clients"
+                value={
+                  organizations.length
+                }
+              />
+
+              <Metric
+                label="Active"
+                value={active}
+              />
+
+              <Metric
+                label="Suspended"
+                value={
+                  organizations.length -
+                  active
+                }
+              />
             </div>
-          ) : organizations.length ===
-            0 ? (
-            <div className="p-10 text-center text-sm text-slate-400">
-              No clients yet.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-950/60 text-left text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-5 py-3">
-                      Company
-                    </th>
-                    <th className="px-5 py-3">
-                      Client Admin
-                    </th>
-                    <th className="px-5 py-3">
-                      Status
-                    </th>
-                    <th className="px-5 py-3">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
 
-                <tbody className="divide-y divide-slate-800">
-                  {organizations.map(
-                    (
-                      organization
-                    ) => (
-                      <tr
-                        key={
-                          organization.id
-                        }
-                      >
-                        <td className="px-5 py-4">
-                          <p className="font-medium text-white">
-                            {organization.name}
-                          </p>
+            <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
+              <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+                <div className="flex items-center gap-2">
+                  <Building2
+                    size={18}
+                    className="text-blue-400"
+                  />
 
-                          <p className="text-xs text-slate-500">
-                            {organization.slug}
-                          </p>
-                        </td>
+                  <h3 className="font-semibold">
+                    Organizations
+                  </h3>
+                </div>
 
-                        <td className="px-5 py-4">
-                          <p className="text-slate-200">
-                            {organization.admin?.fullName ||
-                              '—'}
-                          </p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void load()
+                  }
+                  className="rounded-lg p-2 text-slate-400 hover:bg-slate-800"
+                >
+                  <RefreshCw
+                    size={16}
+                  />
+                </button>
+              </div>
 
-                          <p className="text-xs text-slate-500">
-                            {organization.admin?.email ||
-                              '—'}
-                          </p>
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <span
-                            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                              organization.status ===
-                              'active'
-                                ? 'bg-emerald-950 text-emerald-300'
-                                : 'bg-rose-950 text-rose-300'
-                            }`}
-                          >
-                            {organization.status}
-                          </span>
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setResetTarget(
-                                  organization
-                                )
-                              }
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-300"
-                            >
-                              <UserRoundCog
-                                size={14}
-                              />
-                              Reset Password
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void toggleStatus(
-                                  organization
-                                )
-                              }
-                              className={`rounded-lg px-2.5 py-1.5 text-xs font-medium ${
-                                organization.status ===
-                                'active'
-                                  ? 'bg-rose-950 text-rose-300'
-                                  : 'bg-emerald-950 text-emerald-300'
-                              }`}
-                            >
-                              {organization.status ===
-                              'active'
-                                ? 'Suspend'
-                                : 'Activate'}
-                            </button>
-                          </div>
-                        </td>
+              {loading ? (
+                <div className="p-10 text-center text-sm text-slate-400">
+                  Loading clients...
+                </div>
+              ) : organizations.length ===
+                0 ? (
+                <div className="p-10 text-center text-sm text-slate-400">
+                  No clients yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-950/60 text-left text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="px-5 py-3">
+                          Company
+                        </th>
+                        <th className="px-5 py-3">
+                          Client Admin
+                        </th>
+                        <th className="px-5 py-3">
+                          Status
+                        </th>
+                        <th className="px-5 py-3">
+                          Actions
+                        </th>
                       </tr>
-                    )
-                  )}
-                </tbody>
-              </table>
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-800">
+                      {organizations.map(
+                        (
+                          organization
+                        ) => (
+                          <tr
+                            key={
+                              organization.id
+                            }
+                          >
+                            <td className="px-5 py-4">
+                              <p className="font-medium text-white">
+                                {
+                                  organization.name
+                                }
+                              </p>
+
+                              <p className="text-xs text-slate-500">
+                                {
+                                  organization.slug
+                                }
+                              </p>
+                            </td>
+
+                            <td className="px-5 py-4">
+                              <p className="text-slate-200">
+                                {organization.admin
+                                  ?.fullName ||
+                                  '—'}
+                              </p>
+
+                              <p className="text-xs text-slate-500">
+                                {organization.admin
+                                  ?.email ||
+                                  '—'}
+                              </p>
+                            </td>
+
+                            <td className="px-5 py-4">
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                  organization.status ===
+                                  'active'
+                                    ? 'bg-emerald-950 text-emerald-300'
+                                    : 'bg-rose-950 text-rose-300'
+                                }`}
+                              >
+                                {
+                                  organization.status
+                                }
+                              </span>
+                            </td>
+
+                            <td className="px-5 py-4">
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openEdit(
+                                      organization
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-lg border border-blue-900 bg-blue-950/30 px-2.5 py-1.5 text-xs text-blue-300 hover:bg-blue-900/40"
+                                >
+                                  <Pencil
+                                    size={14}
+                                  />
+                                  Edit
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setResetTarget(
+                                      organization
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-300"
+                                >
+                                  <UserRoundCog
+                                    size={14}
+                                  />
+                                  Reset Password
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={
+                                    saving
+                                  }
+                                  onClick={() =>
+                                    void toggleStatus(
+                                      organization
+                                    )
+                                  }
+                                  className={`rounded-lg px-2.5 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
+                                    organization.status ===
+                                    'active'
+                                      ? 'bg-rose-950 text-rose-300'
+                                      : 'bg-emerald-950 text-emerald-300'
+                                  }`}
+                                >
+                                  {organization.status ===
+                                  'active'
+                                    ? 'Suspend'
+                                    : 'Activate'}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={
+                                    Boolean(
+                                      deletingOrganizationId
+                                    )
+                                  }
+                                  onClick={() => {
+                                    setDeleteTarget(
+                                      organization
+                                    );
+
+                                    setDeleteConfirmation(
+                                      ''
+                                    );
+
+                                    setError('');
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-rose-900 bg-rose-950/40 px-2.5 py-1.5 text-xs font-medium text-rose-300 hover:bg-rose-900/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <Trash2
+                                    size={14}
+                                  />
+
+                                  {deletingOrganizationId ===
+                                  organization.id
+                                    ? 'Deleting...'
+                                    : 'Delete'}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
+
+        {tab ===
+          'feedback' && (
+          <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+              <div>
+                <h3 className="font-semibold">
+                  Client Feedback & Support
+                </h3>
+
+                <p className="mt-1 text-xs text-slate-400">
+                  Review feedback, change requests and issues from Client Admins.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  void loadFeedback()
+                }
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-800"
+              >
+                <RefreshCw
+                  size={16}
+                />
+              </button>
+            </div>
+
+            {feedbackLoading ? (
+              <div className="p-10 text-center text-sm text-slate-400">
+                Loading requests...
+              </div>
+            ) : feedback.length ===
+              0 ? (
+              <div className="p-10 text-center text-sm text-slate-400">
+                No client feedback yet.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-800">
+                {feedback.map(
+                  (item) => (
+                    <button
+                      key={
+                        item.id
+                      }
+                      type="button"
+                      onClick={() =>
+                        openFeedback(
+                          item
+                        )
+                      }
+                      className="block w-full p-5 text-left transition-colors hover:bg-slate-800/50"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-white">
+                            {
+                              item.subject
+                            }
+                          </p>
+
+                          <p className="mt-1 text-xs text-slate-500">
+                            {item.organizationName ||
+                              'Unknown Organization'}
+                            {' · '}
+                            {
+                              item.submittedByName
+                            }
+                            {' · '}
+                            {
+                              item.submittedByEmail
+                            }
+                          </p>
+                        </div>
+
+                        <span className="rounded-full bg-slate-800 px-2.5 py-1 text-xs capitalize text-slate-300">
+                          {item.type.replace(
+                            /_/g,
+                            ' '
+                          )}
+                          {' · '}
+                          {
+                            item.status
+                          }
+                        </span>
+                      </div>
+
+                      <p className="mt-3 line-clamp-2 whitespace-pre-wrap text-sm text-slate-400">
+                        {
+                          item.message
+                        }
+                      </p>
+                    </button>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab ===
+          'broadcast' && (
+          <form
+            onSubmit={
+              sendBroadcast
+            }
+            className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+          >
+            <h3 className="font-semibold">
+              Send Software Update
+            </h3>
+
+            <p className="mt-1 text-xs text-slate-400">
+              Sends only to active Client Admins in active organizations. Managers and Employees are excluded.
+            </p>
+
+            <div className="mt-5 space-y-4">
+              <Field
+                label="Email Subject"
+                value={
+                  broadcastSubject
+                }
+                onChange={
+                  setBroadcastSubject
+                }
+              />
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                  Message
+                </label>
+
+                <textarea
+                  rows={7}
+                  value={
+                    broadcastMessage
+                  }
+                  onChange={(event) =>
+                    setBroadcastMessage(
+                      event.target.value
+                    )
+                  }
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  placeholder="What changed in the software?"
+                />
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  type="submit"
+                  loading={
+                    broadcastSending
+                  }
+                  loadingText="Sending..."
+                >
+                  <Send
+                    size={16}
+                  />
+                  Send to Active Client Admins
+                </Button>
+              </div>
+            </div>
+          </form>
+        )}
       </main>
 
       {showCreate && (
@@ -695,7 +1376,9 @@ function Dashboard({
           }
         >
           <form
-            onSubmit={createClient}
+            onSubmit={
+              createClient
+            }
             className="space-y-4"
           >
             <Field
@@ -703,7 +1386,9 @@ function Dashboard({
               value={
                 form.companyName
               }
-              onChange={(value) =>
+              onChange={(
+                value
+              ) =>
                 setForm({
                   ...form,
                   companyName:
@@ -717,7 +1402,9 @@ function Dashboard({
               value={
                 form.adminName
               }
-              onChange={(value) =>
+              onChange={(
+                value
+              ) =>
                 setForm({
                   ...form,
                   adminName:
@@ -732,7 +1419,9 @@ function Dashboard({
               value={
                 form.adminEmail
               }
-              onChange={(value) =>
+              onChange={(
+                value
+              ) =>
                 setForm({
                   ...form,
                   adminEmail:
@@ -747,7 +1436,9 @@ function Dashboard({
               value={
                 form.password
               }
-              onChange={(value) =>
+              onChange={(
+                value
+              ) =>
                 setForm({
                   ...form,
                   password:
@@ -760,7 +1451,9 @@ function Dashboard({
               <Button
                 type="button"
                 variant="secondary"
-                disabled={saving}
+                disabled={
+                  saving
+                }
                 onClick={() =>
                   setShowCreate(
                     false
@@ -772,11 +1465,85 @@ function Dashboard({
 
               <Button
                 type="submit"
-                disabled={saving}
+                loading={saving}
+                loadingText="Creating..."
               >
-                {saving
-                  ? 'Creating...'
-                  : 'Create Client'}
+                Create Client
+              </Button>
+            </div>
+          </form>
+        </Overlay>
+      )}
+
+      {editTarget && (
+        <Overlay
+          title={`Edit Client — ${editTarget.name}`}
+          onClose={() =>
+            !saving &&
+            setEditTarget(
+              null
+            )
+          }
+        >
+          <form
+            onSubmit={
+              saveEdit
+            }
+            className="space-y-4"
+          >
+            <Field
+              label="Company Name"
+              value={
+                editCompanyName
+              }
+              onChange={
+                setEditCompanyName
+              }
+            />
+
+            <Field
+              label="Client Admin Name"
+              value={
+                editAdminName
+              }
+              onChange={
+                setEditAdminName
+              }
+            />
+
+            <Field
+              label="Client Admin Email"
+              type="email"
+              value={
+                editAdminEmail
+              }
+              onChange={
+                setEditAdminEmail
+              }
+            />
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={
+                  saving
+                }
+                onClick={() =>
+                  setEditTarget(
+                    null
+                  )
+                }
+              >
+                Cancel
+              </Button>
+
+              <Button
+                type="submit"
+                loading={saving}
+                loadingText="Saving..."
+              >
+                Save Changes
               </Button>
             </div>
           </form>
@@ -787,40 +1554,275 @@ function Dashboard({
         <Overlay
           title={`Reset Admin Password — ${resetTarget.name}`}
           onClose={() => {
-            if (saving) return;
-            setResetTarget(null);
-            setNewPassword('');
+            if (saving) {
+              return;
+            }
+
+            setResetTarget(
+              null
+            );
+
+            setNewPassword(
+              ''
+            );
           }}
         >
           <div className="space-y-4">
             <Field
               label="New Password"
               type="password"
-              value={newPassword}
-              onChange={setNewPassword}
+              value={
+                newPassword
+              }
+              onChange={
+                setNewPassword
+              }
             />
 
             <div className="flex justify-end gap-2">
               <Button
                 variant="secondary"
-                disabled={saving}
+                disabled={
+                  saving
+                }
                 onClick={() => {
-                  setResetTarget(null);
-                  setNewPassword('');
+                  setResetTarget(
+                    null
+                  );
+
+                  setNewPassword(
+                    ''
+                  );
                 }}
               >
                 Cancel
               </Button>
 
               <Button
-                disabled={saving}
+                loading={saving}
+                loadingText="Saving..."
                 onClick={() =>
                   void resetPassword()
                 }
               >
-                {saving
-                  ? 'Saving...'
-                  : 'Reset Password'}
+                Reset Password
+              </Button>
+            </div>
+          </div>
+        </Overlay>
+      )}
+
+      {deleteTarget && (
+        <Overlay
+          title={`Delete Client — ${deleteTarget.name}`}
+          onClose={() => {
+            if (
+              deletingOrganizationId
+            ) {
+              return;
+            }
+
+            setDeleteTarget(
+              null
+            );
+
+            setDeleteConfirmation(
+              ''
+            );
+          }}
+        >
+          <div className="space-y-4">
+            <div className="rounded-xl border border-rose-900 bg-rose-950/40 p-4 text-sm text-rose-200">
+              <p className="font-semibold">
+                Permanent deletion
+              </p>
+
+              <p className="mt-2 leading-6 text-rose-300">
+                This will permanently delete the Client Admin, every Manager, every Employee, and all tenant database records belonging to this organization.
+              </p>
+
+              <p className="mt-2 font-medium">
+                This action cannot be undone.
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Type <strong>{deleteTarget.name}</strong> to confirm
+              </label>
+
+              <input
+                value={
+                  deleteConfirmation
+                }
+                disabled={
+                  Boolean(
+                    deletingOrganizationId
+                  )
+                }
+                onChange={(event) =>
+                  setDeleteConfirmation(
+                    event.target.value
+                  )
+                }
+                className="w-full rounded-lg border border-rose-900 bg-slate-950 px-3.5 py-2.5 text-sm text-white outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                disabled={
+                  Boolean(
+                    deletingOrganizationId
+                  )
+                }
+                onClick={() => {
+                  setDeleteTarget(
+                    null
+                  );
+
+                  setDeleteConfirmation(
+                    ''
+                  );
+                }}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                variant="danger"
+                loading={
+                  Boolean(
+                    deletingOrganizationId
+                  )
+                }
+                loadingText="Deleting Client..."
+                disabled={
+                  deleteConfirmation.trim() !==
+                  deleteTarget.name
+                }
+                onClick={() =>
+                  void deleteClient()
+                }
+              >
+                Permanently Delete
+              </Button>
+            </div>
+          </div>
+        </Overlay>
+      )}
+
+      {feedbackTarget && (
+        <Overlay
+          title={feedbackTarget.subject}
+          onClose={() =>
+            !saving &&
+            setFeedbackTarget(
+              null
+            )
+          }
+        >
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs text-slate-500">
+                {feedbackTarget.organizationName ||
+                  'Unknown Organization'}
+                {' · '}
+                {
+                  feedbackTarget.submittedByEmail
+                }
+              </p>
+
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-300">
+                {
+                  feedbackTarget.message
+                }
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Status
+              </label>
+
+              <select
+                value={
+                  feedbackStatus
+                }
+                disabled={
+                  saving
+                }
+                onChange={(event) =>
+                  setFeedbackStatus(
+                    event.target.value as FeedbackStatus
+                  )
+                }
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white"
+              >
+                <option value="new">
+                  New
+                </option>
+
+                <option value="reviewing">
+                  Reviewing
+                </option>
+
+                <option value="resolved">
+                  Resolved
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Reply / Note visible to Client Admin
+              </label>
+
+              <textarea
+                rows={4}
+                value={
+                  feedbackNote
+                }
+                disabled={
+                  saving
+                }
+                onChange={(event) =>
+                  setFeedbackNote(
+                    event.target.value
+                  )
+                }
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Saving this reply also emails the original Client Admin who submitted the request.
+            </p>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                disabled={
+                  saving
+                }
+                onClick={() =>
+                  setFeedbackTarget(
+                    null
+                  )
+                }
+              >
+                Cancel
+              </Button>
+
+              <Button
+                loading={saving}
+                loadingText="Saving & Sending..."
+                onClick={() =>
+                  void saveFeedback()
+                }
+              >
+                Save Reply
               </Button>
             </div>
           </div>
@@ -831,7 +1833,9 @@ function Dashboard({
         <Overlay
           title="Client Admin Credentials"
           onClose={() =>
-            setCredentials(null)
+            setCredentials(
+              null
+            )
           }
         >
           <div className="space-y-4">
@@ -865,7 +1869,9 @@ function Dashboard({
               </p>
 
               <p className="mt-1 select-all text-sm font-medium text-white">
-                {credentials.email}
+                {
+                  credentials.email
+                }
               </p>
 
               <p className="mt-4 text-xs text-slate-500">
@@ -873,7 +1879,9 @@ function Dashboard({
               </p>
 
               <p className="mt-1 select-all break-all text-sm font-medium text-white">
-                {credentials.password}
+                {
+                  credentials.password
+                }
               </p>
             </div>
 
@@ -892,6 +1900,33 @@ function Dashboard({
         </Overlay>
       )}
     </div>
+  );
+}
+
+function TopTab({
+  active,
+  onClick,
+  icon,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
+        active
+          ? 'bg-blue-600 text-white shadow-sm'
+          : 'text-slate-300 hover:bg-slate-800'
+      }`}
+    >
+      {icon}
+      {children}
+    </button>
   );
 }
 
@@ -926,7 +1961,10 @@ function Field({
   onChange: (
     value: string
   ) => void;
-  type?: 'text' | 'email' | 'password';
+  type?:
+    | 'text'
+    | 'email'
+    | 'password';
 }) {
   return (
     <div>
@@ -959,8 +1997,8 @@ function Overlay({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8">
-      <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+        <div className="sticky top-0 flex items-center justify-between border-b border-slate-800 bg-slate-900 px-5 py-4">
           <h3 className="font-semibold text-white">
             {title}
           </h3>
