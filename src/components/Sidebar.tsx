@@ -13,6 +13,7 @@ import {
   X,
   UserCircle,
   Settings2,
+  MessageSquareText,
 } from "lucide-react";
 import type { Role } from "../types";
 import { useAuth } from "../context/AuthContext";
@@ -53,7 +54,7 @@ const navItems: NavItem[] = [
     to: "/approvals",
     label: "Approvals",
     icon: CheckSquare,
-    roles: ["manager"],
+    roles: ["admin", "manager"],
   },
   {
     to: "/my-team",
@@ -89,6 +90,12 @@ const navItems: NavItem[] = [
     to: "/policies",
     label: "Leave Policies",
     icon: FileText,
+    roles: ["admin"],
+  },
+  {
+    to: "/feedback",
+    label: "Feedback & Support",
+    icon: MessageSquareText,
     roles: ["admin"],
   },
   {
@@ -138,7 +145,7 @@ export default function Sidebar({
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div className="flex items-center gap-2.5">
               <img
-                src="/neddconsultantlogo.png"
+                src="/neddconsultantlogo.jpeg"
                 alt="Nedd Consultant"
                 className="h-9 w-auto max-w-[70px] object-contain"
               />
