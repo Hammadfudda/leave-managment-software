@@ -134,16 +134,67 @@ export default function SuperAdminPortal() {
 
       {authorized && (
         <>
-          <button
-            type="button"
-            onClick={() =>
-              setOpen(true)
-            }
-            className="fixed bottom-5 right-5 z-[70] inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-xl hover:bg-blue-700"
-          >
-            <Settings2 size={17} />
-            Super Admin Tools
-          </button>
+          {/*
+           * Keep the new SaaS controls visible on the Super Admin screen.
+           * Previously they were hidden behind one small floating button,
+           * which made Edit Company / Feedback / Broadcast look missing.
+           */}
+          <div className="fixed bottom-5 right-5 z-[70] w-[min(92vw,430px)] rounded-2xl border border-slate-700 bg-slate-900/95 p-3 text-slate-100 shadow-2xl backdrop-blur">
+            <div className="mb-2 flex items-center gap-2 px-1">
+              <Settings2
+                size={17}
+                className="text-blue-400"
+              />
+
+              <div>
+                <p className="text-sm font-semibold">
+                  Super Admin Management
+                </p>
+
+                <p className="text-[11px] text-slate-400">
+                  Edit clients, review feedback and send software updates.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setTab('companies');
+                  setOpen(true);
+                }}
+                className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-2 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+              >
+                <Building2 size={15} />
+                Edit Companies
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTab('feedback');
+                  setOpen(true);
+                }}
+                className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-950 px-2 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+              >
+                <MessageSquareText size={15} />
+                Client Feedback
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTab('broadcast');
+                  setOpen(true);
+                }}
+                className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-950 px-2 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+              >
+                <Mail size={15} />
+                Software Update
+              </button>
+            </div>
+          </div>
 
           {open && (
             <ToolsDrawer
@@ -498,11 +549,10 @@ function CompaniesPanel() {
 
             <Button
               type="submit"
-              disabled={saving}
+              loading={saving}
+              loadingText="Saving..."
             >
-              {saving
-                ? 'Saving...'
-                : 'Save Changes'}
+              Save Changes
             </Button>
           </div>
         </form>
@@ -733,14 +783,13 @@ function FeedbackPanel() {
               Cancel
             </Button>
             <Button
-              disabled={saving}
+              loading={saving}
+              loadingText="Saving..."
               onClick={() =>
                 void save()
               }
             >
-              {saving
-                ? 'Saving...'
-                : 'Save'}
+              Save
             </Button>
           </div>
         </div>
@@ -867,12 +916,11 @@ function BroadcastPanel() {
         <div className="flex justify-end">
           <Button
             type="submit"
-            disabled={sending}
+            loading={sending}
+            loadingText="Sending..."
           >
             <Send size={16} />
-            {sending
-              ? 'Sending...'
-              : 'Send to Active Client Admins'}
+            Send to Active Client Admins
           </Button>
         </div>
       </form>

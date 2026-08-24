@@ -7,40 +7,114 @@ import {
 import {
   CalendarDays,
   Clock3,
+  History,
   RotateCcw,
   Square,
 } from 'lucide-react';
 
-import { useAuth } from '../context/AuthContext';
-import { useAppData } from '../context/AppDataContext';
+import {
+  useAuth,
+} from '../context/AuthContext';
+
+import {
+  useAppData,
+} from '../context/AppDataContext';
+
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import StatusBadge from '../components/ui/StatusBadge';
-import { formatDate } from '../utils/formatDate';
-import { getApiErrorMessage } from '../services/api';
-import type { LeaveRequest } from '../types';
+
+import {
+  formatDate,
+} from '../utils/formatDate';
+
+import {
+  getApiErrorMessage,
+} from '../services/api';
+
+import type {
+  LeaveRequest,
+} from '../types';
 
 type ActionMode =
   | 'extend'
   | 'stop'
   | null;
 
+type ViewTab =
+  | 'current'
+  | 'history';
+
 function dateOnly(
   value: string
 ) {
-  return String(value || '')
-    .split('T')[0];
+  return String(
+    value ||
+    ''
+  ).split('T')[0];
+}
+
+function asDay(
+  value:
+    | string
+    | Date
+    | null
+    | undefined
+) {
+  if (!value) {
+    return null;
+  }
+
+  const date =
+    new Date(
+      value
+    );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return null;
+  }
+
+  date.setHours(
+    0,
+    0,
+    0,
+    0
+  );
+
+  return date;
+}
+
+function todayOnly() {
+  const today =
+    new Date();
+
+  today.setHours(
+    0,
+    0,
+    0,
+    0
+  );
+
+  return today;
 }
 
 function addOneDay(
   value: string
 ) {
-  const date = new Date(
-    `${dateOnly(value)}T00:00:00`
-  );
+  const date =
+    new Date(
+      `${dateOnly(
+        value
+      )}T00:00:00`
+    );
 
   date.setDate(
-    date.getDate() + 1
+    date.getDate() +
+      1
   );
 
   return date
@@ -48,8 +122,58 @@ function addOneDay(
     .split('T')[0];
 }
 
+function isOriginalLeave(
+  leave:
+    LeaveRequest
+) {
+  return (
+    !leave.isExtension &&
+    !leave.isStopRequest
+  );
+}
+
+function isActiveToday(
+  leave:
+    LeaveRequest
+) {
+  if (
+    !isOriginalLeave(
+      leave
+    ) ||
+    leave.status !==
+      'approved'
+  ) {
+    return false;
+  }
+
+  const start =
+    asDay(
+      leave.startDate
+    );
+
+  const end =
+    asDay(
+      leave.actualEndDate ||
+        leave.endDate
+    );
+
+  const today =
+    todayOnly();
+
+  return Boolean(
+    start &&
+      end &&
+      start <=
+        today &&
+      end >=
+        today
+  );
+}
+
 export default function LeaveHistory() {
-  const { user } = useAuth();
+  const {
+    user,
+  } = useAuth();
 
   const {
     leaveRequests,
@@ -57,6 +181,13 @@ export default function LeaveHistory() {
     extendLeave,
     requestStopLeave,
   } = useAppData();
+
+  const [
+    viewTab,
+    setViewTab,
+  ] = useState<ViewTab>(
+    'current'
+  );
 
   const [
     loading,
@@ -71,9 +202,9 @@ export default function LeaveHistory() {
   const [
     selected,
     setSelected,
-  ] = useState<LeaveRequest | null>(
-    null
-  );
+  ] = useState<
+    LeaveRequest | null
+  >(null);
 
   const [
     actionMode,
@@ -92,7 +223,6 @@ export default function LeaveHistory() {
     setReason,
   ] = useState('');
 
-
   const [
     submitting,
     setSubmitting,
@@ -104,34 +234,50 @@ export default function LeaveHistory() {
       return;
     }
 
-    let cancelled = false;
+    let cancelled =
+      false;
 
-    const load = async () => {
-      setLoading(true);
-      setApiError('');
+    const load =
+      async () => {
+        setLoading(
+          true
+        );
 
-      try {
-        await refreshLeaveRequests();
-      } catch (error) {
-        if (!cancelled) {
-          setApiError(
-            getApiErrorMessage(
-              error,
-              'Unable to load your leave requests.'
-            )
-          );
+        setApiError(
+          ''
+        );
+
+        try {
+          await refreshLeaveRequests();
+        } catch (
+          error
+        ) {
+          if (
+            !cancelled
+          ) {
+            setApiError(
+              getApiErrorMessage(
+                error,
+                'Unable to load your leave requests.'
+              )
+            );
+          }
+        } finally {
+          if (
+            !cancelled
+          ) {
+            setLoading(
+              false
+            );
+          }
         }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
+      };
 
     void load();
 
     return () => {
-      cancelled = true;
+      cancelled =
+        true;
     };
   }, [
     user?.id,
@@ -150,7 +296,9 @@ export default function LeaveHistory() {
             String(
               leave.employeeId
             ) ===
-            String(user.id)
+            String(
+              user.id
+            )
         )
         .sort(
           (a, b) =>
@@ -166,18 +314,37 @@ export default function LeaveHistory() {
       user?.id,
     ]);
 
+  /*
+   * Keep original leave modification state separate:
+   *
+   * stopRequestedEver:
+   *   preserves the old one-stop-request rule.
+   *
+   * stopBlocksExtend:
+   *   pending or approved Stop request makes Extend unavailable.
+   *   A rejected Stop request does not block Extend.
+   */
   const modificationState =
     useMemo(() => {
       const byOriginal =
         new Map<
           string,
           {
-            extended: boolean;
-            stopped: boolean;
+            extended:
+              boolean;
+            stopRequestedEver:
+              boolean;
+            stopBlocksExtend:
+              boolean;
+            approvedStop:
+              boolean;
           }
         >();
 
-      for (const leave of myLeaves) {
+      for (
+        const leave of
+        myLeaves
+      ) {
         if (
           !leave.originalRequestId
         ) {
@@ -190,17 +357,49 @@ export default function LeaveHistory() {
           );
 
         const current =
-          byOriginal.get(key) || {
-            extended: false,
-            stopped: false,
+          byOriginal.get(
+            key
+          ) || {
+            extended:
+              false,
+            stopRequestedEver:
+              false,
+            stopBlocksExtend:
+              false,
+            approvedStop:
+              false,
           };
 
-        if (leave.isExtension) {
-          current.extended = true;
+        if (
+          leave.isExtension
+        ) {
+          current.extended =
+            true;
         }
 
-        if (leave.isStopRequest) {
-          current.stopped = true;
+        if (
+          leave.isStopRequest
+        ) {
+          current.stopRequestedEver =
+            true;
+
+          if (
+            leave.status ===
+              'pending' ||
+            leave.status ===
+              'approved'
+          ) {
+            current.stopBlocksExtend =
+              true;
+          }
+
+          if (
+            leave.status ===
+            'approved'
+          ) {
+            current.approvedStop =
+              true;
+          }
         }
 
         byOriginal.set(
@@ -212,40 +411,86 @@ export default function LeaveHistory() {
       return byOriginal;
     }, [myLeaves]);
 
+  const currentLeaves =
+    useMemo(
+      () =>
+        myLeaves.filter(
+          isActiveToday
+        ),
+      [myLeaves]
+    );
+
+  /*
+   * History intentionally shows ALL requests, including the current leave,
+   * extensions and stop requests. This matches the requested "History mai
+   * saara show ho" behavior.
+   */
+  const visibleLeaves =
+    viewTab ===
+    'current'
+      ? currentLeaves
+      : myLeaves;
+
   if (!user) {
     return null;
   }
 
   const closeAction =
     () => {
-      if (submitting) {
+      if (
+        submitting
+      ) {
         return;
       }
 
-      setSelected(null);
-      setActionMode(null);
-      setActionDate('');
+      setSelected(
+        null
+      );
+      setActionMode(
+        null
+      );
+      setActionDate(
+        ''
+      );
       setReason('');
     };
 
   const openExtend = (
-    leave: LeaveRequest
+    leave:
+      LeaveRequest
   ) => {
-    setSelected(leave);
-    setActionMode('extend');
-    setActionDate('');
+    setSelected(
+      leave
+    );
+    setActionMode(
+      'extend'
+    );
+    setActionDate(
+      ''
+    );
     setReason('');
-    setApiError('');
+    setApiError(
+      ''
+    );
   };
 
   const openStop = (
-    leave: LeaveRequest
+    leave:
+      LeaveRequest
   ) => {
-    setSelected(leave);
-    setActionMode('stop');
-    setActionDate('');
+    setSelected(
+      leave
+    );
+    setActionMode(
+      'stop'
+    );
+    setActionDate(
+      ''
+    );
     setReason('');
-    setApiError('');
+    setApiError(
+      ''
+    );
   };
 
   const submitAction =
@@ -262,7 +507,9 @@ export default function LeaveHistory() {
         return;
       }
 
-      setSubmitting(true);
+      setSubmitting(
+        true
+      );
       setApiError('');
 
       try {
@@ -285,15 +532,12 @@ export default function LeaveHistory() {
           );
         }
 
-        /*
-         * Read back from MongoDB after every mutation.
-         * My Leaves must always reflect the server,
-         * not a stale/local-only React array.
-         */
         await refreshLeaveRequests();
 
         closeAction();
-      } catch (error) {
+      } catch (
+        error
+      ) {
         setApiError(
           getApiErrorMessage(
             error,
@@ -304,7 +548,9 @@ export default function LeaveHistory() {
           )
         );
       } finally {
-        setSubmitting(false);
+        setSubmitting(
+          false
+        );
       }
     };
 
@@ -316,8 +562,74 @@ export default function LeaveHistory() {
         </h1>
 
         <p className="mt-1 text-sm text-gray-500">
-          View your leave requests and request one-time changes to an approved leave.
+          View your current active leave and complete leave history.
         </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() =>
+            setViewTab(
+              'current'
+            )
+          }
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            viewTab ===
+            'current'
+              ? 'bg-blue-600 text-white'
+              : 'bg-white text-gray-600 ring-1 ring-inset ring-gray-200 hover:bg-gray-50'
+          }`}
+        >
+          <Clock3
+            size={15}
+          />
+          Current
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+              viewTab ===
+              'current'
+                ? 'bg-white/20 text-white'
+                : 'bg-gray-100 text-gray-600'
+            }`}
+          >
+            {
+              currentLeaves.length
+            }
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() =>
+            setViewTab(
+              'history'
+            )
+          }
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            viewTab ===
+            'history'
+              ? 'bg-blue-600 text-white'
+              : 'bg-white text-gray-600 ring-1 ring-inset ring-gray-200 hover:bg-gray-50'
+          }`}
+        >
+          <History
+            size={15}
+          />
+          History
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+              viewTab ===
+              'history'
+                ? 'bg-white/20 text-white'
+                : 'bg-gray-100 text-gray-600'
+            }`}
+          >
+            {
+              myLeaves.length
+            }
+          </span>
+        </button>
       </div>
 
       {apiError && (
@@ -325,6 +637,16 @@ export default function LeaveHistory() {
           {apiError}
         </div>
       )}
+
+      {viewTab ===
+        'current' &&
+        !loading &&
+        currentLeaves.length >
+          0 && (
+          <div className="rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm text-blue-700">
+            You currently have an active approved leave. While this leave is active, a new normal leave request cannot be submitted.
+          </div>
+        )}
 
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
         <div className="overflow-x-auto">
@@ -356,7 +678,9 @@ export default function LeaveHistory() {
               {loading && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={
+                      6
+                    }
                     className="px-5 py-8 text-center text-gray-400"
                   >
                     Loading leave requests...
@@ -365,24 +689,32 @@ export default function LeaveHistory() {
               )}
 
               {!loading &&
-                myLeaves.length ===
+                visibleLeaves.length ===
                   0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={
+                        6
+                      }
                       className="px-5 py-8 text-center text-gray-400"
                     >
-                      No leave requests yet.
+                      {viewTab ===
+                      'current'
+                        ? 'You do not have an active leave today.'
+                        : 'No leave requests yet.'}
                     </td>
                   </tr>
                 )}
 
               {!loading &&
-                myLeaves.map(
-                  (leave) => {
+                visibleLeaves.map(
+                  (
+                    leave
+                  ) => {
                     const isOriginal =
-                      !leave.isExtension &&
-                      !leave.isStopRequest;
+                      isOriginalLeave(
+                        leave
+                      );
 
                     const modifications =
                       modificationState.get(
@@ -397,20 +729,54 @@ export default function LeaveHistory() {
                           ?.extended
                       );
 
-                    const hasStopped =
+                    const stopRequestedEver =
                       Boolean(
                         modifications
-                          ?.stopped
+                          ?.stopRequestedEver
                       );
 
+                    const stopBlocksExtend =
+                      Boolean(
+                        modifications
+                          ?.stopBlocksExtend
+                      );
+
+                    const approvedStop =
+                      Boolean(
+                        modifications
+                          ?.approvedStop
+                      );
+
+                    /*
+                     * Extension / Stop actions only make sense while the
+                     * original leave is actually active today.
+                     */
                     const canModify =
                       isOriginal &&
                       leave.status ===
-                        'approved';
+                        'approved' &&
+                      isActiveToday(
+                        leave
+                      );
+
+                    const extendDisabled =
+                      hasExtended ||
+                      stopBlocksExtend;
+
+                    const extendTitle =
+                      hasExtended
+                        ? 'This leave has already been extended once.'
+                        : approvedStop
+                          ? 'This leave has been stopped. It can no longer be extended.'
+                          : stopBlocksExtend
+                            ? 'A stop-leave request is pending. Extension is unavailable.'
+                            : 'Extend leave';
 
                     return (
                       <tr
-                        key={leave.id}
+                        key={
+                          leave.id
+                        }
                         className="hover:bg-gray-50/50"
                       >
                         <td className="px-5 py-3 capitalize text-gray-700">
@@ -483,21 +849,24 @@ export default function LeaveHistory() {
                                   )
                                 }
                                 disabled={
-                                  hasExtended
+                                  extendDisabled
                                 }
                                 className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent"
                                 title={
-                                  hasExtended
-                                    ? 'This leave has already been extended once.'
-                                    : 'Extend leave'
+                                  extendTitle
                                 }
                               >
                                 <RotateCcw
-                                  size={13}
+                                  size={
+                                    13
+                                  }
                                 />
+
                                 {hasExtended
                                   ? 'Extended'
-                                  : 'Extend'}
+                                  : stopBlocksExtend
+                                    ? 'Extend unavailable'
+                                    : 'Extend'}
                               </button>
 
                               <button
@@ -508,20 +877,25 @@ export default function LeaveHistory() {
                                   )
                                 }
                                 disabled={
-                                  hasStopped
+                                  stopRequestedEver
                                 }
                                 className="inline-flex items-center gap-1 rounded-lg border border-amber-200 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent"
                                 title={
-                                  hasStopped
+                                  stopRequestedEver
                                     ? 'A stop request has already been submitted for this leave.'
                                     : 'Stop leave early'
                                 }
                               >
                                 <Square
-                                  size={13}
+                                  size={
+                                    13
+                                  }
                                 />
-                                {hasStopped
-                                  ? 'Stop requested'
+
+                                {stopRequestedEver
+                                  ? approvedStop
+                                    ? 'Stopped'
+                                    : 'Stop requested'
                                   : 'Stop'}
                               </button>
                             </div>
@@ -541,19 +915,20 @@ export default function LeaveHistory() {
       </div>
 
       <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs text-blue-700">
-        Each original approved leave can be extended only once and can have only one stop-leave request. The backend also enforces this rule.
+        Current shows only the original approved leave that is active today. History shows all leave, extension and stop requests. A pending or approved Stop request prevents extension of that leave.
       </div>
 
       <Modal
-        open={
-          Boolean(
-            selected &&
-              actionMode
-          )
+        open={Boolean(
+          selected &&
+            actionMode
+        )}
+        onClose={
+          closeAction
         }
-        onClose={closeAction}
         title={
-          actionMode === 'extend'
+          actionMode ===
+          'extend'
             ? 'Extend Leave'
             : 'Stop Leave Early'
         }
@@ -561,22 +936,29 @@ export default function LeaveHistory() {
           <>
             <Button
               variant="secondary"
-              onClick={closeAction}
-              disabled={submitting}
+              onClick={
+                closeAction
+              }
+              disabled={
+                submitting
+              }
             >
               Cancel
             </Button>
 
             <Button
-              onClick={submitAction}
-              disabled={submitting}
+              onClick={
+                submitAction
+              }
+              loading={
+                submitting
+              }
+              loadingText="Submitting..."
             >
-              {submitting
-                ? 'Submitting...'
-                : actionMode ===
-                    'extend'
-                  ? 'Submit Extension'
-                  : 'Submit Stop Request'}
+              {actionMode ===
+              'extend'
+                ? 'Submit Extension'
+                : 'Submit Stop Request'}
             </Button>
           </>
         }
@@ -596,8 +978,11 @@ export default function LeaveHistory() {
 
               <p className="mt-1 flex items-center gap-1.5 text-xs text-gray-500">
                 <CalendarDays
-                  size={14}
+                  size={
+                    14
+                  }
                 />
+
                 {formatDate(
                   selected.startDate
                 )}{' '}
@@ -619,7 +1004,12 @@ export default function LeaveHistory() {
 
               <input
                 type="date"
-                value={actionDate}
+                disabled={
+                  submitting
+                }
+                value={
+                  actionDate
+                }
                 min={
                   actionMode ===
                   'extend'
@@ -644,21 +1034,21 @@ export default function LeaveHistory() {
                   event
                 ) =>
                   setActionDate(
-                    event.target
+                    event
+                      .target
                       .value
                   )
                 }
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-gray-50 disabled:text-gray-400"
               />
 
               {actionMode ===
                 'stop' && (
                 <p className="mt-1 text-xs text-gray-400">
-                  Choose a date within the original leave period. The backend requires it to be before the current end date.
+                  Choose a date within the current leave period. The return date must be before the current end date.
                 </p>
               )}
             </div>
-
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -666,33 +1056,44 @@ export default function LeaveHistory() {
               </label>
 
               <textarea
-                rows={4}
-                value={reason}
+                value={
+                  reason
+                }
+                disabled={
+                  submitting
+                }
                 onChange={(
                   event
                 ) =>
                   setReason(
-                    event.target
+                    event
+                      .target
                       .value
                   )
                 }
+                rows={3}
                 placeholder={
                   actionMode ===
                   'extend'
                     ? 'Why do you need to extend this leave?'
                     : 'Why are you returning early?'
                 }
-                className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-gray-50 disabled:text-gray-400"
               />
             </div>
 
-            <div className="flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-              <Clock3
-                size={14}
-                className="mt-0.5 shrink-0"
-              />
-              This action can be submitted only once for this original leave.
-            </div>
+            {actionMode ===
+              'extend' && (
+              <div className="flex items-start gap-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2.5 text-xs text-indigo-700">
+                <Clock3
+                  size={
+                    14
+                  }
+                  className="mt-0.5 shrink-0"
+                />
+                The extension will be sent through the configured approval route.
+              </div>
+            )}
           </div>
         )}
       </Modal>

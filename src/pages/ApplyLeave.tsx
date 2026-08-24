@@ -91,7 +91,12 @@ function normalizeBalances(data: unknown): LeaveBalance[] {
 
 export default function ApplyLeave() {
   const { user } = useAuth();
-  const { refreshLeaveRequests } = useAppData();
+
+  const {
+    leaveRequests,
+    refreshLeaveRequests,
+  } = useAppData();
+
   const navigate = useNavigate();
 
   const [
@@ -190,6 +195,8 @@ export default function ApplyLeave() {
           api.get(
             '/departments'
           ),
+
+          refreshLeaveRequests(),
         ]);
 
         const availableTypes =
@@ -310,6 +317,135 @@ export default function ApplyLeave() {
         )
       : undefined;
 
+  const normalMyLeaves =
+    useMemo(
+      () =>
+        user
+          ? leaveRequests.filter(
+              (request) =>
+                String(
+                  request.employeeId
+                ) ===
+                  String(
+                    user.id
+                  ) &&
+                !request.isExtension &&
+                !request.isStopRequest
+            )
+          : [],
+      [
+        leaveRequests,
+        user?.id,
+      ]
+    );
+
+  const pendingNormalLeave =
+    useMemo(
+      () =>
+        normalMyLeaves.find(
+          (request) =>
+            request.status ===
+            'pending'
+        ),
+      [normalMyLeaves]
+    );
+
+  const activeApprovedLeave =
+    useMemo(
+      () => {
+        const today =
+          new Date();
+
+        today.setHours(
+          0,
+          0,
+          0,
+          0
+        );
+
+        return normalMyLeaves.find(
+          (request) => {
+            if (
+              request.status !==
+              'approved'
+            ) {
+              return false;
+            }
+
+            const start =
+              new Date(
+                request.startDate
+              );
+
+            const end =
+              new Date(
+                request.actualEndDate ||
+                  request.endDate
+              );
+
+            if (
+              Number.isNaN(
+                start.getTime()
+              ) ||
+              Number.isNaN(
+                end.getTime()
+              )
+            ) {
+              return false;
+            }
+
+            start.setHours(
+              0,
+              0,
+              0,
+              0
+            );
+
+            end.setHours(
+              0,
+              0,
+              0,
+              0
+            );
+
+            return (
+              start <=
+                today &&
+              end >=
+                today
+            );
+          }
+        );
+      },
+      [normalMyLeaves]
+    );
+
+  const leaveBlocked =
+    Boolean(
+      pendingNormalLeave ||
+        activeApprovedLeave
+    );
+
+  const blockedMessage =
+    pendingNormalLeave
+      ? `You already have a pending ${String(
+          pendingNormalLeave.leaveType
+        ).replace(
+          /_/g,
+          ' '
+        )} leave request. You can apply again after it is approved or rejected.`
+      : activeApprovedLeave
+        ? `Your approved ${String(
+            activeApprovedLeave.leaveType
+          ).replace(
+            /_/g,
+            ' '
+          )} leave is currently active until ${formatDate(
+            activeApprovedLeave.actualEndDate ||
+              activeApprovedLeave.endDate
+          )}. You cannot apply for another leave while it is active.`
+        : '';
+
   const handleFileChange = (
     event: ChangeEvent<HTMLInputElement>
   ) => {
@@ -350,6 +486,14 @@ export default function ApplyLeave() {
     event: FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
+
+    if (leaveBlocked) {
+      setErrorMessage(
+        blockedMessage ||
+          'You cannot submit another leave request right now.'
+      );
+      return;
+    }
 
     if (!leaveType) {
       setErrorMessage(
@@ -457,6 +601,13 @@ export default function ApplyLeave() {
           Submit a new leave request for approval.
         </p>
       </div>
+
+      {leaveBlocked && !loadingData && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <strong>Leave application unavailable:</strong>{' '}
+          {blockedMessage}
+        </div>
+      )}
 
       <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
         {loadingData ? (
@@ -679,6 +830,7 @@ export default function ApplyLeave() {
                 type="submit"
                 disabled={
                   loading ||
+                  leaveBlocked ||
                   Boolean(
                     selectedBalance &&
                     startDate &&
