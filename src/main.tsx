@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import App from './App.tsx';
-import SuperAdminApp from './super-admin/SuperAdminApp';
+import SuperAdminPortal from './super-admin/SuperAdminPortal';
 
 import './index.css';
 
@@ -11,6 +11,6 @@ const isSuperAdminRoute =
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {isSuperAdminRoute ? <SuperAdminApp /> : <App />}
+    {isSuperAdminRoute ? <SuperAdminPortal /> : <App />}
   </StrictMode>
 );
