@@ -38,22 +38,9 @@ const variants:
 interface Props
   extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
-
-  children:
-    ReactNode;
-
-  /*
-   * Standard backend-processing state.
-   * Example:
-   * <Button loading={saving} loadingText="Saving...">
-   *   Save Changes
-   * </Button>
-   */
-  loading?:
-    boolean;
-
-  loadingText?:
-    ReactNode;
+  children: ReactNode;
+  loading?: boolean;
+  loadingText?: ReactNode;
 }
 
 export default function Button({

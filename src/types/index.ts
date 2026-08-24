@@ -14,7 +14,11 @@ export type LeaveType =
   | 'maternity'
   | 'paternity';
 
-export const CORE_LEAVE_TYPES: LeaveType[] = ['annual', 'sick', 'casual'];
+export const CORE_LEAVE_TYPES: LeaveType[] = [
+  'annual',
+  'sick',
+  'casual',
+];
 
 export interface User {
   id: string;
@@ -32,16 +36,19 @@ export interface User {
   managerId?: string;
   canApproveOtherDepartments?: boolean;
   profilePhotoUrl?: string;
+  detailsStatus?: 'complete' | 'pending';
+  pendingFields?: string[];
+  mustChangePassword?: boolean;
+  passwordChangedFromDefault?: boolean;
 }
 
+/*
+ * Grade represents employee level only.
+ * Leave quota / carry-forward rules belong to LeavePolicy.
+ */
 export interface Grade {
   id: string;
   name: string;
-  annualLeaveQuota: number;
-  sickLeaveQuota: number;
-  casualLeaveQuota: number;
-  carryForwardAllowed: boolean;
-  maxCarryForwardDays: number;
   description?: string;
 }
 
@@ -49,6 +56,11 @@ export interface LeavePolicy {
   id: string;
   leaveType: string;
   role?: string;
+  gradeQuotas: Array<{
+    gradeId: string;
+    gradeName?: string;
+    yearlyQuota: number;
+  }>;
   requiresApprovalFrom: 'manager' | 'admin';
   approvalRouting?: {
     designation?: string;
@@ -57,11 +69,16 @@ export interface LeavePolicy {
     approverIds: string[];
   };
   requiresDocumentUpload: boolean;
-  documentRequirement?: 'optional' | 'required' | 'not_required';
+  documentRequirement?:
+    | 'optional'
+    | 'required'
+    | 'not_required';
   adminOnlyApproval?: boolean;
   finalApprovalMode?: boolean;
   minDaysNoticeRequired: number;
   isPaid: boolean;
+  carryForwardAllowed?: boolean;
+  maxCarryForwardDays?: number;
 }
 
 export interface ApprovalHistoryEntry {

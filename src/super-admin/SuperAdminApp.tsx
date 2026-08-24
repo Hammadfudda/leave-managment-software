@@ -82,7 +82,6 @@ const emptyClient = {
   companyName: '',
   adminName: '',
   adminEmail: '',
-  password: '',
 };
 
 export default function SuperAdminApp() {
@@ -365,9 +364,6 @@ function Dashboard({
       null
     );
 
-  const [newPassword, setNewPassword] =
-    useState('');
-
   const [editTarget, setEditTarget] =
     useState<Organization | null>(
       null
@@ -501,11 +497,10 @@ function Dashboard({
     if (
       !form.companyName.trim() ||
       !form.adminName.trim() ||
-      !form.adminEmail.trim() ||
-      form.password.length < 8
+      !form.adminEmail.trim()
     ) {
       setError(
-        'Complete all fields. Password must be at least 8 characters.'
+        'Company name, Client Admin name and email are required.'
       );
       return;
     }
@@ -572,13 +567,7 @@ function Dashboard({
   };
 
   const resetPassword = async () => {
-    if (
-      !resetTarget ||
-      newPassword.length < 8
-    ) {
-      setError(
-        'Password must be at least 8 characters.'
-      );
+    if (!resetTarget) {
       return;
     }
 
@@ -589,10 +578,7 @@ function Dashboard({
       const response =
         await superAdminApi.patch(
           `/super-admin/organizations/${resetTarget.id}/reset-admin-password`,
-          {
-            password:
-              newPassword,
-          }
+          {}
         );
 
       setCredentials(
@@ -600,7 +586,12 @@ function Dashboard({
       );
 
       setResetTarget(null);
-      setNewPassword('');
+
+      setNotice(
+        response.data.emailSent
+          ? 'Temporary password generated and emailed to the Client Admin.'
+          : 'Temporary password generated. Email delivery failed; share the displayed credentials securely.'
+      );
     } catch (requestError) {
       setError(
         getSuperAdminError(
@@ -1430,23 +1421,6 @@ function Dashboard({
               }
             />
 
-            <Field
-              label="Client Admin Password"
-              type="password"
-              value={
-                form.password
-              }
-              onChange={(
-                value
-              ) =>
-                setForm({
-                  ...form,
-                  password:
-                    value,
-                })
-              }
-            />
-
             <div className="flex justify-end gap-2 pt-2">
               <Button
                 type="button"
@@ -1568,44 +1542,29 @@ function Dashboard({
           }}
         >
           <div className="space-y-4">
-            <Field
-              label="New Password"
-              type="password"
-              value={
-                newPassword
-              }
-              onChange={
-                setNewPassword
-              }
-            />
+            <div className="rounded-xl border border-amber-900 bg-amber-950/30 p-4 text-sm text-amber-200">
+              A new random <strong>Temporary Password</strong> will be generated and emailed to the Client Admin. After login, they must change it before using the system.
+            </div>
 
             <div className="flex justify-end gap-2">
               <Button
                 variant="secondary"
-                disabled={
-                  saving
+                disabled={saving}
+                onClick={() =>
+                  setResetTarget(null)
                 }
-                onClick={() => {
-                  setResetTarget(
-                    null
-                  );
-
-                  setNewPassword(
-                    ''
-                  );
-                }}
               >
                 Cancel
               </Button>
 
               <Button
                 loading={saving}
-                loadingText="Saving..."
+                loadingText="Generating..."
                 onClick={() =>
                   void resetPassword()
                 }
               >
-                Reset Password
+                Generate Temporary Password
               </Button>
             </div>
           </div>
@@ -1840,7 +1799,7 @@ function Dashboard({
         >
           <div className="space-y-4">
             <div className="rounded-lg border border-emerald-900 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-300">
-              Client Admin access created successfully.
+              Client Admin access created successfully with a temporary password.
             </div>
 
             <div
@@ -1875,13 +1834,17 @@ function Dashboard({
               </p>
 
               <p className="mt-4 text-xs text-slate-500">
-                Password
+                Temporary Password
               </p>
 
               <p className="mt-1 select-all break-all text-sm font-medium text-white">
                 {
                   credentials.password
                 }
+              </p>
+
+              <p className="mt-3 text-xs leading-5 text-amber-300">
+                Once the Client Admin logs in with this temporary password, they must change it before using the system.
               </p>
             </div>
 
