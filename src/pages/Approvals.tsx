@@ -8,6 +8,12 @@ import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
 import { formatDate } from '../utils/formatDate';
+import { getApiErrorMessage } from '../services/api';
+import {
+  approveLeaveRequest,
+  rejectLeaveRequest,
+  actOnBehalfOfApprover,
+} from '../services/leaveApprovalActions';
 import { CORE_LEAVE_TYPES } from '../types';
 import type { LeaveRequest } from '../types';
 
@@ -44,8 +50,6 @@ export default function Approvals() {
     leaveRequests,
     leaveBalances,
     getUserById,
-    approveLeave,
-    rejectLeave,
     cancelLeaveByAdmin,
     refreshLeaveRequests,
     refreshEmployees,
@@ -58,6 +62,11 @@ export default function Approvals() {
     useState<LeaveRequest | null>(null);
 
   const [comment, setComment] = useState('');
+  const [decisionAction, setDecisionAction] =
+    useState<'approved' | 'rejected' | null>(null);
+  const [decisionError, setDecisionError] = useState('');
+  const [adminTargetApproverId, setAdminTargetApproverId] =
+    useState('');
   const [cancelMode, setCancelMode] = useState(false);
   const [returnDate, setReturnDate] = useState('');
   const [cancelReason, setCancelReason] = useState('');
@@ -211,13 +220,19 @@ export default function Approvals() {
       ? getUserById(detail.employeeId)
       : undefined;
 
+  const currentTurnIdsOnDetail =
+    detail
+      ? getCurrentTurnApproverIds(detail)
+      : [];
+
   const isMyTurnOnDetail =
     !!detail &&
     (
-      user.role === 'admin' ||
-      getCurrentTurnApproverIds(detail).includes(
-        user.id
-      )
+      detail.isAdminOnlyDecision
+        ? user.role === 'admin'
+        : user.role === 'admin'
+          ? currentTurnIdsOnDetail.length > 0
+          : currentTurnIdsOnDetail.includes(user.id)
     );
 
   const balances = detail
@@ -232,28 +247,79 @@ export default function Approvals() {
       )
     : [];
 
-  const takeAction = (
+  const takeAction = async (
     action: 'approved' | 'rejected'
   ) => {
-    if (!detail || !user) return;
-
-    if (action === 'approved') {
-      approveLeave(
-        detail.id,
-        user,
-        comment
-      );
-    } else {
-      rejectLeave(
-        detail.id,
-        user,
-        comment
-      );
+    if (!detail || !user || decisionAction) {
+      return;
     }
 
-    setDetail(null);
-    setComment('');
-    setCancelMode(false);
+    if (
+      action === 'rejected' &&
+      !comment.trim()
+    ) {
+      setDecisionError(
+        'Please enter a comment before rejecting the leave request.'
+      );
+      return;
+    }
+
+    if (
+      user.role === 'admin' &&
+      !detail.isAdminOnlyDecision &&
+      !adminTargetApproverId
+    ) {
+      setDecisionError(
+        'Select the Manager/approver you are acting on behalf of.'
+      );
+      return;
+    }
+
+    setDecisionAction(action);
+    setDecisionError('');
+
+    try {
+      if (
+        user.role === 'admin' &&
+        !detail.isAdminOnlyDecision
+      ) {
+        await actOnBehalfOfApprover(
+          detail.id,
+          adminTargetApproverId,
+          action,
+          comment
+        );
+      } else if (action === 'approved') {
+        await approveLeaveRequest(
+          detail.id,
+          comment
+        );
+      } else {
+        await rejectLeaveRequest(
+          detail.id,
+          comment
+        );
+      }
+
+      await refreshLeaveRequests();
+
+      setDetail(null);
+      setComment('');
+      setDecisionError('');
+      setAdminTargetApproverId('');
+      setCancelMode(false);
+    } catch (error) {
+      setDecisionError(
+        getApiErrorMessage(
+          error,
+          action === 'approved'
+            ? 'Unable to approve this leave request.'
+            : 'Unable to reject this leave request.'
+        )
+      );
+    } finally {
+      setDecisionAction(null);
+    }
   };
 
   const handleCancelLeave = () => {
@@ -283,9 +349,19 @@ export default function Approvals() {
     leave: LeaveRequest,
     cancel = false
   ) => {
+    const currentTurnIds =
+      getCurrentTurnApproverIds(leave);
+
     setDetail(leave);
     setCancelMode(cancel);
     setComment('');
+    setDecisionError('');
+    setAdminTargetApproverId(
+      user.role === 'admin' &&
+      !leave.isAdminOnlyDecision
+        ? currentTurnIds[0] || ''
+        : ''
+    );
     setReturnDate('');
     setCancelReason('');
   };
@@ -627,6 +703,8 @@ export default function Approvals() {
         onClose={() => {
           setDetail(null);
           setComment('');
+          setDecisionError('');
+          setAdminTargetApproverId('');
           setCancelMode(false);
         }}
         title={
@@ -662,22 +740,36 @@ export default function Approvals() {
             </>
           ) : isMyTurnOnDetail ? (
             <>
+              {detail?.hasAttachment && (
+                <LeaveAttachmentButton
+                  leaveRequestId={detail.id}
+                  hasAttachment={detail.hasAttachment}
+                  attachmentName={detail.attachmentName}
+                />
+              )}
+
               <Button
                 variant="danger"
+                disabled={!!decisionAction}
                 onClick={() =>
-                  takeAction('rejected')
+                  void takeAction('rejected')
                 }
               >
-                Reject
+                {decisionAction === 'rejected'
+                  ? 'Rejecting...'
+                  : 'Reject'}
               </Button>
 
               <Button
                 variant="success"
+                disabled={!!decisionAction}
                 onClick={() =>
-                  takeAction('approved')
+                  void takeAction('approved')
                 }
               >
-                Approve
+                {decisionAction === 'approved'
+                  ? 'Approving...'
+                  : 'Approve'}
               </Button>
             </>
           ) : undefined
@@ -685,6 +777,12 @@ export default function Approvals() {
       >
         {detail && (
           <div className="space-y-4 text-sm">
+            {decisionError && (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {decisionError}
+              </div>
+            )}
+
             {employee &&
               isAdminOrManager && (
                 <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
@@ -853,6 +951,47 @@ export default function Approvals() {
               </div>
             )}
 
+            {user.role === 'admin' &&
+              !detail.isAdminOnlyDecision &&
+              isMyTurnOnDetail &&
+              currentTurnIdsOnDetail.length > 0 && (
+                <div className="rounded-lg border border-amber-100 bg-amber-50/60 p-3">
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Act on behalf of
+                  </label>
+
+                  <select
+                    value={adminTargetApproverId}
+                    onChange={(event) =>
+                      setAdminTargetApproverId(
+                        event.target.value
+                      )
+                    }
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm"
+                  >
+                    {currentTurnIdsOnDetail.map((id) => {
+                      const approver = getUserById(id);
+
+                      return (
+                        <option
+                          key={id}
+                          value={id}
+                        >
+                          {approver?.fullName || 'Unknown'}
+                          {approver?.designation
+                            ? ` — ${approver.designation}`
+                            : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+
+                  <p className="mt-1.5 text-xs text-amber-700">
+                    Admin fills the selected approver's current approval slot; the remaining approval chain is preserved.
+                  </p>
+                </div>
+              )}
+
             {cancelMode ? (
               <div className="space-y-3 rounded-lg border border-rose-100 bg-rose-50/50 p-4">
                 <p className="text-xs text-rose-700">
@@ -903,7 +1042,9 @@ export default function Approvals() {
               tab === 'pending' && (
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                    Comment (optional)
+                    {user.role === 'admin'
+                      ? 'Comment'
+                      : 'Comment (optional)'}
                   </label>
 
                   <textarea
@@ -914,6 +1055,11 @@ export default function Approvals() {
                       )
                     }
                     rows={2}
+                    placeholder={
+                      user.role === 'admin'
+                        ? 'Comment is required when rejecting.'
+                        : undefined
+                    }
                     className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   />
                 </div>

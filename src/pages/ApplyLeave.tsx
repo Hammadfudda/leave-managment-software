@@ -217,19 +217,6 @@ export default function ApplyLeave() {
           setLeaveType('');
         }
 
-        /*
-         * Backend may return balances as:
-         *
-         * {
-         *   annual: { quota, used, remaining },
-         *   sick:   { quota, used, remaining },
-         *   casual: { quota, used, remaining }
-         * }
-         *
-         * or as an array.
-         *
-         * Normalize both forms so the UI always receives LeaveBalance[].
-         */
         setBalances(
           normalizeBalances(
             balanceResponse.data?.data
@@ -314,6 +301,15 @@ export default function ApplyLeave() {
       [balances, leaveTypes]
     );
 
+  const selectedBalance =
+    leaveType
+      ? balances.find(
+          (balance) =>
+            balance.leaveType ===
+            leaveType
+        )
+      : undefined;
+
   const handleFileChange = (
     event: ChangeEvent<HTMLInputElement>
   ) => {
@@ -376,9 +372,28 @@ export default function ApplyLeave() {
       return;
     }
 
-    if (calcDays() <= 0) {
+    const requestedWorkingDays =
+      calcDays();
+
+    if (requestedWorkingDays <= 0) {
       setErrorMessage(
         'The selected range contains no working days.'
+      );
+      return;
+    }
+
+    if (
+      selectedBalance &&
+      requestedWorkingDays >
+        selectedBalance.remaining
+    ) {
+      setErrorMessage(
+        `You only have ${selectedBalance.remaining} day(s) remaining for ${String(
+          leaveType
+        ).replace(
+          /_/g,
+          ' '
+        )}. You cannot request ${requestedWorkingDays} working day(s).`
       );
       return;
     }
@@ -405,12 +420,6 @@ export default function ApplyLeave() {
         attachment: selectedFile,
       });
 
-      /*
-       * Keep AppDataContext in sync with the real backend before
-       * navigating to My Leaves. Without this refresh, the request
-       * is saved in MongoDB but My Leaves can still render the old
-       * in-memory leaveRequests array.
-       */
       await refreshLeaveRequests();
 
       setSuccessMessage(
@@ -504,6 +513,16 @@ export default function ApplyLeave() {
                   .
                 </p>
               )}
+
+              {selectedBalance && (
+                <p className="mt-1.5 text-xs text-emerald-700">
+                  Remaining balance:{' '}
+                  <strong>
+                    {selectedBalance.remaining}
+                  </strong>{' '}
+                  working day(s)
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -567,6 +586,14 @@ export default function ApplyLeave() {
                     day(s) excluded.
                   </p>
                 )}
+
+                {selectedBalance &&
+                  calcDays() >
+                    selectedBalance.remaining && (
+                    <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                      Requested {calcDays()} working day(s), but only {selectedBalance.remaining} day(s) remain for this leave type.
+                    </p>
+                  )}
               </div>
             )}
 
@@ -650,7 +677,16 @@ export default function ApplyLeave() {
 
               <Button
                 type="submit"
-                disabled={loading}
+                disabled={
+                  loading ||
+                  Boolean(
+                    selectedBalance &&
+                    startDate &&
+                    endDate &&
+                    calcDays() >
+                      selectedBalance.remaining
+                  )
+                }
               >
                 {loading
                   ? 'Submitting...'

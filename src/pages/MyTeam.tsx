@@ -19,6 +19,7 @@ import { useAppData } from '../context/AppDataContext';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
+import LeaveAttachmentButton from '../components/leave/LeaveAttachmentButton';
 
 import {
   getEmployeeLeaveBalance,
@@ -132,11 +133,6 @@ export default function MyTeam() {
     setRequestSearchQuery,
   ] = useState('');
 
-  /*
-   * IMPORTANT:
-   * Do NOT use AppDataContext's old temporary leaveBalances state here.
-   * Team balances are loaded directly from MongoDB through the backend.
-   */
   const [
     teamBalances,
     setTeamBalances,
@@ -157,11 +153,6 @@ export default function MyTeam() {
     setBalancesError,
   ] = useState('');
 
-
-  /*
-   * Approval actions use the real backend API.
-   * No window.prompt / alert and no temporary local approval mutation.
-   */
   const [
     actionRequestId,
     setActionRequestId,
@@ -294,13 +285,6 @@ export default function MyTeam() {
       ]
     );
 
-  /*
-   * Fetch each team member's balance from:
-   * GET /api/leave-requests/balance/:employeeId
-   *
-   * Backend automatically creates annual/sick/casual records
-   * from the employee's assigned Grade if they do not exist yet.
-   */
   useEffect(() => {
     if (
       !user ||
@@ -1239,6 +1223,20 @@ export default function MyTeam() {
                                   request.reason
                                 }
                               </p>
+
+                              {request.hasAttachment && (
+                                <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+                                  <p className="mb-2 text-xs font-medium text-gray-500">
+                                    Attached document
+                                  </p>
+
+                                  <LeaveAttachmentButton
+                                    leaveRequestId={request.id}
+                                    hasAttachment={request.hasAttachment}
+                                    attachmentName={request.attachmentName}
+                                  />
+                                </div>
+                              )}
 
                               {required.length >
                                 0 && (

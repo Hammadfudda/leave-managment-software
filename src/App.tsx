@@ -27,8 +27,9 @@ import AuditLogs from "./pages/AuditLogs";
 import Profile from "./pages/Profile";
 import MasterData from "./pages/MasterData";
 import MyTeam from "./pages/MyTeam";
+import Feedback from "./pages/Feedback";
 
-import SuperAdminApp from "./super-admin/SuperAdminApp";
+import SuperAdminPortal from "./super-admin/SuperAdminPortal";
 
 import type { Role } from "./types";
 
@@ -117,8 +118,8 @@ export default function App() {
 
             {/* SUPER ADMIN */}
             <Route
-              path="/super-admin"
-              element={<SuperAdminApp />}
+              path="/super-admin/*"
+              element={<SuperAdminPortal />}
             />
 
             {/* AUTHENTICATED AREA */}
@@ -181,7 +182,10 @@ export default function App() {
                 path="/approvals"
                 element={
                   <Protected
-                    roles={["manager"]}
+                    roles={[
+                      "admin",
+                      "manager",
+                    ]}
                   >
                     <Approvals />
                   </Protected>
@@ -271,6 +275,17 @@ export default function App() {
                     roles={["admin"]}
                   >
                     <MasterData />
+                  </Protected>
+                }
+              />
+
+              <Route
+                path="/feedback"
+                element={
+                  <Protected
+                    roles={["admin"]}
+                  >
+                    <Feedback />
                   </Protected>
                 }
               />
