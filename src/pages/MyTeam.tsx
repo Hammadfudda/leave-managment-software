@@ -272,12 +272,6 @@ export default function MyTeam() {
       ? selectedManagerId
       : user?.id || '';
 
-  const selectedManager =
-    users.find(
-      (candidate) =>
-        candidate.id ===
-        activeManagerId
-    );
 
   const team =
     useMemo(
@@ -716,7 +710,13 @@ export default function MyTeam() {
               No managers found for this filter.
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div
+              className={
+                selectedManagerId
+                  ? 'flex gap-3 overflow-x-auto pb-2'
+                  : 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'
+              }
+            >
               {managers.map(
                 (manager) => {
                   const isSelected =
@@ -749,6 +749,10 @@ export default function MyTeam() {
                         );
                       }}
                       className={`rounded-2xl border p-4 text-left shadow-sm transition-colors ${
+                        selectedManagerId
+                          ? 'w-[300px] shrink-0 '
+                          : ''
+                      }${
                         isSelected
                           ? 'border-blue-400 bg-blue-50/60 ring-2 ring-blue-100'
                           : 'border-gray-100 bg-white hover:border-blue-200 hover:bg-blue-50/30'
@@ -824,22 +828,6 @@ export default function MyTeam() {
       {(!isAdmin ||
         selectedManagerId) && (
         <>
-          {isAdmin &&
-            selectedManager && (
-              <div className="rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-2.5 text-sm text-blue-800">
-                Showing team reporting to{' '}
-                <span className="font-semibold">
-                  {
-                    selectedManager.fullName
-                  }
-                </span>{' '}
-                (
-                {
-                  selectedManager.designation
-                }
-                )
-              </div>
-            )}
 
           {team.length === 0 ? (
             <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-400">

@@ -12,6 +12,7 @@ import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 
 import ChangePasswordRequired from './auth/ChangePasswordRequired';
+import SmartCsvImportEnhancer from './import/SmartCsvImportEnhancer';
 
 import api, {
   getApiErrorMessage,
@@ -144,6 +145,7 @@ export default function Layout() {
           </div>
         </main>
       </div>
+      <SmartCsvImportEnhancer />
     </div>
   );
 }
