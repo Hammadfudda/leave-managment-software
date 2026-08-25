@@ -824,8 +824,8 @@ export default function SmartCsvImportEnhancer() {
 
       {modalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
-          <div className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
+          <div className="flex h-[92vh] max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="shrink-0 flex items-start justify-between border-b border-gray-100 px-5 py-4">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">
                   Smart CSV Import Review
@@ -850,7 +850,7 @@ export default function SmartCsvImportEnhancer() {
               </button>
             </div>
 
-            <div className="max-h-[72vh] space-y-5 overflow-y-auto p-5">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
               {error && (
                 <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                   {error}
@@ -1317,7 +1317,7 @@ export default function SmartCsvImportEnhancer() {
               )}
             </div>
 
-            <div className="border-t border-gray-100 px-5 py-4">
+            <div className="shrink-0 border-t border-gray-100 bg-white px-5 py-4">
               {error && (
                 <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
                   <strong>
@@ -1362,7 +1362,7 @@ export default function SmartCsvImportEnhancer() {
                 </div>
               )}
 
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <button
                 type="button"
                 disabled={busy}

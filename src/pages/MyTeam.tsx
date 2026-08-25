@@ -713,7 +713,7 @@ export default function MyTeam() {
             <div
               className={
                 selectedManagerId
-                  ? 'flex gap-3 overflow-x-auto pb-2'
+                  ? 'flex w-full flex-nowrap gap-3 overflow-x-auto pb-3 pr-2'
                   : 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'
               }
             >
@@ -750,7 +750,7 @@ export default function MyTeam() {
                       }}
                       className={`rounded-2xl border p-4 text-left shadow-sm transition-colors ${
                         selectedManagerId
-                          ? 'w-[300px] shrink-0 '
+                          ? 'w-[280px] min-w-[280px] shrink-0 '
                           : ''
                       }${
                         isSelected
@@ -828,6 +828,50 @@ export default function MyTeam() {
       {(!isAdmin ||
         selectedManagerId) && (
         <>
+          <div className="flex gap-1.5 border-b border-gray-100">
+            <button
+              type="button"
+              onClick={() =>
+                setActiveTab(
+                  'team'
+                )
+              }
+              className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab ===
+                'team'
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Team
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setActiveTab(
+                  'requests'
+                )
+              }
+              className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab ===
+                'requests'
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Leave Requests
+
+              {pendingCount >
+                0 && (
+                <span className="ml-1 rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">
+                  {
+                    pendingCount
+                  }
+                </span>
+              )}
+            </button>
+          </div>
 
           {team.length === 0 ? (
             <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-400">
@@ -837,51 +881,6 @@ export default function MyTeam() {
             </div>
           ) : (
             <>
-              <div className="flex gap-1.5 border-b border-gray-100">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setActiveTab(
-                      'team'
-                    )
-                  }
-                  className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                    activeTab ===
-                    'team'
-                      ? 'border-blue-600 text-blue-700'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  Team
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setActiveTab(
-                      'requests'
-                    )
-                  }
-                  className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                    activeTab ===
-                    'requests'
-                      ? 'border-blue-600 text-blue-700'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  Leave Requests
-
-                  {pendingCount >
-                    0 && (
-                    <span className="ml-1 rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">
-                      {
-                        pendingCount
-                      }
-                    </span>
-                  )}
-                </button>
-              </div>
-
               {activeTab ===
                 'team' && (
                 <>
