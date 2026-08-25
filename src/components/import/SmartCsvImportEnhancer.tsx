@@ -689,6 +689,9 @@ export default function SmartCsvImportEnhancer() {
                 'Content-Type':
                   'multipart/form-data',
               },
+
+              timeout:
+                60000,
             }
           );
 
@@ -705,12 +708,26 @@ export default function SmartCsvImportEnhancer() {
             0
           )
         );
-      } catch (requestError) {
-        setError(
-          getApiErrorMessage(
-            requestError,
-            'Unable to complete Smart CSV import.'
+      } catch (requestError: any) {
+        const isTimeout =
+          requestError?.code ===
+            'ECONNABORTED' ||
+          String(
+            requestError?.message ||
+              ''
           )
+            .toLowerCase()
+            .includes(
+              'timeout'
+            );
+
+        setError(
+          isTimeout
+            ? 'Import request took too long. Please check the backend logs before trying again. The import may already have completed.'
+            : getApiErrorMessage(
+                requestError,
+                'Unable to complete Smart CSV import.'
+              )
         );
       } finally {
         setBusy(false);
@@ -1294,14 +1311,59 @@ export default function SmartCsvImportEnhancer() {
                   )}
 
                   <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-                    New portal accounts receive a random Temporary Password. Emails are scheduled through QStash with a 30-second gap, so the Vercel backend does not need a permanent worker. Users must change the Temporary Password on first login.
+                    New portal accounts will receive a Temporary Password by email. Emails are sent one at a time with a 30-second gap. Users must change their password after first login.
                   </div>
                 </>
               )}
             </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-gray-100 px-5 py-4">
-              <button
+            <div className="border-t border-gray-100 px-5 py-4">
+              {error && (
+                <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+                  <strong>
+                    Import failed:
+                  </strong>{' '}
+                  {error}
+                </div>
+              )}
+
+              {busy && (
+                <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                  Processing import... Please wait and do not close this window.
+                </div>
+              )}
+
+              {success && (
+                <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                  {success}
+
+                  {schedulingFailed > 0 && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void retryEmailScheduling()
+                      }
+                      className="ml-2 font-semibold underline disabled:opacity-50"
+                    >
+                      Retry Email Scheduling
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      window.location.reload()
+                    }
+                    className="ml-2 font-semibold underline"
+                  >
+                    Refresh Employees
+                  </button>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-3">
+                <button
                 type="button"
                 disabled={busy}
                 onClick={
@@ -1351,6 +1413,7 @@ export default function SmartCsvImportEnhancer() {
                     ? 'Processing...'
                     : 'Import with Approved Setup'}
                 </button>
+              </div>
               </div>
             </div>
           </div>
