@@ -159,11 +159,6 @@ export default function SmartCsvImportEnhancer() {
     setSuccess,
   ] = useState('');
 
-  const [
-    schedulingFailed,
-    setSchedulingFailed,
-  ] = useState(0);
-
   const inputRef =
     useRef<HTMLInputElement | null>(
       null
@@ -542,7 +537,6 @@ export default function SmartCsvImportEnhancer() {
   const openPicker = () => {
     setError('');
     setSuccess('');
-    setSchedulingFailed(0);
     inputRef.current?.click();
   };
 
@@ -554,8 +548,7 @@ export default function SmartCsvImportEnhancer() {
       setBusy(true);
       setError('');
       setSuccess('');
-      setSchedulingFailed(0);
-
+  
       try {
         const form =
           new FormData();
@@ -696,17 +689,7 @@ export default function SmartCsvImportEnhancer() {
           );
 
         setSuccess(
-          response.data
-            ?.message ||
-            'Smart import completed successfully.'
-        );
-
-        setSchedulingFailed(
-          Number(
-            response.data?.data
-              ?.emailSchedulingFailed ||
-            0
-          )
+          'Import completed successfully. New account emails are being processed automatically.'
         );
       } catch (requestError: any) {
         const isTimeout =
@@ -734,84 +717,28 @@ export default function SmartCsvImportEnhancer() {
       }
     };
 
-  const retryEmailScheduling =
-    async () => {
-      setBusy(true);
-      setError('');
+  useEffect(() => {
+    if (
+      window.location.pathname !==
+      '/employees'
+    ) {
+      return;
+    }
 
-      try {
-        const response =
-          await api.post(
-            '/employees/import-smart/retry-emails'
-          );
+    /*
+     * Silent recovery only. This is intentionally not exposed as an Admin
+     * button: pending credential jobs stay on the backend and are retried
+     * automatically when the Employees screen is opened.
+     */
+    void api
+      .post(
+        '/employees/import-smart/retry-emails'
+      )
+      .catch(() => {
+        // No technical scheduler errors are shown to the Admin.
+      });
+  }, []);
 
-        const failedCount =
-          Number(
-            response.data?.data
-              ?.failed ||
-            0
-          );
-
-        const retryErrors =
-          Array.isArray(
-            response.data?.data
-              ?.errors
-          )
-            ? response.data.data.errors
-            : [];
-
-        setSchedulingFailed(
-          failedCount
-        );
-
-        if (
-          failedCount >
-            0
-        ) {
-          const reason =
-            retryErrors
-              .map(
-                (
-                  item: {
-                    message?: string;
-                  }
-                ) =>
-                  item?.message
-              )
-              .filter(
-                Boolean
-              )
-              .join(
-                ' | '
-              );
-
-          setSuccess('');
-
-          setError(
-            reason
-              ? `QStash scheduling failed: ${reason}`
-              : 'QStash scheduling failed. Please check the backend environment variables and Vercel logs.'
-          );
-        } else {
-          setError('');
-
-          setSuccess(
-            response.data
-              ?.message ||
-              'Pending credential emails were rescheduled.'
-          );
-        }
-      } catch (requestError) {
-        setError(
-          getApiErrorMessage(
-            requestError,
-            'Unable to retry pending credential email scheduling.'
-          )
-        );
-      } finally {
-        setBusy(false);
-      }
-    };
 
   const trigger =
     mount
@@ -903,19 +830,6 @@ export default function SmartCsvImportEnhancer() {
               {success && (
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                   {success}
-
-                  {schedulingFailed > 0 && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        void retryEmailScheduling()
-                      }
-                      className="ml-2 font-semibold underline disabled:opacity-50"
-                    >
-                      Retry Email Scheduling
-                    </button>
-                  )}
 
                   <button
                     type="button"
@@ -1354,7 +1268,7 @@ export default function SmartCsvImportEnhancer() {
                   )}
 
                   <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-                    New portal accounts will receive a Temporary Password by email. Emails are sent one at a time with a 30-second gap. Users must change their password after first login.
+                    New portal accounts will receive a Temporary Password by email. Account emails are processed automatically. Users must change their password after first login.
                   </div>
                 </>
               )}
@@ -1379,19 +1293,6 @@ export default function SmartCsvImportEnhancer() {
               {success && (
                 <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
                   {success}
-
-                  {schedulingFailed > 0 && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        void retryEmailScheduling()
-                      }
-                      className="ml-2 font-semibold underline disabled:opacity-50"
-                    >
-                      Retry Email Scheduling
-                    </button>
-                  )}
 
                   <button
                     type="button"
