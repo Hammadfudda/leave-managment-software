@@ -745,19 +745,62 @@ export default function SmartCsvImportEnhancer() {
             '/employees/import-smart/retry-emails'
           );
 
-        setSuccess(
-          response.data
-            ?.message ||
-            'Pending credential emails were rescheduled.'
-        );
-
-        setSchedulingFailed(
+        const failedCount =
           Number(
             response.data?.data
               ?.failed ||
             0
+          );
+
+        const retryErrors =
+          Array.isArray(
+            response.data?.data
+              ?.errors
           )
+            ? response.data.data.errors
+            : [];
+
+        setSchedulingFailed(
+          failedCount
         );
+
+        if (
+          failedCount >
+            0
+        ) {
+          const reason =
+            retryErrors
+              .map(
+                (
+                  item: {
+                    message?: string;
+                  }
+                ) =>
+                  item?.message
+              )
+              .filter(
+                Boolean
+              )
+              .join(
+                ' | '
+              );
+
+          setSuccess('');
+
+          setError(
+            reason
+              ? `QStash scheduling failed: ${reason}`
+              : 'QStash scheduling failed. Please check the backend environment variables and Vercel logs.'
+          );
+        } else {
+          setError('');
+
+          setSuccess(
+            response.data
+              ?.message ||
+              'Pending credential emails were rescheduled.'
+          );
+        }
       } catch (requestError) {
         setError(
           getApiErrorMessage(
