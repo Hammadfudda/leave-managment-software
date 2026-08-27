@@ -548,7 +548,7 @@ export default function SmartCsvImportEnhancer() {
       setBusy(true);
       setError('');
       setSuccess('');
-  
+
       try {
         const form =
           new FormData();
@@ -673,20 +673,19 @@ export default function SmartCsvImportEnhancer() {
           })
         );
 
-        const response =
-          await api.post(
-            '/employees/import-smart/commit',
-            form,
-            {
-              headers: {
-                'Content-Type':
-                  'multipart/form-data',
-              },
+        await api.post(
+          '/employees/import-smart/commit',
+          form,
+          {
+            headers: {
+              'Content-Type':
+                'multipart/form-data',
+            },
 
-              timeout:
-                60000,
-            }
-          );
+            timeout:
+              60000,
+          }
+        );
 
         setSuccess(
           'Import completed successfully. New account emails are being processed automatically.'
@@ -1078,7 +1077,7 @@ export default function SmartCsvImportEnhancer() {
                     </div>
 
                     <div className="overflow-x-auto rounded-xl border border-gray-200">
-                      <table className="w-full min-w-[950px] text-sm">
+                      <table className="w-full min-w-[1050px] text-sm">
                         <thead className="bg-gray-50 text-left text-xs text-gray-500">
                           <tr>
                             <th className="px-3 py-2">
@@ -1102,8 +1101,8 @@ export default function SmartCsvImportEnhancer() {
                             <th className="px-3 py-2">
                               Portal Access
                             </th>
-                            <th className="px-3 py-2">
-                              Status
+                            <th className="min-w-[260px] px-3 py-2">
+                              Status / Reason
                             </th>
                           </tr>
                         </thead>
@@ -1191,38 +1190,60 @@ export default function SmartCsvImportEnhancer() {
                                   </select>
                                 </td>
 
-                                <td className="px-3 py-2 text-xs">
+                                <td className="px-3 py-2 text-xs align-top">
                                   {row.exists ? (
                                     <span className="font-medium text-amber-700">
                                       Exists — skipped
                                     </span>
                                   ) : row.errors.length ? (
-                                    <span
-                                      className="font-medium text-rose-700"
-                                      title={
-                                        row.errors.join(
-                                          '\n'
-                                        )
-                                      }
-                                    >
-                                      {row.errors.length}{' '}
-                                      error(s)
-                                    </span>
+                                    <div className="max-w-[300px]">
+                                      <span className="font-semibold text-rose-700">
+                                        {row.errors.length}{' '}
+                                        error(s)
+                                      </span>
+
+                                      <ul className="mt-1 space-y-1 text-[11px] leading-4 text-rose-700">
+                                        {row.errors.map(
+                                          (
+                                            message,
+                                            index
+                                          ) => (
+                                            <li
+                                              key={`${row.rowNumber}-error-${index}`}
+                                              className="break-words"
+                                            >
+                                              • {message}
+                                            </li>
+                                          )
+                                        )}
+                                      </ul>
+                                    </div>
                                   ) : managerReviewErrors[
                                       row.rowNumber
                                     ]?.length ? (
-                                    <span
-                                      className="font-medium text-rose-700"
-                                      title={
-                                        managerReviewErrors[
+                                    <div className="max-w-[300px]">
+                                      <span className="font-semibold text-rose-700">
+                                        Manager conflict
+                                      </span>
+
+                                      <ul className="mt-1 space-y-1 text-[11px] leading-4 text-rose-700">
+                                        {managerReviewErrors[
                                           row.rowNumber
-                                        ].join(
-                                          '\n'
-                                        )
-                                      }
-                                    >
-                                      Manager conflict
-                                    </span>
+                                        ].map(
+                                          (
+                                            message,
+                                            index
+                                          ) => (
+                                            <li
+                                              key={`${row.rowNumber}-manager-error-${index}`}
+                                              className="break-words"
+                                            >
+                                              • {message}
+                                            </li>
+                                          )
+                                        )}
+                                      </ul>
+                                    </div>
                                   ) : (
                                     <span className="font-medium text-emerald-700">
                                       Ready
@@ -1308,56 +1329,56 @@ export default function SmartCsvImportEnhancer() {
 
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <button
-                type="button"
-                disabled={busy}
-                onClick={
-                  openPicker
-                }
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                <Upload
-                  size={15}
-                />
-                Choose Another CSV
-              </button>
-
-              <div className="flex gap-2">
-                <button
                   type="button"
                   disabled={busy}
-                  onClick={() =>
-                    setModalOpen(
-                      false
-                    )
+                  onClick={
+                    openPicker
                   }
-                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
-                  Cancel
+                  <Upload
+                    size={15}
+                  />
+                  Choose Another CSV
                 </button>
 
-                <button
-                  type="button"
-                  disabled={
-                    busy ||
-                    !preview ||
-                    invalidRows.length >
-                      0 ||
-                    managerBlockingCount >
-                      0 ||
-                    Boolean(
-                      success
-                    )
-                  }
-                  onClick={() =>
-                    void commit()
-                  }
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {busy
-                    ? 'Processing...'
-                    : 'Import with Approved Setup'}
-                </button>
-              </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      setModalOpen(
+                        false
+                      )
+                    }
+                    className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={
+                      busy ||
+                      !preview ||
+                      invalidRows.length >
+                        0 ||
+                      managerBlockingCount >
+                        0 ||
+                      Boolean(
+                        success
+                      )
+                    }
+                    onClick={() =>
+                      void commit()
+                    }
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {busy
+                      ? 'Processing...'
+                      : 'Import with Approved Setup'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
