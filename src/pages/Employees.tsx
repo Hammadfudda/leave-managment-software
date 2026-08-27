@@ -29,6 +29,7 @@ import {
   completePendingEmployee,
   createEmployee as apiCreateEmployee,
   updateEmployee as apiUpdateEmployee,
+  updateEmployeeRoleLabel,
   exportEmployeesCsv,
   importEmployeesCsv,
   type CreateEmployeePayload,
@@ -37,7 +38,7 @@ import {
   type UpdateEmployeePayload,
 } from '../services/employees';
 
-import {
+import api, {
   getApiErrorMessage,
 } from '../services/api';
 
@@ -56,6 +57,12 @@ type MessageType =
   | 'warning'
   | 'info';
 
+type AddMasterField =
+  | 'roleLabel'
+  | 'grade'
+  | 'designation'
+  | 'department';
+
 interface MessageState {
   open: boolean;
   type: MessageType;
@@ -63,7 +70,7 @@ interface MessageState {
   message: string;
 }
 
-const roleLabel: Record<Role, string> = {
+const portalAccessLabel: Record<Role, string> = {
   admin: 'Admin',
   manager: 'Manager',
   employee: 'Employee',
@@ -76,6 +83,7 @@ const emptyForm = {
   cnic: '',
   phone: '',
   role: 'employee' as Role,
+  roleLabel: '',
   designation: '',
   grade: '',
   department: '',
@@ -109,12 +117,14 @@ export default function Employees() {
     grades,
     designations,
     departments,
+    roles,
     employeesLoading,
     refreshEmployees,
     refreshLookups,
     removeUser,
     addDesignation,
     addDepartment,
+    addRole,
     getUserById,
   } = useAppData();
 
@@ -133,6 +143,7 @@ export default function Employees() {
   const [deleting, setDeleting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [addingMaster, setAddingMaster] = useState(false);
 
   const [csvReview, setCsvReview] =
     useState<CsvImportResponse | null>(null);
@@ -149,7 +160,7 @@ export default function Employees() {
     useState<Record<string, string>>({});
 
   const [addNewField, setAddNewField] =
-    useState<'designation' | 'department' | null>(null);
+    useState<AddMasterField | null>(null);
 
   const [newItemName, setNewItemName] =
     useState('');
@@ -209,8 +220,7 @@ export default function Employees() {
     return users
       .filter(
         (user) =>
-          user.role !==
-          'admin'
+          user.role !== 'admin'
       )
       .filter((user) => {
         const matchesSearch =
@@ -224,10 +234,10 @@ export default function Employees() {
           user.employeeId
             .toLowerCase()
             .includes(search) ||
-          (
-            user.designation ||
-            ''
-          )
+          (user.designation || '')
+            .toLowerCase()
+            .includes(search) ||
+          (user.roleLabel || '')
             .toLowerCase()
             .includes(search);
 
@@ -269,9 +279,8 @@ export default function Employees() {
   ]);
 
   /*
-   * IMPORTANT:
-   * Manager dropdown remains department-scoped.
-   * Only active managers from the selected department are shown.
+   * Existing manager rule is preserved:
+   * only active Managers from the selected department.
    */
   const availableManagers =
     useMemo(() => {
@@ -324,16 +333,12 @@ export default function Employees() {
   const validate = () => {
     const next: Record<string, string> = {};
 
-    if (
-      !form.fullName.trim()
-    ) {
+    if (!form.fullName.trim()) {
       next.fullName =
         'Full name is required';
     }
 
-    if (
-      !form.email.trim()
-    ) {
+    if (!form.email.trim()) {
       next.email =
         'Email is required';
     } else if (
@@ -345,16 +350,12 @@ export default function Employees() {
         'Invalid email format';
     }
 
-    if (
-      !form.employeeId.trim()
-    ) {
+    if (!form.employeeId.trim()) {
       next.employeeId =
         'Employee ID is required';
     }
 
-    if (
-      !form.cnic.trim()
-    ) {
+    if (!form.cnic.trim()) {
       next.cnic =
         'CNIC is required';
     } else if (
@@ -366,37 +367,32 @@ export default function Employees() {
         'Format: 12345-1234567-1';
     }
 
-    if (
-      !form.phone.trim()
-    ) {
+    if (!form.phone.trim()) {
       next.phone =
         'Phone is required';
     }
 
-    if (
-      !form.designation
-    ) {
+    if (!form.roleLabel) {
+      next.roleLabel =
+        'Role is required';
+    }
+
+    if (!form.designation) {
       next.designation =
         'Designation is required';
     }
 
-    if (
-      !form.grade
-    ) {
+    if (!form.grade) {
       next.grade =
         'Grade is required';
     }
 
-    if (
-      !form.department
-    ) {
+    if (!form.department) {
       next.department =
         'Department is required';
     }
 
-    if (
-      !form.dateOfJoining
-    ) {
+    if (!form.dateOfJoining) {
       next.dateOfJoining =
         'Date of joining is required';
     }
@@ -404,8 +400,8 @@ export default function Employees() {
     setErrors(next);
 
     if (
-      Object.keys(next)
-        .length > 0
+      Object.keys(next).length >
+      0
     ) {
       showMessage(
         'warning',
@@ -434,9 +430,10 @@ export default function Employees() {
 
     setForm({
       ...emptyForm,
+      roleLabel:
+        roles[0] || '',
       grade:
-        grades[0]?.name ||
-        '',
+        grades[0]?.name || '',
     });
 
     setShowAdd(true);
@@ -466,6 +463,9 @@ export default function Employees() {
 
       role:
         user.role,
+
+      roleLabel:
+        user.roleLabel || '',
 
       designation:
         user.designation || '',
@@ -518,18 +518,14 @@ export default function Employees() {
             form.grade
         );
 
-      if (
-        !selectedGrade
-      ) {
+      if (!selectedGrade) {
         throw new Error(
           'Please select a valid grade.'
         );
       }
 
       if (isEdit) {
-        if (
-          !editingUser?.id
-        ) {
+        if (!editingUser?.id) {
           throw new Error(
             'Employee ID is missing for update.'
           );
@@ -578,8 +574,7 @@ export default function Employees() {
         };
 
         /*
-         * Existing update endpoint stays exactly in use.
-         * No CSV feature bypasses the old manager/department validation.
+         * Mature employee update flow remains unchanged.
          */
         await apiUpdateEmployee(
           editingUser.id,
@@ -587,10 +582,14 @@ export default function Employees() {
         );
 
         /*
-         * Only a CSV-pending employee needs the separate completion call.
-         * It validates the corrected DB values, updates CNIC/default password,
-         * clears Details Pending and initializes leave balances.
+         * HR Role is separate from access-control role and is updated
+         * through its dedicated endpoint.
          */
+        await updateEmployeeRoleLabel(
+          editingUser.id,
+          form.roleLabel
+        );
+
         if (
           editingUser.detailsStatus ===
           'pending'
@@ -631,6 +630,9 @@ export default function Employees() {
             'manager'
               ? 'manager'
               : 'employee',
+
+          roleLabel:
+            form.roleLabel,
 
           gradeId:
             selectedGrade.id,
@@ -675,11 +677,6 @@ export default function Employees() {
 
       await refreshEmployees();
     } catch (error) {
-      /*
-       * Do not close the Edit modal on failure.
-       * Corrected values already saved by the normal update endpoint stay safe,
-       * while pending status remains until all details pass validation.
-       */
       showMessage(
         'error',
         isEdit
@@ -732,6 +729,13 @@ export default function Employees() {
     }
   };
 
+  const openAddMaster = (
+    field: AddMasterField
+  ) => {
+    setNewItemName('');
+    setAddNewField(field);
+  };
+
   const handleAddNewItem =
     async () => {
       const name =
@@ -746,12 +750,47 @@ export default function Employees() {
           'Name Required',
           'Please enter a name.'
         );
-
         return;
       }
 
+      setAddingMaster(true);
+
       try {
         if (
+          addNewField ===
+          'roleLabel'
+        ) {
+          await addRole(name);
+
+          setForm(
+            (previous) => ({
+              ...previous,
+              roleLabel:
+                name,
+            })
+          );
+        } else if (
+          addNewField ===
+          'grade'
+        ) {
+          await api.post(
+            '/grades',
+            {
+              name,
+              description: '',
+            }
+          );
+
+          await refreshLookups();
+
+          setForm(
+            (previous) => ({
+              ...previous,
+              grade:
+                name,
+            })
+          );
+        } else if (
           addNewField ===
           'designation'
         ) {
@@ -787,7 +826,7 @@ export default function Employees() {
         showMessage(
           'success',
           'Added Successfully',
-          `${name} has been added.`
+          `${name} has been added and selected.`
         );
       } catch (error) {
         showMessage(
@@ -798,6 +837,8 @@ export default function Employees() {
             'Unable to save this item.'
           )
         );
+      } finally {
+        setAddingMaster(false);
       }
     };
 
@@ -906,7 +947,6 @@ export default function Employees() {
       }
     } finally {
       setImporting(false);
-
       event.target.value =
         '';
     }
@@ -1001,6 +1041,15 @@ export default function Employees() {
     setGradeFilter('');
   };
 
+  const addModalTitle =
+    addNewField === 'roleLabel'
+      ? 'Add Role'
+      : addNewField === 'grade'
+        ? 'Add Grade'
+        : addNewField === 'designation'
+          ? 'Add Designation'
+          : 'Add Department';
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1078,7 +1127,7 @@ export default function Employees() {
                   event.target.value
                 )
             }
-            placeholder="Search name, email, ID, designation"
+            placeholder="Search name, email, ID, role, designation"
             className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           />
         </div>
@@ -1137,7 +1186,7 @@ export default function Employees() {
           }
         >
           <option value="">
-            All Roles
+            All Portal Access
           </option>
 
           <option value="manager">
@@ -1250,6 +1299,9 @@ export default function Employees() {
                     Role
                   </th>
                   <th className="px-5 py-3 font-medium">
+                    Portal Access
+                  </th>
+                  <th className="px-5 py-3 font-medium">
                     Status
                   </th>
                   <th className="px-5 py-3 font-medium">
@@ -1263,7 +1315,7 @@ export default function Employees() {
                   0 && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-5 py-10 text-center text-sm text-gray-400"
                     >
                       No employees match the selected filters.
@@ -1326,7 +1378,12 @@ export default function Employees() {
                       </td>
 
                       <td className="px-5 py-3 text-gray-600">
-                        {roleLabel[
+                        {user.roleLabel ||
+                          '—'}
+                      </td>
+
+                      <td className="px-5 py-3 text-gray-600">
+                        {portalAccessLabel[
                           user.role
                         ]}
                       </td>
@@ -1475,8 +1532,7 @@ export default function Employees() {
               </p>
 
               <p className="mt-1">
-                Complete the highlighted employee details:
-                {' '}
+                Complete the highlighted employee details:{' '}
                 {(
                   editingUser.pendingFields ||
                   []
@@ -1487,473 +1543,488 @@ export default function Employees() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField
-              label="Full Name"
-              error={
-                errors.fullName
-              }
-            >
-              <input
-                value={
-                  form.fullName
-                }
-                onChange={
-                  (event) =>
-                    setForm({
-                      ...form,
-                      fullName:
-                        event.target.value,
-                    })
-                }
-                className={
-                  inputCls
-                }
-              />
-            </FormField>
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[0.9fr_1.6fr]">
+            {/* MASTER DATA — ALL TOGETHER ON LEFT */}
+            <div className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  Employee Classification
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Role, Grade, Designation and Department
+                </p>
+              </div>
 
-            <FormField
-              label="Email"
-              error={
-                errors.email
-              }
-            >
-              <input
-                type="email"
-                value={
-                  form.email
-                }
-                onChange={
-                  (event) =>
-                    setForm({
-                      ...form,
-                      email:
-                        event.target.value,
-                    })
-                }
-                className={
-                  inputCls
-                }
-              />
-            </FormField>
-
-            <FormField
-              label="CNIC"
-              error={
-                errors.cnic
-              }
-            >
-              <input
-                value={
-                  form.cnic
-                }
-                disabled={
-                  Boolean(
-                    editingUser?.id &&
-                    editingUser.detailsStatus !==
-                      'pending'
-                  )
-                }
-                onChange={
-                  (event) =>
-                    setForm({
-                      ...form,
-                      cnic:
-                        event.target.value,
-                    })
-                }
-                placeholder="12345-1234567-1"
-                className={`${pendingInputClass('cnic')} disabled:bg-gray-100`}
-              />
-            </FormField>
-
-            <FormField
-              label="Phone"
-              error={
-                errors.phone
-              }
-            >
-              <input
-                value={
-                  form.phone
-                }
-                onChange={
-                  (event) =>
-                    setForm({
-                      ...form,
-                      phone:
-                        event.target.value,
-                    })
-                }
-                className={
-                  pendingInputClass(
-                    'phone'
-                  )
-                }
-              />
-            </FormField>
-
-            <FormField
-              label="Employee ID"
-              error={
-                errors.employeeId
-              }
-            >
-              <input
-                value={
-                  form.employeeId
-                }
-                onChange={
-                  (event) =>
-                    setForm({
-                      ...form,
-                      employeeId:
-                        event.target.value,
-                    })
-                }
-                className={
-                  inputCls
-                }
-              />
-            </FormField>
-
-            <FormField label="Portal Access">
-              <select
-                value={
-                  form.role
-                }
-                onChange={
-                  (event) =>
-                    setForm({
-                      ...form,
-                      role:
-                        event.target
-                          .value as Role,
-                    })
-                }
-                className={
-                  inputCls
+              <FormField
+                label="Role"
+                error={
+                  errors.roleLabel
                 }
               >
-                <option value="employee">
-                  Employee
-                </option>
+                <SelectWithAdd
+                  value={
+                    form.roleLabel
+                  }
+                  onChange={(
+                    value
+                  ) =>
+                    setForm(
+                      (previous) => ({
+                        ...previous,
+                        roleLabel:
+                          value,
+                      })
+                    )
+                  }
+                  placeholder="Select role"
+                  options={
+                    roles
+                  }
+                  inputClass={
+                    inputCls
+                  }
+                  onAdd={() =>
+                    openAddMaster(
+                      'roleLabel'
+                    )
+                  }
+                />
+              </FormField>
 
-                <option value="manager">
-                  Manager
-                </option>
-              </select>
-            </FormField>
+              <FormField
+                label="Grade"
+                error={
+                  errors.grade
+                }
+              >
+                <SelectWithAdd
+                  value={
+                    form.grade
+                  }
+                  onChange={(
+                    value
+                  ) =>
+                    setForm(
+                      (previous) => ({
+                        ...previous,
+                        grade:
+                          value,
+                      })
+                    )
+                  }
+                  placeholder="Select grade"
+                  options={
+                    grades.map(
+                      (grade) =>
+                        grade.name
+                    )
+                  }
+                  inputClass={
+                    pendingInputClass(
+                      'grade'
+                    )
+                  }
+                  onAdd={() =>
+                    openAddMaster(
+                      'grade'
+                    )
+                  }
+                />
+              </FormField>
 
-            <FormField
-              label="Designation"
-              error={
-                errors.designation
-              }
-            >
-              <div className="flex gap-2">
-                <select
+              <FormField
+                label="Designation"
+                error={
+                  errors.designation
+                }
+              >
+                <SelectWithAdd
                   value={
                     form.designation
                   }
-                  onChange={
-                    (event) =>
-                      setForm({
-                        ...form,
+                  onChange={(
+                    value
+                  ) =>
+                    setForm(
+                      (previous) => ({
+                        ...previous,
                         designation:
-                          event.target.value,
+                          value,
                       })
+                    )
                   }
-                  className={
+                  placeholder="Select designation"
+                  options={
+                    designations
+                  }
+                  inputClass={
                     pendingInputClass(
                       'designation'
                     )
                   }
-                >
-                  <option value="">
-                    Select designation
-                  </option>
-
-                  {designations.map(
-                    (name) => (
-                      <option
-                        key={
-                          name
-                        }
-                        value={
-                          name
-                        }
-                      >
-                        {name}
-                      </option>
-                    )
-                  )}
-                </select>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setAddNewField(
+                  onAdd={() =>
+                    openAddMaster(
                       'designation'
                     )
                   }
-                  className="rounded-lg border border-gray-200 px-3 text-blue-600 hover:bg-blue-50"
-                >
-                  <Plus
-                    size={17}
-                  />
-                </button>
-              </div>
-            </FormField>
+                />
+              </FormField>
 
-            <FormField
-              label="Grade"
-              error={
-                errors.grade
-              }
-            >
-              <select
-                value={
-                  form.grade
-                }
-                onChange={
-                  (event) =>
-                    setForm({
-                      ...form,
-                      grade:
-                        event.target.value,
-                    })
-                }
-                className={
-                  pendingInputClass(
-                    'grade'
-                  )
+              <FormField
+                label="Department"
+                error={
+                  errors.department
                 }
               >
-                <option value="">
-                  Select grade
-                </option>
-
-                {grades.map(
-                  (grade) => (
-                    <option
-                      key={
-                        grade.id
-                      }
-                      value={
-                        grade.name
-                      }
-                    >
-                      {grade.name}
-                    </option>
-                  )
-                )}
-              </select>
-            </FormField>
-
-            <FormField
-              label="Department"
-              error={
-                errors.department
-              }
-            >
-              <div className="flex gap-2">
-                <select
+                <SelectWithAdd
                   value={
                     form.department
                   }
-                  onChange={
-                    (event) => {
-                      const newDepartment =
-                        event.target.value;
-
-                      setForm(
-                        (previous) => ({
-                          ...previous,
-                          department:
-                            newDepartment,
-                          managerId:
-                            '',
-                        })
-                      );
-                    }
+                  onChange={(
+                    value
+                  ) =>
+                    setForm(
+                      (previous) => ({
+                        ...previous,
+                        department:
+                          value,
+                        managerId:
+                          '',
+                      })
+                    )
                   }
-                  className={
+                  placeholder="Select department"
+                  options={
+                    departments
+                  }
+                  inputClass={
                     pendingInputClass(
                       'department'
                     )
                   }
-                >
-                  <option value="">
-                    Select department
-                  </option>
-
-                  {departments.map(
-                    (name) => (
-                      <option
-                        key={
-                          name
-                        }
-                        value={
-                          name
-                        }
-                      >
-                        {name}
-                      </option>
-                    )
-                  )}
-                </select>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setAddNewField(
+                  onAdd={() =>
+                    openAddMaster(
                       'department'
                     )
                   }
-                  className="rounded-lg border border-gray-200 px-3 text-blue-600 hover:bg-blue-50"
-                >
-                  <Plus
-                    size={17}
-                  />
-                </button>
-              </div>
-            </FormField>
+                />
+              </FormField>
+            </div>
 
-            <FormField
-              label="Date of Joining"
-              error={
-                errors.dateOfJoining
-              }
-            >
-              <input
-                type="date"
-                value={
-                  form.dateOfJoining
+            {/* ALL OTHER EMPLOYEE DETAILS ON RIGHT */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField
+                label="Full Name"
+                error={
+                  errors.fullName
                 }
-                onChange={
-                  (event) =>
-                    setForm({
-                      ...form,
-                      dateOfJoining:
-                        event.target.value,
-                    })
-                }
-                className={
-                  pendingInputClass(
-                    'dateOfJoining'
-                  )
-                }
-              />
-            </FormField>
-
-            {editingUser?.id && (
-              <FormField label="Status">
-                <select
+              >
+                <input
                   value={
-                    form.status
+                    form.fullName
                   }
                   onChange={
                     (event) =>
-                      setForm({
-                        ...form,
-                        status:
-                          event.target
-                            .value as
-                            | 'active'
-                            | 'inactive',
-                      })
+                      setForm(
+                        (previous) => ({
+                          ...previous,
+                          fullName:
+                            event.target.value,
+                        })
+                      )
+                  }
+                  className={
+                    inputCls
+                  }
+                />
+              </FormField>
+
+              <FormField
+                label="Email"
+                error={
+                  errors.email
+                }
+              >
+                <input
+                  type="email"
+                  value={
+                    form.email
+                  }
+                  onChange={
+                    (event) =>
+                      setForm(
+                        (previous) => ({
+                          ...previous,
+                          email:
+                            event.target.value,
+                        })
+                      )
+                  }
+                  className={
+                    inputCls
+                  }
+                />
+              </FormField>
+
+              <FormField
+                label="CNIC"
+                error={
+                  errors.cnic
+                }
+              >
+                <input
+                  value={
+                    form.cnic
+                  }
+                  disabled={
+                    Boolean(
+                      editingUser?.id &&
+                      editingUser.detailsStatus !==
+                        'pending'
+                    )
+                  }
+                  onChange={
+                    (event) =>
+                      setForm(
+                        (previous) => ({
+                          ...previous,
+                          cnic:
+                            event.target.value,
+                        })
+                      )
+                  }
+                  placeholder="12345-1234567-1"
+                  className={`${pendingInputClass('cnic')} disabled:bg-gray-100`}
+                />
+              </FormField>
+
+              <FormField
+                label="Phone"
+                error={
+                  errors.phone
+                }
+              >
+                <input
+                  value={
+                    form.phone
+                  }
+                  onChange={
+                    (event) =>
+                      setForm(
+                        (previous) => ({
+                          ...previous,
+                          phone:
+                            event.target.value,
+                        })
+                      )
+                  }
+                  className={
+                    pendingInputClass(
+                      'phone'
+                    )
+                  }
+                />
+              </FormField>
+
+              <FormField
+                label="Employee ID"
+                error={
+                  errors.employeeId
+                }
+              >
+                <input
+                  value={
+                    form.employeeId
+                  }
+                  onChange={
+                    (event) =>
+                      setForm(
+                        (previous) => ({
+                          ...previous,
+                          employeeId:
+                            event.target.value,
+                        })
+                      )
+                  }
+                  className={
+                    inputCls
+                  }
+                />
+              </FormField>
+
+              <FormField label="Portal Access">
+                <select
+                  value={
+                    form.role
+                  }
+                  onChange={
+                    (event) =>
+                      setForm(
+                        (previous) => ({
+                          ...previous,
+                          role:
+                            event.target
+                              .value as Role,
+                        })
+                      )
                   }
                   className={
                     inputCls
                   }
                 >
-                  <option value="active">
-                    Active
+                  <option value="employee">
+                    Employee
                   </option>
 
-                  <option value="inactive">
-                    Inactive
+                  <option value="manager">
+                    Manager
                   </option>
                 </select>
               </FormField>
-            )}
 
-            <FormField label="Manager">
-              <select
-                value={
-                  form.managerId
+              <FormField
+                label="Date of Joining"
+                error={
+                  errors.dateOfJoining
                 }
-                onChange={
-                  (event) =>
-                    setForm({
-                      ...form,
-                      managerId:
-                        event.target.value,
-                    })
-                }
-                disabled={
-                  !form.department
-                }
-                className={`${inputCls} disabled:cursor-not-allowed disabled:bg-gray-100`}
               >
-                <option value="">
-                  {form.department
-                    ? 'No Manager'
-                    : 'Select department first'}
-                </option>
+                <input
+                  type="date"
+                  value={
+                    form.dateOfJoining
+                  }
+                  onChange={
+                    (event) =>
+                      setForm(
+                        (previous) => ({
+                          ...previous,
+                          dateOfJoining:
+                            event.target.value,
+                        })
+                      )
+                  }
+                  className={
+                    pendingInputClass(
+                      'dateOfJoining'
+                    )
+                  }
+                />
+              </FormField>
 
-                {availableManagers.map(
-                  (manager) => (
-                    <option
-                      key={
-                        manager.id
-                      }
-                      value={
-                        manager.id
-                      }
-                    >
-                      {manager.fullName}
-                      {' — '}
-                      {manager.designation}
-                    </option>
-                  )
+              <FormField label="Manager">
+                <select
+                  value={
+                    form.managerId
+                  }
+                  onChange={
+                    (event) =>
+                      setForm(
+                        (previous) => ({
+                          ...previous,
+                          managerId:
+                            event.target.value,
+                        })
+                      )
+                  }
+                  disabled={
+                    !form.department
+                  }
+                  className={`${inputCls} disabled:cursor-not-allowed disabled:bg-gray-100`}
+                >
+                  <option value="">
+                    {form.department
+                      ? 'No Manager'
+                      : 'Select department first'}
+                  </option>
+
+                  {availableManagers.map(
+                    (manager) => (
+                      <option
+                        key={
+                          manager.id
+                        }
+                        value={
+                          manager.id
+                        }
+                      >
+                        {manager.fullName}
+                        {' — '}
+                        {manager.designation}
+                      </option>
+                    )
+                  )}
+                </select>
+
+                {form.department &&
+                  availableManagers.length ===
+                    0 && (
+                  <p className="mt-1 text-xs text-gray-400">
+                    No active manager is available in this department.
+                  </p>
                 )}
-              </select>
+              </FormField>
 
-              {form.department &&
-                availableManagers.length ===
-                  0 && (
-                <p className="mt-1 text-xs text-gray-400">
-                  No active manager is available in this department.
-                </p>
-              )}
-            </FormField>
-
-            {form.role ===
-              'manager' && (
-              <div className="sm:col-span-2">
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={
-                      form.canApproveOtherDepartments
+              {editingUser?.id && (
+                <FormField label="Status">
+                  <select
+                    value={
+                      form.status
                     }
                     onChange={
                       (event) =>
-                        setForm({
-                          ...form,
-                          canApproveOtherDepartments:
-                            event.target.checked,
-                        })
+                        setForm(
+                          (previous) => ({
+                            ...previous,
+                            status:
+                              event.target
+                                .value as
+                                | 'active'
+                                | 'inactive',
+                          })
+                        )
                     }
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
+                    className={
+                      inputCls
+                    }
+                  >
+                    <option value="active">
+                      Active
+                    </option>
 
-                  Can approve leaves from other departments too
-                </label>
-              </div>
-            )}
+                    <option value="inactive">
+                      Inactive
+                    </option>
+                  </select>
+                </FormField>
+              )}
+
+              {form.role ===
+                'manager' && (
+                <div className="sm:col-span-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={
+                        form.canApproveOtherDepartments
+                      }
+                      onChange={
+                        (event) =>
+                          setForm(
+                            (previous) => ({
+                              ...previous,
+                              canApproveOtherDepartments:
+                                event.target.checked,
+                            })
+                          )
+                      }
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+
+                    Can approve leaves from other departments too
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
         </form>
       </Modal>
@@ -1965,19 +2036,25 @@ export default function Employees() {
           )
         }
         onClose={() => {
+          if (
+            addingMaster
+          ) {
+            return;
+          }
+
           setAddNewField(null);
           setNewItemName('');
         }}
         title={
-          addNewField ===
-          'designation'
-            ? 'Add Designation'
-            : 'Add Department'
+          addModalTitle
         }
         footer={
           <>
             <Button
               variant="secondary"
+              disabled={
+                addingMaster
+              }
               onClick={() => {
                 setAddNewField(
                   null
@@ -1992,11 +2069,16 @@ export default function Employees() {
             </Button>
 
             <Button
+              disabled={
+                addingMaster
+              }
               onClick={() =>
                 void handleAddNewItem()
               }
             >
-              Add
+              {addingMaster
+                ? 'Adding…'
+                : 'Add'}
             </Button>
           </>
         }
@@ -2011,6 +2093,19 @@ export default function Employees() {
                 event.target.value
               )
           }
+          onKeyDown={
+            (event) => {
+              if (
+                event.key ===
+                  'Enter' &&
+                !addingMaster
+              ) {
+                event.preventDefault();
+                void handleAddNewItem();
+              }
+            }
+          }
+          placeholder={`Enter ${addModalTitle.replace('Add ', '').toLowerCase()} name`}
           className={
             inputCls
           }
@@ -2049,8 +2144,7 @@ export default function Employees() {
                   <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                     <strong>
                       Details Pending:
-                    </strong>
-                    {' '}
+                    </strong>{' '}
                     {(
                       viewUser.pendingFields ||
                       []
@@ -2097,6 +2191,14 @@ export default function Employees() {
                 />
 
                 <Detail
+                  label="Role"
+                  value={
+                    viewUser.roleLabel ||
+                    '—'
+                  }
+                />
+
+                <Detail
                   label="Designation"
                   value={
                     viewUser.designation ||
@@ -2121,9 +2223,9 @@ export default function Employees() {
                 />
 
                 <Detail
-                  label="Role"
+                  label="Portal Access"
                   value={
-                    roleLabel[
+                    portalAccessLabel[
                       viewUser.role
                     ]
                   }
@@ -2485,6 +2587,73 @@ export default function Employees() {
           {message.message}
         </div>
       </Modal>
+    </div>
+  );
+}
+
+function SelectWithAdd({
+  value,
+  options,
+  placeholder,
+  inputClass,
+  onChange,
+  onAdd,
+}: {
+  value: string;
+  options: string[];
+  placeholder: string;
+  inputClass: string;
+  onChange: (value: string) => void;
+  onAdd: () => void;
+}) {
+  return (
+    <div className="flex gap-2">
+      <select
+        value={
+          value
+        }
+        onChange={
+          (event) =>
+            onChange(
+              event.target.value
+            )
+        }
+        className={
+          inputClass
+        }
+      >
+        <option value="">
+          {placeholder}
+        </option>
+
+        {options.map(
+          (name) => (
+            <option
+              key={
+                name
+              }
+              value={
+                name
+              }
+            >
+              {name}
+            </option>
+          )
+        )}
+      </select>
+
+      <button
+        type="button"
+        onClick={
+          onAdd
+        }
+        aria-label={`Add ${placeholder.replace('Select ', '')}`}
+        className="flex w-11 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-blue-600 hover:bg-blue-50"
+      >
+        <Plus
+          size={17}
+        />
+      </button>
     </div>
   );
 }

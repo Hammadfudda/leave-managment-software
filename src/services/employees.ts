@@ -12,6 +12,12 @@ export interface BackendEmployee {
   email: string;
   role: Role;
 
+  /*
+   * HR / Master Data role label.
+   * Separate from access-control role above.
+   */
+  roleLabel?: string;
+
   employeeId: string;
   cnic?: string;
   nationalId?: string;
@@ -66,7 +72,15 @@ export interface CreateEmployeePayload {
   email: string;
   cnic: string;
 
+  /*
+   * Portal access: employee / manager only.
+   */
   role: 'employee' | 'manager';
+
+  /*
+   * HR role selected from Master Data -> Roles.
+   */
+  roleLabel: string;
 
   gradeId: string;
 
@@ -175,6 +189,9 @@ export function mapEmployeeToUser(
 
     role:
       employee.role,
+
+    roleLabel:
+      employee.roleLabel || '',
 
     designation:
       employee.designation || '',
@@ -302,6 +319,28 @@ export async function updateEmployee(
     await api.patch<EmployeeResponse>(
       `/employees/${id}`,
       payload
+    );
+
+  return mapEmployeeToUser(
+    response.data.data
+  );
+}
+
+/*
+ * HR RoleLabel is deliberately updated through its own small endpoint.
+ * This avoids changing the mature employee update controller and keeps
+ * access-control role separate from the Master Data role label.
+ */
+export async function updateEmployeeRoleLabel(
+  id: string,
+  roleLabel: string
+): Promise<User> {
+  const response =
+    await api.patch<EmployeeResponse>(
+      `/employees/${id}/role-label`,
+      {
+        roleLabel,
+      }
     );
 
   return mapEmployeeToUser(

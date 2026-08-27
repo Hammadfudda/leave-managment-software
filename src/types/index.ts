@@ -25,7 +25,19 @@ export interface User {
   employeeId: string;
   fullName: string;
   email: string;
+
+  /*
+   * Access-control role.
+   * This remains employee / manager / admin only.
+   */
   role: Role;
+
+  /*
+   * HR / Master Data role label.
+   * This is separate from portal access.
+   */
+  roleLabel?: string;
+
   designation: string;
   grade: string;
   department: string;
