@@ -2249,6 +2249,12 @@ export default function Employees() {
                     '—'
                   }
                 />
+
+                <EmployeeLeaveBalanceSummary
+                  employeeId={
+                    viewUser.id
+                  }
+                />
               </div>
             );
           })()}
@@ -2700,6 +2706,206 @@ function Detail({
       <p className="mt-0.5 text-sm font-medium text-gray-900">
         {value}
       </p>
+    </div>
+  );
+}
+
+function EmployeeLeaveBalanceSummary({
+  employeeId,
+}: {
+  employeeId: string;
+}) {
+  const [
+    balances,
+    setBalances,
+  ] = useState<
+    Record<
+      string,
+      {
+        quota: number;
+        used: number;
+        remaining: number;
+      }
+    >
+  >({});
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    balanceError,
+    setBalanceError,
+  ] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    setLoading(true);
+    setBalanceError('');
+
+    void api
+      .get(
+        `/leave-requests/balance/${employeeId}`
+      )
+      .then((response) => {
+        if (!active) {
+          return;
+        }
+
+        setBalances(
+          response.data?.data ||
+            {}
+        );
+      })
+      .catch((error) => {
+        if (!active) {
+          return;
+        }
+
+        setBalanceError(
+          getApiErrorMessage(
+            error,
+            'Unable to load leave balances.'
+          )
+        );
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [employeeId]);
+
+  const rows =
+    Object.entries(
+      balances
+    ).sort(
+      ([a], [b]) =>
+        a.localeCompare(b)
+    );
+
+  const totals =
+    rows.reduce(
+      (
+        total,
+        [, balance]
+      ) => ({
+        quota:
+          total.quota +
+          Number(
+            balance.quota ||
+            0
+          ),
+        used:
+          total.used +
+          Number(
+            balance.used ||
+            0
+          ),
+        remaining:
+          total.remaining +
+          Number(
+            balance.remaining ||
+            0
+          ),
+      }),
+      {
+        quota: 0,
+        used: 0,
+        remaining: 0,
+      }
+    );
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="mb-3">
+        <p className="text-sm font-semibold text-gray-900">
+          Leave Balance
+        </p>
+        <p className="mt-1 text-xs text-gray-500">
+          Granted, used and remaining leave for the current leave year.
+        </p>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-gray-500">
+          Loading leave balance…
+        </p>
+      ) : balanceError ? (
+        <p className="text-sm text-rose-600">
+          {balanceError}
+        </p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-gray-500">
+          No leave balance is available for this employee.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-left text-xs text-gray-500">
+              <tr>
+                <th className="px-3 py-2 font-medium">
+                  Leave Type
+                </th>
+                <th className="px-3 py-2 text-right font-medium">
+                  Granted
+                </th>
+                <th className="px-3 py-2 text-right font-medium">
+                  Used
+                </th>
+                <th className="px-3 py-2 text-right font-medium">
+                  Remaining
+                </th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-gray-100">
+              {rows.map(
+                ([leaveType, balance]) => (
+                  <tr key={leaveType}>
+                    <td className="px-3 py-2 font-medium capitalize text-gray-800">
+                      {leaveType.replace(
+                        /_/g,
+                        ' '
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right text-gray-700">
+                      {balance.quota}
+                    </td>
+                    <td className="px-3 py-2 text-right text-gray-700">
+                      {balance.used}
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium text-emerald-700">
+                      {balance.remaining}
+                    </td>
+                  </tr>
+                )
+              )}
+
+              <tr className="bg-gray-50 font-semibold">
+                <td className="px-3 py-2 text-gray-900">
+                  Total
+                </td>
+                <td className="px-3 py-2 text-right text-gray-900">
+                  {totals.quota}
+                </td>
+                <td className="px-3 py-2 text-right text-gray-900">
+                  {totals.used}
+                </td>
+                <td className="px-3 py-2 text-right text-emerald-700">
+                  {totals.remaining}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

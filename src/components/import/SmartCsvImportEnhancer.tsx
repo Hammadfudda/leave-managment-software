@@ -64,6 +64,15 @@ interface SmartPreview {
   policySuggestions: PolicySuggestion[];
 }
 
+interface MetadataPreview {
+  missingRoles: string[];
+  usedLeaveTypes: string[];
+  errors: Array<{
+    rowNumber: number;
+    message: string;
+  }>;
+}
+
 function checkboxLabel(
   text: string,
   checked: boolean,
@@ -105,6 +114,11 @@ export default function SmartCsvImportEnhancer() {
   ] = useState(false);
 
   const [
+    guideOpen,
+    setGuideOpen,
+  ] = useState(false);
+
+  const [
     file,
     setFile,
   ] = useState<File | null>(
@@ -115,6 +129,13 @@ export default function SmartCsvImportEnhancer() {
     preview,
     setPreview,
   ] = useState<SmartPreview | null>(
+    null
+  );
+
+  const [
+    metadataPreview,
+    setMetadataPreview,
+  ] = useState<MetadataPreview | null>(
     null
   );
 
@@ -137,6 +158,8 @@ export default function SmartCsvImportEnhancer() {
     autoCreateDesignations:
       false,
     autoCreateGrades:
+      false,
+    autoCreateRoles:
       false,
     createLeavePolicies:
       false,
@@ -534,7 +557,60 @@ export default function SmartCsvImportEnhancer() {
       managerReviewErrors
     ).length;
 
+  const metadataBlockingCount =
+    metadataPreview?.errors.length ||
+    0;
+
+  const openGuide = () => {
+    setError('');
+    setSuccess('');
+    setGuideOpen(true);
+  };
+
+  const downloadSampleCsv = () => {
+    const csv = [
+      'fullName,email,cnic,phone,employeeId,portalRole,roleLabel,designation,department,grade,dateOfJoining,managerEmail,canApproveOtherDepartments,annualQuota,annualUsed,annualPaid,sickQuota,sickUsed,sickPaid,casualQuota,casualUsed,casualPaid',
+      'James Carter,james.carter@example.com,42101-8765432-1,+923001111111,EMP-001,manager,Engineering Lead,Engineering Manager,Engineering,G4,2024-01-15,,false,20,5,Paid,10,2,Paid,8,1,Paid',
+      'Alex Thompson,alex.thompson@example.com,42101-2345678-2,+923002222222,EMP-002,employee,Software Engineer,Software Engineer,Engineering,G4,2025-03-10,james.carter@example.com,false,20,7,Paid,10,1,Paid,8,3,Paid',
+      'Emma Wilson,emma.wilson@example.com,42101-3456789-3,+923003333333,EMP-003,employee,Frontend Developer,Frontend Developer,Engineering,G3,2025-06-01,james.carter@example.com,false,15,4,Paid,8,0,Paid,6,2,Paid',
+    ].join('\n');
+
+    const blob =
+      new Blob(
+        [csv],
+        {
+          type: 'text/csv;charset=utf-8;',
+        }
+      );
+
+    const url =
+      window.URL.createObjectURL(
+        blob
+      );
+
+    const link =
+      document.createElement(
+        'a'
+      );
+
+    link.href = url;
+    link.download =
+      'leave-management-smart-import-sample.csv';
+
+    document.body.appendChild(
+      link
+    );
+
+    link.click();
+    link.remove();
+
+    window.URL.revokeObjectURL(
+      url
+    );
+  };
+
   const openPicker = () => {
+    setGuideOpen(false);
     setError('');
     setSuccess('');
     inputRef.current?.click();
@@ -550,29 +626,56 @@ export default function SmartCsvImportEnhancer() {
       setSuccess('');
 
       try {
-        const form =
+        const mainForm =
           new FormData();
 
-        form.append(
+        mainForm.append(
           'file',
           selected
         );
 
-        const response =
-          await api.post(
+        const metadataForm =
+          new FormData();
+
+        metadataForm.append(
+          'file',
+          selected
+        );
+
+        const [
+          response,
+          metadataResponse,
+        ] = await Promise.all([
+          api.post(
             '/employees/import-smart/preview',
-            form,
+            mainForm,
             {
               headers: {
                 'Content-Type':
                   'multipart/form-data',
               },
             }
-          );
+          ),
+          api.post(
+            '/employees/import-smart/metadata-preview',
+            metadataForm,
+            {
+              headers: {
+                'Content-Type':
+                  'multipart/form-data',
+              },
+            }
+          ),
+        ]);
 
         const data =
           response.data
             ?.preview as SmartPreview;
+
+        setMetadataPreview(
+          metadataResponse.data
+            ?.preview as MetadataPreview
+        );
 
         setPreview(
           data
@@ -641,9 +744,32 @@ export default function SmartCsvImportEnhancer() {
         return;
       }
 
+      if (
+        metadataBlockingCount >
+        0
+      ) {
+        setError(
+          'Fix the HR Role / leave-used CSV errors shown below before importing.'
+        );
+        return;
+      }
+
+      if (
+        metadataPreview?.missingRoles.length &&
+        !permissions.autoCreateRoles
+      ) {
+        setError(
+          'Missing Roles exist. Allow automatic Role creation or cancel the import.'
+        );
+        return;
+      }
+
       setBusy(true);
       setError('');
       setSuccess('');
+
+      let employeeImportSaved =
+        false;
 
       try {
         const form =
@@ -687,8 +813,45 @@ export default function SmartCsvImportEnhancer() {
           }
         );
 
+        employeeImportSaved =
+          true;
+
+        const metadataForm =
+          new FormData();
+
+        metadataForm.append(
+          'file',
+          file
+        );
+
+        metadataForm.append(
+          'decisions',
+          JSON.stringify({
+            autoCreateRoles:
+              permissions.autoCreateRoles,
+            targetEmails:
+              newRows.map(
+                (row) =>
+                  row.email
+              ),
+          })
+        );
+
+        await api.post(
+          '/employees/import-smart/metadata-commit',
+          metadataForm,
+          {
+            headers: {
+              'Content-Type':
+                'multipart/form-data',
+            },
+            timeout:
+              60000,
+          }
+        );
+
         setSuccess(
-          'Import completed successfully. New account emails are being processed automatically.'
+          'Import completed successfully. Employee details, HR Roles and starting leave usage were applied. New account emails are being processed automatically.'
         );
       } catch (requestError: any) {
         const isTimeout =
@@ -703,13 +866,18 @@ export default function SmartCsvImportEnhancer() {
               'timeout'
             );
 
+        const message =
+          getApiErrorMessage(
+            requestError,
+            'Unable to complete Smart CSV import.'
+          );
+
         setError(
-          isTimeout
-            ? 'Import request took too long. Please check the backend logs before trying again. The import may already have completed.'
-            : getApiErrorMessage(
-                requestError,
-                'Unable to complete Smart CSV import.'
-              )
+          employeeImportSaved
+            ? `Employees were imported, but HR Role / starting leave usage could not be applied: ${message}`
+            : isTimeout
+              ? 'Import request took too long. Please check the backend logs before trying again. The import may already have completed.'
+              : message
         );
       } finally {
         setBusy(false);
@@ -747,7 +915,7 @@ export default function SmartCsvImportEnhancer() {
               type="button"
               disabled={busy}
               onClick={
-                openPicker
+                openGuide
               }
               className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -790,6 +958,106 @@ export default function SmartCsvImportEnhancer() {
   return (
     <>
       {trigger}
+
+      {guideOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Import Employees from CSV
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Use the sample format so employee details, policies and starting leave usage can be reviewed safely before import.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setGuideOpen(
+                    false
+                  )
+                }
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <h3 className="text-sm font-semibold text-gray-900">
+                    Required employee fields
+                  </h3>
+                  <p className="mt-2 text-xs leading-6 text-gray-600">
+                    fullName, email, cnic, employeeId, portalRole, designation, department, grade, dateOfJoining
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <h3 className="text-sm font-semibold text-gray-900">
+                    Additional employee fields
+                  </h3>
+                  <p className="mt-2 text-xs leading-6 text-gray-600">
+                    phone, roleLabel, managerEmail, canApproveOtherDepartments
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                <h3 className="text-sm font-semibold text-blue-900">
+                  Leave columns
+                </h3>
+                <p className="mt-2 text-xs leading-6 text-blue-800">
+                  Use leaveTypeQuota, leaveTypeUsed and leaveTypePaid. Example: annualQuota, annualUsed, annualPaid. Quota configures the grade policy, Used sets the employee&apos;s starting used balance, and Remaining is calculated automatically.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+                Date of Joining must use YYYY-MM-DD. CNIC must use 12345-1234567-1. Existing emails remain skipped by the normal Smart Import flow.
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-5 py-4">
+              <button
+                type="button"
+                onClick={
+                  downloadSampleCsv
+                }
+                className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
+              >
+                Download Sample CSV
+              </button>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setGuideOpen(
+                      false
+                    )
+                  }
+                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={
+                    openPicker
+                  }
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  Choose CSV File
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
@@ -871,11 +1139,13 @@ export default function SmartCsvImportEnhancer() {
                       label="Blocking Errors"
                       value={
                         invalidRows.length +
-                        managerBlockingCount
+                        managerBlockingCount +
+                        metadataBlockingCount
                       }
                       danger={
                         invalidRows.length +
-                          managerBlockingCount >
+                          managerBlockingCount +
+                          metadataBlockingCount >
                         0
                       }
                     />
@@ -927,6 +1197,19 @@ export default function SmartCsvImportEnhancer() {
                       )}
 
                       {checkboxLabel(
+                        `Create missing Roles automatically (${metadataPreview?.missingRoles.length || 0})`,
+                        permissions.autoCreateRoles,
+                        (checked) =>
+                          setPermissions(
+                            (previous) => ({
+                              ...previous,
+                              autoCreateRoles:
+                                checked,
+                            })
+                          )
+                      )}
+
+                      {checkboxLabel(
                         `Create Leave Policies from sheet (${preview.policySuggestions.length})`,
                         permissions.createLeavePolicies,
                         (checked) =>
@@ -963,13 +1246,15 @@ export default function SmartCsvImportEnhancer() {
                     preview.missingDesignations.length >
                       0 ||
                     preview.missingGrades.length >
+                      0 ||
+                    (metadataPreview?.missingRoles.length || 0) >
                       0) && (
                     <section className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                       <h3 className="text-sm font-semibold text-amber-900">
                         Missing Master Data
                       </h3>
 
-                      <div className="mt-2 grid gap-3 text-xs text-amber-800 md:grid-cols-3">
+                      <div className="mt-2 grid gap-3 text-xs text-amber-800 md:grid-cols-4">
                         <List
                           title="Departments"
                           items={
@@ -988,6 +1273,13 @@ export default function SmartCsvImportEnhancer() {
                           title="Grades"
                           items={
                             preview.missingGrades
+                          }
+                        />
+
+                        <List
+                          title="Roles"
+                          items={
+                            metadataPreview?.missingRoles || []
                           }
                         />
                       </div>
@@ -1288,6 +1580,29 @@ export default function SmartCsvImportEnhancer() {
                     </div>
                   )}
 
+                  {metadataBlockingCount > 0 && (
+                    <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      <p className="font-semibold">
+                        HR Role / leave balance errors
+                      </p>
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+                        {metadataPreview?.errors.map(
+                          (item) => (
+                            <li key={`${item.rowNumber}-${item.message}`}>
+                              Row {item.rowNumber}: {item.message}
+                            </li>
+                          )
+                        )}
+                      </ul>
+                    </div>
+                  )}
+
+                  {(metadataPreview?.usedLeaveTypes.length || 0) > 0 && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                      Starting used balances detected for: {metadataPreview?.usedLeaveTypes.join(', ')}. Remaining leave will be calculated from the real grade policy quota.
+                    </div>
+                  )}
+
                   <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
                     New portal accounts will receive a Temporary Password by email. Account emails are processed automatically. Users must change their password after first login.
                   </div>
@@ -1364,6 +1679,8 @@ export default function SmartCsvImportEnhancer() {
                       invalidRows.length >
                         0 ||
                       managerBlockingCount >
+                        0 ||
+                      metadataBlockingCount >
                         0 ||
                       Boolean(
                         success
