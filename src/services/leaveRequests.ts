@@ -1,4 +1,5 @@
 import api from './api';
+
 import type {
   LeaveRequest,
   LeaveType,
@@ -36,6 +37,10 @@ interface BackendLeaveRequest {
   isPaidOverride?: boolean | null;
   isStopRequest?: boolean;
   cancelledBy?: string | null;
+  cancelledByName?: string;
+  cancelledReason?: string;
+  daysUsedBeforeCancel?: number;
+  actualEndDate?: string | null;
   attachmentName?: string;
   attachmentUrl?: string;
   hasAttachment?: boolean;
@@ -45,7 +50,9 @@ interface BackendLeaveRequest {
 function getId(
   value: BackendId
 ): string {
-  if (!value) return '';
+  if (!value) {
+    return '';
+  }
 
   if (
     typeof value ===
@@ -58,9 +65,11 @@ function getId(
 }
 
 function dateOnly(
-  value?: string
+  value?: string | null
 ): string {
-  if (!value) return '';
+  if (!value) {
+    return '';
+  }
 
   return value.split(
     'T'
@@ -77,83 +86,133 @@ export function mapBackendLeaveRequest(
       : null;
 
   return {
-    id: leave._id,
+    id:
+      leave._id,
+
     employeeId:
       getId(
         leave.employeeId
       ),
+
     employeeName:
       leave.employeeName ||
       employee?.fullName ||
       '',
+
     department:
       leave.department ||
       '',
+
     leaveType:
       leave.leaveType,
+
     startDate:
       dateOnly(
         leave.startDate
       ),
+
     endDate:
       dateOnly(
         leave.endDate
       ),
+
     totalDaysRequested:
       leave.totalDaysRequested ??
       0,
+
     totalWorkingDays:
       leave.totalWorkingDays ??
       0,
+
     excludedWeekendDates:
       leave.excludedWeekendDates ||
       [],
+
     reason:
-      leave.reason || '',
+      leave.reason ||
+      '',
+
     status:
       leave.status,
+
     requiredApproverIds:
       (
         leave.requiredApproverIds ||
         []
-      ).map(getId),
+      ).map(
+        getId
+      ),
+
     approvedByIds:
       (
         leave.approvedByIds ||
         []
-      ).map(getId),
+      ).map(
+        getId
+      ),
+
     rejectedByIds:
       (
         leave.rejectedByIds ||
         []
-      ).map(getId),
+      ).map(
+        getId
+      ),
+
     approvalHistory:
       leave.approvalHistory ||
       [],
+
     isAdminOnlyDecision:
       leave.isAdminOnlyDecision ??
       false,
+
     isExtension:
       leave.isExtension ??
       false,
+
     originalRequestId:
       leave.originalRequestId ||
       undefined,
+
     isPaidOverride:
       leave.isPaidOverride ??
       undefined,
+
     isStopRequest:
       leave.isStopRequest ??
       false,
+
     cancelledBy:
       leave.cancelledBy ||
       undefined,
+
+    cancelledByName:
+      leave.cancelledByName ||
+      undefined,
+
+    cancelledReason:
+      leave.cancelledReason ||
+      undefined,
+
+    daysUsedBeforeCancel:
+      leave.daysUsedBeforeCancel,
+
+    actualEndDate:
+      dateOnly(
+        leave.actualEndDate
+      ) ||
+      undefined,
+
     attachmentName:
       leave.attachmentName,
+
     attachmentUrl:
       leave.attachmentUrl,
+
     createdAt:
       leave.createdAt,
+
     hasAttachment:
       leave.hasAttachment,
   } as LeaveRequest & {
@@ -193,7 +252,8 @@ export interface CreateLeaveRequestPayload {
 }
 
 export async function createLeaveRequest(
-  payload: CreateLeaveRequestPayload
+  payload:
+    CreateLeaveRequestPayload
 ): Promise<LeaveRequest> {
   const formData =
     new FormData();
@@ -245,7 +305,8 @@ export async function createLeaveRequest(
 }
 
 export async function getLeaveAttachmentUrl(
-  leaveRequestId: string
+  leaveRequestId:
+    string
 ): Promise<{
   url: string;
   expiresAt: number;
@@ -260,11 +321,13 @@ export async function getLeaveAttachmentUrl(
   return response.data.data;
 }
 
-
 export async function extendLeaveRequest(
-  leaveRequestId: string,
-  newEndDate: string,
-  reason: string
+  leaveRequestId:
+    string,
+  newEndDate:
+    string,
+  reason:
+    string
 ): Promise<LeaveRequest> {
   const response =
     await api.post(
@@ -281,9 +344,12 @@ export async function extendLeaveRequest(
 }
 
 export async function requestStopLeaveRequest(
-  leaveRequestId: string,
-  returnDate: string,
-  reason: string
+  leaveRequestId:
+    string,
+  returnDate:
+    string,
+  reason:
+    string
 ): Promise<LeaveRequest> {
   const response =
     await api.post(

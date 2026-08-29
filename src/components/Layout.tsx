@@ -6,6 +6,7 @@ import {
 
 import {
   Outlet,
+  useLocation,
 } from 'react-router-dom';
 
 import Sidebar from './Sidebar';
@@ -17,12 +18,14 @@ import EmployeeRequirementsEnhancer from './enhancers/EmployeeRequirementsEnhanc
 import MasterDataRequirementsEnhancer from './enhancers/MasterDataRequirementsEnhancer';
 import YearlyReportEnhancer from './enhancers/YearlyReportEnhancer';
 import ApprovalAdminEnhancer from './enhancers/ApprovalAdminEnhancer';
+import DivisionTerminologyEnhancer from './enhancers/DivisionTerminologyEnhancer';
 
 import api, {
   getApiErrorMessage,
 } from '../services/api';
 
 export default function Layout() {
+  const location = useLocation();
   const [
     sidebarOpen,
     setSidebarOpen,
@@ -149,11 +152,25 @@ export default function Layout() {
         </main>
       </div>
 
-      <SmartCsvImportEnhancer />
-      <EmployeeRequirementsEnhancer />
-      <MasterDataRequirementsEnhancer />
-      <YearlyReportEnhancer />
-      <ApprovalAdminEnhancer />
+      <DivisionTerminologyEnhancer />
+
+      {location.pathname === '/employees' && (
+        <>
+          <SmartCsvImportEnhancer />
+          <EmployeeRequirementsEnhancer />
+        </>
+      )}
+
+      {location.pathname === '/create' && (
+        <MasterDataRequirementsEnhancer />
+      )}
+
+      {location.pathname === '/approvals' && (
+        <>
+          <YearlyReportEnhancer />
+          <ApprovalAdminEnhancer />
+        </>
+      )}
     </div>
   );
 }

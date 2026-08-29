@@ -1,4 +1,7 @@
-export type Role = 'admin' | 'manager' | 'employee';
+export type Role =
+  | 'admin'
+  | 'manager'
+  | 'employee';
 
 export type LeaveStatus =
   | 'pending'
@@ -14,11 +17,12 @@ export type LeaveType =
   | 'maternity'
   | 'paternity';
 
-export const CORE_LEAVE_TYPES: LeaveType[] = [
-  'annual',
-  'sick',
-  'casual',
-];
+export const CORE_LEAVE_TYPES:
+  LeaveType[] = [
+    'annual',
+    'sick',
+    'casual',
+  ];
 
 export interface User {
   id: string;
@@ -33,8 +37,8 @@ export interface User {
   role: Role;
 
   /*
-   * HR / Master Data role label.
-   * This is separate from portal access.
+   * Backward-compatible database field for the new Division master-data value.
+   * User-facing UI calls this Division; Portal Access remains separate.
    */
   roleLabel?: string;
 
@@ -44,20 +48,20 @@ export interface User {
   dateOfJoining: string;
   cnic: string;
   phone: string;
-  status: 'active' | 'inactive';
+  status:
+    | 'active'
+    | 'inactive';
   managerId?: string;
   canApproveOtherDepartments?: boolean;
   profilePhotoUrl?: string;
-  detailsStatus?: 'complete' | 'pending';
+  detailsStatus?:
+    | 'complete'
+    | 'pending';
   pendingFields?: string[];
   mustChangePassword?: boolean;
   passwordChangedFromDefault?: boolean;
 }
 
-/*
- * Grade represents employee level only.
- * Leave quota / carry-forward rules belong to LeavePolicy.
- */
 export interface Grade {
   id: string;
   name: string;
@@ -73,7 +77,9 @@ export interface LeavePolicy {
     gradeName?: string;
     yearlyQuota: number;
   }>;
-  requiresApprovalFrom: 'manager' | 'admin';
+  requiresApprovalFrom:
+    | 'manager'
+    | 'admin';
   approvalRouting?: {
     designation?: string;
     department?: string;
@@ -97,9 +103,29 @@ export interface ApprovalHistoryEntry {
   approverId: string;
   approverName: string;
   approverRole: string;
-  action: 'approved' | 'rejected' | 'cancelled';
+  action:
+    | 'approved'
+    | 'rejected'
+    | 'cancelled';
   comment?: string;
   actionDate: string;
+
+  /*
+   * Optional metadata added by the confirmed Admin finalized-decision actions.
+   */
+  isAdminOverride?: boolean;
+  isAdminStop?: boolean;
+  previousStatus?:
+    | 'approved'
+    | 'rejected'
+    | 'cancelled'
+    | 'pending';
+  newStatus?:
+    | 'approved'
+    | 'rejected'
+    | 'cancelled'
+    | 'pending';
+  effectiveReturnDate?: string;
 }
 
 export interface LeaveRequest {
@@ -114,8 +140,11 @@ export interface LeaveRequest {
   totalWorkingDays: number;
   reason: string;
   status: LeaveStatus;
-  currentApproverRole: 'manager' | 'admin';
-  approvalHistory: ApprovalHistoryEntry[];
+  currentApproverRole:
+    | 'manager'
+    | 'admin';
+  approvalHistory:
+    ApprovalHistoryEntry[];
   requiredApproverIds?: string[];
   approvedByIds?: string[];
   rejectedByIds?: string[];
