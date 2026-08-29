@@ -78,3 +78,66 @@ export async function actOnBehalfOfApprover(
     response.data.data
   );
 }
+
+export async function adminOverrideFinalDecision(
+  requestId: string,
+  action:
+    | 'approved'
+    | 'rejected',
+  reason: string
+): Promise<LeaveRequest> {
+  const cleanReason =
+    reason.trim();
+
+  if (!cleanReason) {
+    throw new Error(
+      'A reason is required for an Admin override.'
+    );
+  }
+
+  const response =
+    await api.patch(
+      `/leave-requests/${requestId}/admin-override`,
+      {
+        action,
+        reason:
+          cleanReason,
+      }
+    );
+
+  return mapBackendLeaveRequest(
+    response.data.data
+  );
+}
+
+export async function adminStopApprovedLeave(
+  requestId: string,
+  effectiveReturnDate: string,
+  reason: string
+): Promise<LeaveRequest> {
+  const cleanReason =
+    reason.trim();
+
+  if (
+    !effectiveReturnDate ||
+    !cleanReason
+  ) {
+    throw new Error(
+      'Effective Return / Join Date and reason are required.'
+    );
+  }
+
+  const response =
+    await api.patch(
+      `/leave-requests/${requestId}/admin-stop`,
+      {
+        effectiveReturnDate,
+        reason:
+          cleanReason,
+      }
+    );
+
+  return mapBackendLeaveRequest(
+    response.data.data
+  );
+}

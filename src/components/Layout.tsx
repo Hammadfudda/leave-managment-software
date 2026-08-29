@@ -13,6 +13,10 @@ import Topbar from './Topbar';
 
 import ChangePasswordRequired from './auth/ChangePasswordRequired';
 import SmartCsvImportEnhancer from './import/SmartCsvImportEnhancer';
+import EmployeeRequirementsEnhancer from './enhancers/EmployeeRequirementsEnhancer';
+import MasterDataRequirementsEnhancer from './enhancers/MasterDataRequirementsEnhancer';
+import YearlyReportEnhancer from './enhancers/YearlyReportEnhancer';
+import ApprovalAdminEnhancer from './enhancers/ApprovalAdminEnhancer';
 
 import api, {
   getApiErrorMessage,
@@ -61,8 +65,7 @@ export default function Layout() {
           );
         } catch (error) {
           /*
-           * Fail closed: if mandatory-password status cannot be verified,
-           * do not expose the application until the backend check succeeds.
+           * Existing fail-closed account-security behavior is preserved.
            */
           setPasswordCheckError(
             getApiErrorMessage(
@@ -145,7 +148,12 @@ export default function Layout() {
           </div>
         </main>
       </div>
+
       <SmartCsvImportEnhancer />
+      <EmployeeRequirementsEnhancer />
+      <MasterDataRequirementsEnhancer />
+      <YearlyReportEnhancer />
+      <ApprovalAdminEnhancer />
     </div>
   );
 }
