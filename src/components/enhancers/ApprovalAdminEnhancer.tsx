@@ -84,46 +84,6 @@ function parseLocalDate(
   return date;
 }
 
-function isActiveApprovedLeave(
-  request:
-    LeaveRequest
-) {
-  if (
-    request.status !==
-    'approved'
-  ) {
-    return false;
-  }
-
-  const today =
-    new Date();
-
-  today.setHours(
-    0,
-    0,
-    0,
-    0
-  );
-
-  const start =
-    parseLocalDate(
-      request.startDate
-    );
-
-  const end =
-    parseLocalDate(
-      request.actualEndDate ||
-      request.endDate
-    );
-
-  return (
-    today >=
-      start &&
-    today <=
-      end
-  );
-}
-
 function requestSignature(
   request:
     LeaveRequest
@@ -158,24 +118,36 @@ function findCardCandidates(
       request.leaveType
     );
 
-  const startToken =
+  const startTokens = [
     normalizeText(
       formatDate(
         request.startDate
       )
-    );
+    ),
+    normalizeText(
+      numericDate(
+        request.startDate
+      )
+    ),
+  ];
 
-  const endToken =
+  const endTokens = [
     normalizeText(
       formatDate(
         request.endDate
       )
-    );
+    ),
+    normalizeText(
+      numericDate(
+        request.endDate
+      )
+    ),
+  ];
 
   const all =
     Array.from(
       document.querySelectorAll(
-        'main div'
+        'main tr, main article, main div'
       )
     ) as HTMLElement[];
 
@@ -205,11 +177,23 @@ function findCardCandidates(
           text.includes(
             leaveToken
           ) &&
-          text.includes(
-            startToken
+          startTokens.some(
+            (
+              token
+            ) =>
+              token &&
+              text.includes(
+                token
+              )
           ) &&
-          text.includes(
-            endToken
+          endTokens.some(
+            (
+              token
+            ) =>
+              token &&
+              text.includes(
+                token
+              )
           )
         );
       }
@@ -351,8 +335,12 @@ export default function ApprovalAdminEnhancer() {
   useEffect(
     () => {
       if (
-        location.pathname !==
-          '/approvals' ||
+        ![
+          '/approvals',
+          '/my-team',
+        ].includes(
+          location.pathname
+        ) ||
         user?.role !==
           'admin'
       ) {
@@ -569,8 +557,12 @@ export default function ApprovalAdminEnhancer() {
   );
 
   if (
-    location.pathname !==
-      '/approvals' ||
+    ![
+      '/approvals',
+      '/my-team',
+    ].includes(
+      location.pathname
+    ) ||
     user?.role !==
       'admin'
   ) {
@@ -822,9 +814,10 @@ export default function ApprovalAdminEnhancer() {
                     : 'Approve'}
                 </button>
 
-                {isActiveApprovedLeave(
-                  request
-                ) && (
+                {request.status ===
+                  'approved' &&
+                  !request.cancelledBy &&
+                  !request.actualEndDate && (
                   <button
                     type="button"
                     onClick={() =>

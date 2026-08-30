@@ -166,10 +166,14 @@ export default function Layout() {
       )}
 
       {location.pathname === '/approvals' && (
-        <>
-          <YearlyReportEnhancer />
-          <ApprovalAdminEnhancer />
-        </>
+        <YearlyReportEnhancer />
+      )}
+
+      {[
+        '/approvals',
+        '/my-team',
+      ].includes(location.pathname) && (
+        <ApprovalAdminEnhancer />
       )}
     </div>
   );

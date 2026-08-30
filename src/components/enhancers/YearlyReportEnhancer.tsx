@@ -13,7 +13,10 @@ import {
 } from 'react-router-dom';
 
 import {
-  exportYearlyLeaveReport,
+  useAppData,
+} from '../../context/AppDataContext';
+
+import {
   getYearlyLeaveReport,
   type YearlyLeaveSnapshot,
 } from '../../services/yearlyReports';
@@ -30,6 +33,8 @@ interface EmployeeYearGroup {
   department: string;
   designation: string;
   grade: string;
+  managerId: string;
+  managerName: string;
   rows: YearlyLeaveSnapshot[];
   totalGranted: number;
   totalUsed: number;
@@ -39,6 +44,11 @@ interface EmployeeYearGroup {
 export default function YearlyReportEnhancer() {
   const location =
     useLocation();
+
+  const {
+    users,
+  } =
+    useAppData();
 
   const [
     mount,
@@ -73,6 +83,30 @@ export default function YearlyReportEnhancer() {
   const [
     error,
     setError,
+  ] =
+    useState('');
+
+  const [
+    divisionFilter,
+    setDivisionFilter,
+  ] =
+    useState('');
+
+  const [
+    departmentFilter,
+    setDepartmentFilter,
+  ] =
+    useState('');
+
+  const [
+    managerFilter,
+    setManagerFilter,
+  ] =
+    useState('');
+
+  const [
+    employeeFilter,
+    setEmployeeFilter,
   ] =
     useState('');
 
@@ -120,10 +154,6 @@ export default function YearlyReportEnhancer() {
             'true'
           );
 
-          /*
-           * Put yearly reporting at the TOP of Approvals. Audit Logs stays focused on
-           * audit events only.
-           */
           pageRoot.prepend(
             host
           );
@@ -239,6 +269,26 @@ export default function YearlyReportEnhancer() {
     ]
   );
 
+  useEffect(
+    () => {
+      setDivisionFilter(
+        ''
+      );
+      setDepartmentFilter(
+        ''
+      );
+      setManagerFilter(
+        ''
+      );
+      setEmployeeFilter(
+        ''
+      );
+    },
+    [
+      year,
+    ]
+  );
+
   const groups =
     useMemo<
       EmployeeYearGroup[]
@@ -254,6 +304,34 @@ export default function YearlyReportEnhancer() {
           const row
           of rows
         ) {
+          const currentEmployee =
+            users.find(
+              (
+                item
+              ) =>
+                (
+                  row.employeeId &&
+                  item.id ===
+                    row.employeeId
+                ) ||
+                (
+                  row.employeeCode &&
+                  item.employeeId ===
+                    row.employeeCode
+                )
+            );
+
+          const manager =
+            currentEmployee?.managerId
+              ? users.find(
+                  (
+                    item
+                  ) =>
+                    item.id ===
+                    currentEmployee.managerId
+                )
+              : undefined;
+
           const key =
             row.employeeId ||
             row.employeeCode ||
@@ -279,6 +357,12 @@ export default function YearlyReportEnhancer() {
                 row.designation,
               grade:
                 row.grade,
+              managerId:
+                manager?.id ||
+                '',
+              managerName:
+                manager?.fullName ||
+                'Unassigned',
               rows:
                 [],
               totalGranted:
@@ -332,8 +416,295 @@ export default function YearlyReportEnhancer() {
       },
       [
         rows,
+        users,
       ]
     );
+
+  const divisions =
+    useMemo(
+      () =>
+        Array.from(
+          new Set(
+            groups
+              .map(
+                (
+                  group
+                ) =>
+                  group.division
+              )
+              .filter(
+                Boolean
+              )
+          )
+        ).sort(),
+      [
+        groups,
+      ]
+    );
+
+  const departments =
+    useMemo(
+      () =>
+        Array.from(
+          new Set(
+            groups
+              .filter(
+                (
+                  group
+                ) =>
+                  group.division ===
+                  divisionFilter
+              )
+              .map(
+                (
+                  group
+                ) =>
+                  group.department
+              )
+              .filter(
+                Boolean
+              )
+          )
+        ).sort(),
+      [
+        groups,
+        divisionFilter,
+      ]
+    );
+
+  const managers =
+    useMemo(
+      () => {
+        const map =
+          new Map<
+            string,
+            string
+          >();
+
+        for (
+          const group
+          of groups
+        ) {
+          if (
+            group.division !==
+              divisionFilter ||
+            group.department !==
+              departmentFilter
+          ) {
+            continue;
+          }
+
+          if (
+            group.managerId
+          ) {
+            map.set(
+              group.managerId,
+              group.managerName
+            );
+          }
+        }
+
+        return Array.from(
+          map.entries()
+        ).sort(
+          (
+            a,
+            b
+          ) =>
+            a[1].localeCompare(
+              b[1]
+            )
+        );
+      },
+      [
+        groups,
+        divisionFilter,
+        departmentFilter,
+      ]
+    );
+
+  const employees =
+    useMemo(
+      () =>
+        groups.filter(
+          (
+            group
+          ) =>
+            group.division ===
+              divisionFilter &&
+            group.department ===
+              departmentFilter &&
+            group.managerId ===
+              managerFilter
+        ),
+      [
+        groups,
+        divisionFilter,
+        departmentFilter,
+        managerFilter,
+      ]
+    );
+
+  const filteredGroups =
+    useMemo(
+      () => {
+        if (
+          !divisionFilter ||
+          !departmentFilter ||
+          !managerFilter ||
+          !employeeFilter
+        ) {
+          return [];
+        }
+
+        return groups.filter(
+          (
+            group
+          ) =>
+            group.division ===
+              divisionFilter &&
+            group.department ===
+              departmentFilter &&
+            group.managerId ===
+              managerFilter &&
+            group.key ===
+              employeeFilter
+        );
+      },
+      [
+        groups,
+        divisionFilter,
+        departmentFilter,
+        managerFilter,
+        employeeFilter,
+      ]
+    );
+
+  const exportFilteredCsv =
+    () => {
+      if (
+        filteredGroups.length ===
+        0
+      ) {
+        return;
+      }
+
+      const csvRows = [
+        [
+          'Year',
+          'Employee',
+          'Employee ID',
+          'Division',
+          'Department',
+          'Manager',
+          'Designation',
+          'Grade',
+          'Leave Type',
+          'Granted',
+          'Used',
+          'Remaining',
+        ],
+        ...filteredGroups.flatMap(
+          (
+            group
+          ) =>
+            group.rows.map(
+              (
+                row
+              ) => [
+                String(
+                  year
+                ),
+                group.employeeName,
+                group.employeeCode,
+                group.division,
+                group.department,
+                group.managerName,
+                group.designation,
+                group.grade,
+                row.leaveType,
+                String(
+                  row.granted
+                ),
+                String(
+                  row.used
+                ),
+                String(
+                  row.remaining
+                ),
+              ]
+            )
+        ),
+      ];
+
+      const escape =
+        (
+          value:
+            string
+        ) =>
+          `"${String(
+            value
+          ).replace(
+            /"/g,
+            '""'
+          )}"`;
+
+      const csv =
+        csvRows
+          .map(
+            (
+              row
+            ) =>
+              row
+                .map(
+                  escape
+                )
+                .join(
+                  ','
+                )
+          )
+          .join(
+            '\r\n'
+          );
+
+      const blob =
+        new Blob(
+          [
+            csv,
+          ],
+          {
+            type:
+              'text/csv;charset=utf-8;',
+          }
+        );
+
+      const url =
+        window.URL.createObjectURL(
+          blob
+        );
+
+      const link =
+        document.createElement(
+          'a'
+        );
+
+      link.href =
+        url;
+
+      link.download =
+        `yearly-leave-report-${year}-${filteredGroups[0].employeeCode || 'employee'}.csv`;
+
+      document.body.appendChild(
+        link
+      );
+
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(
+        url
+      );
+    };
 
   if (!mount) {
     return null;
@@ -357,71 +728,259 @@ export default function YearlyReportEnhancer() {
   return createPortal(
     <section className="mb-8 space-y-4">
       <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">
-              Historical Yearly Leave Report
-            </h2>
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">
+            Historical Yearly Leave Report
+          </h2>
 
-            <p className="mt-1 text-sm text-gray-500">
-              Select a leave year to see each employee's preserved Division,
-              Department, Designation, Grade and leave-wise Granted / Used /
-              Remaining balances.
-            </p>
-          </div>
+          <p className="mt-1 text-sm text-gray-500">
+            Select Year → Division → Department → Manager → Employee. Data is
+            shown only after the full filter path is selected.
+          </p>
+        </div>
 
-          <div className="flex flex-wrap gap-2">
-            <select
-              value={
-                year
-              }
-              onChange={
-                (
-                  event
-                ) =>
-                  setYear(
-                    Number(
-                      event.target.value
-                    )
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <select
+            value={
+              year
+            }
+            onChange={
+              (
+                event
+              ) =>
+                setYear(
+                  Number(
+                    event.target.value
                   )
-              }
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
-            >
-              {years.map(
-                (
-                  item
-                ) => (
-                  <option
-                    key={
-                      item
-                    }
-                    value={
-                      item
-                    }
-                  >
-                    {
-                      item
-                    }
-                  </option>
                 )
-              )}
-            </select>
+            }
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+          >
+            {years.map(
+              (
+                item
+              ) => (
+                <option
+                  key={
+                    item
+                  }
+                  value={
+                    item
+                  }
+                >
+                  {
+                    item
+                  }
+                </option>
+              )
+            )}
+          </select>
 
-            <button
-              type="button"
-              disabled={
-                loading
+          <select
+            value={
+              divisionFilter
+            }
+            onChange={
+              (
+                event
+              ) => {
+                setDivisionFilter(
+                  event.target.value
+                );
+
+                setDepartmentFilter(
+                  ''
+                );
+
+                setManagerFilter(
+                  ''
+                );
+
+                setEmployeeFilter(
+                  ''
+                );
               }
-              onClick={() =>
-                void exportYearlyLeaveReport(
-                  year
+            }
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">
+              Select Division
+            </option>
+
+            {divisions.map(
+              (
+                division
+              ) => (
+                <option
+                  key={
+                    division
+                  }
+                  value={
+                    division
+                  }
+                >
+                  {
+                    division
+                  }
+                </option>
+              )
+            )}
+          </select>
+
+          <select
+            value={
+              departmentFilter
+            }
+            disabled={
+              !divisionFilter
+            }
+            onChange={
+              (
+                event
+              ) => {
+                setDepartmentFilter(
+                  event.target.value
+                );
+
+                setManagerFilter(
+                  ''
+                );
+
+                setEmployeeFilter(
+                  ''
+                );
+              }
+            }
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm disabled:bg-gray-50"
+          >
+            <option value="">
+              Select Department
+            </option>
+
+            {departments.map(
+              (
+                department
+              ) => (
+                <option
+                  key={
+                    department
+                  }
+                  value={
+                    department
+                  }
+                >
+                  {
+                    department
+                  }
+                </option>
+              )
+            )}
+          </select>
+
+          <select
+            value={
+              managerFilter
+            }
+            disabled={
+              !departmentFilter
+            }
+            onChange={
+              (
+                event
+              ) => {
+                setManagerFilter(
+                  event.target.value
+                );
+
+                setEmployeeFilter(
+                  ''
+                );
+              }
+            }
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm disabled:bg-gray-50"
+          >
+            <option value="">
+              Select Manager
+            </option>
+
+            {managers.map(
+              ([
+                id,
+                name,
+              ]) => (
+                <option
+                  key={
+                    id
+                  }
+                  value={
+                    id
+                  }
+                >
+                  {
+                    name
+                  }
+                </option>
+              )
+            )}
+          </select>
+
+          <select
+            value={
+              employeeFilter
+            }
+            disabled={
+              !managerFilter
+            }
+            onChange={
+              (
+                event
+              ) =>
+                setEmployeeFilter(
+                  event.target.value
                 )
-              }
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              Export CSV
-            </button>
-          </div>
+            }
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm disabled:bg-gray-50"
+          >
+            <option value="">
+              Select Team Member
+            </option>
+
+            {employees.map(
+              (
+                employee
+              ) => (
+                <option
+                  key={
+                    employee.key
+                  }
+                  value={
+                    employee.key
+                  }
+                >
+                  {
+                    employee.employeeName
+                  }
+                </option>
+              )
+            )}
+          </select>
+
+          <button
+            type="button"
+            disabled={
+              loading ||
+              !divisionFilter ||
+              !departmentFilter ||
+              !managerFilter ||
+              !employeeFilter
+            }
+            onClick={
+              exportFilteredCsv
+            }
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Export CSV
+          </button>
         </div>
 
         {error && (
@@ -441,15 +1000,33 @@ export default function YearlyReportEnhancer() {
 
       {!loading &&
         !error &&
-        groups.length ===
-          0 && (
-          <div className="rounded-2xl border border-gray-100 bg-white px-5 py-10 text-center text-sm text-gray-400 shadow-sm">
-            No preserved snapshot data is available for {year}.
+        (
+          !divisionFilter ||
+          !departmentFilter ||
+          !managerFilter ||
+          !employeeFilter
+        ) && (
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-10 text-center text-sm text-gray-400">
+            Select Division, Department, Manager and Team Member to view leave
+            data.
           </div>
         )}
 
       {!loading &&
-        groups.map(
+        !error &&
+        divisionFilter &&
+        departmentFilter &&
+        managerFilter &&
+        employeeFilter &&
+        filteredGroups.length ===
+          0 && (
+          <div className="rounded-2xl border border-gray-100 bg-white px-5 py-10 text-center text-sm text-gray-400 shadow-sm">
+            No preserved data is available for this selection in {year}.
+          </div>
+        )}
+
+      {!loading &&
+        filteredGroups.map(
           (
             group
           ) => (
@@ -475,8 +1052,8 @@ export default function YearlyReportEnhancer() {
                     </p>
 
                     <p className="mt-1 text-xs text-gray-500">
-                      Designation: {group.designation || '—'} · Grade:{' '}
-                      {group.grade || '—'}
+                      Manager: {group.managerName || '—'} · Designation:{' '}
+                      {group.designation || '—'} · Grade: {group.grade || '—'}
                     </p>
                   </div>
 

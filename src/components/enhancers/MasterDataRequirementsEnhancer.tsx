@@ -83,6 +83,14 @@ export default function MasterDataRequirementsEnhancer() {
     >([]);
 
   const [
+    active,
+    setActive,
+  ] =
+    useState(
+      false
+    );
+
+  const [
     newDivision,
     setNewDivision,
   ] =
@@ -157,6 +165,10 @@ export default function MasterDataRequirementsEnhancer() {
         location.pathname !==
         '/create'
       ) {
+        setActive(
+          false
+        );
+
         return;
       }
 
@@ -178,118 +190,6 @@ export default function MasterDataRequirementsEnhancer() {
     ]
   );
 
-  /*
-   * Remove the old HR Role UI from Master Data completely.
-   * We keep the same backend /roles API only as a compatibility endpoint.
-   */
-  useEffect(
-    () => {
-      if (
-        location.pathname !==
-        '/create'
-      ) {
-        return;
-      }
-
-      const hideLegacyRoleUi =
-        () => {
-          const buttons =
-            Array.from(
-              document.querySelectorAll(
-                'button'
-              )
-            ) as HTMLButtonElement[];
-
-          const designationTab =
-            buttons.find(
-              (
-                button
-              ) =>
-                button.textContent
-                  ?.trim() ===
-                'Designations'
-            );
-
-          const roleTab =
-            buttons.find(
-              (
-                button
-              ) =>
-                [
-                  'Roles',
-                  'Divisions',
-                ].includes(
-                  button.textContent
-                    ?.trim() ||
-                    ''
-                )
-            );
-
-          if (
-            roleTab
-          ) {
-            const isSelected =
-              roleTab.className.includes(
-                'bg-blue'
-              );
-
-            if (
-              isSelected &&
-              designationTab
-            ) {
-              designationTab.click();
-            }
-
-            roleTab.style.display =
-              'none';
-          }
-
-          for (
-            const button
-            of buttons
-          ) {
-            const text =
-              button.textContent
-                ?.trim() ||
-              '';
-
-            if (
-              text ===
-                'Add Role' ||
-              text ===
-                'Add Division'
-            ) {
-              button.style.display =
-                'none';
-            }
-          }
-        };
-
-      const observer =
-        new MutationObserver(
-          hideLegacyRoleUi
-        );
-
-      observer.observe(
-        document.body,
-        {
-          childList:
-            true,
-          subtree:
-            true,
-        }
-      );
-
-      hideLegacyRoleUi();
-
-      return () =>
-        observer.disconnect();
-    },
-    [
-      location.pathname,
-    ]
-  );
-
   useEffect(
     () => {
       if (
@@ -303,40 +203,249 @@ export default function MasterDataRequirementsEnhancer() {
         HTMLDivElement | null =
         null;
 
-      const install =
+      let divisionButton:
+        HTMLButtonElement | null =
+        null;
+
+      const hiddenSiblings:
+        HTMLElement[] =
+        [];
+
+      const restoreContent =
+        () => {
+          for (
+            const element
+            of hiddenSiblings
+          ) {
+            element.style.display =
+              '';
+          }
+
+          hiddenSiblings.length =
+            0;
+
+          if (
+            host
+          ) {
+            host.style.display =
+              'none';
+          }
+
+          if (
+            divisionButton
+          ) {
+            divisionButton.className =
+              'rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50';
+          }
+
+          setActive(
+            false
+          );
+        };
+
+      const showDivision =
         () => {
           if (
-            host?.isConnected
+            !host ||
+            !divisionButton
           ) {
             return;
           }
 
-          const pageRoot =
-            document.querySelector(
-              'main .mx-auto.max-w-7xl'
-            );
+          const tabBar =
+            divisionButton.parentElement;
 
-          if (!pageRoot) {
+          if (!tabBar) {
             return;
           }
 
-          host =
-            document.createElement(
-              'div'
+          hiddenSiblings.length =
+            0;
+
+          let sibling =
+            tabBar.nextElementSibling as
+              | HTMLElement
+              | null;
+
+          while (
+            sibling
+          ) {
+            if (
+              sibling !==
+              host
+            ) {
+              hiddenSiblings.push(
+                sibling
+              );
+
+              sibling.style.display =
+                'none';
+            }
+
+            sibling =
+              sibling.nextElementSibling as
+                | HTMLElement
+                | null;
+          }
+
+          host.style.display =
+            '';
+
+          divisionButton.className =
+            'rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white';
+
+          setActive(
+            true
+          );
+
+          void load();
+        };
+
+      const install =
+        () => {
+          const buttons =
+            Array.from(
+              document.querySelectorAll(
+                'button'
+              )
+            ) as HTMLButtonElement[];
+
+          const gradesButton =
+            buttons.find(
+              (
+                button
+              ) =>
+                button.textContent
+                  ?.trim() ===
+                'Grades'
             );
 
-          host.setAttribute(
-            'data-division-department-setup',
-            'true'
-          );
+          if (
+            !gradesButton
+          ) {
+            return;
+          }
 
-          pageRoot.prepend(
-            host
-          );
+          const tabBar =
+            gradesButton.parentElement;
 
-          setMount(
-            host
-          );
+          if (
+            !tabBar
+          ) {
+            return;
+          }
+
+          /*
+           * Remove old Role/Division compatibility tab from the visible UI.
+           * Real Division management is provided by our own tab.
+           */
+          for (
+            const button
+            of Array.from(
+              tabBar.querySelectorAll(
+                'button'
+              )
+            ) as HTMLButtonElement[]
+          ) {
+            const text =
+              button.textContent
+                ?.trim() ||
+              '';
+
+            if (
+              text ===
+                'Roles' ||
+              text ===
+                'Divisions'
+            ) {
+              button.style.display =
+                'none';
+            }
+          }
+
+          if (
+            !divisionButton ||
+            !divisionButton.isConnected
+          ) {
+            divisionButton =
+              document.createElement(
+                'button'
+              );
+
+            divisionButton.type =
+              'button';
+
+            divisionButton.textContent =
+              'Divisions';
+
+            divisionButton.className =
+              'rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50';
+
+            gradesButton.insertAdjacentElement(
+              'afterend',
+              divisionButton
+            );
+
+            divisionButton.addEventListener(
+              'click',
+              showDivision
+            );
+          }
+
+          if (
+            !host ||
+            !host.isConnected
+          ) {
+            host =
+              document.createElement(
+                'div'
+              );
+
+            host.setAttribute(
+              'data-division-tab-content',
+              'true'
+            );
+
+            host.style.display =
+              'none';
+
+            tabBar.insertAdjacentElement(
+              'afterend',
+              host
+            );
+
+            setMount(
+              host
+            );
+          }
+
+          for (
+            const button
+            of Array.from(
+              tabBar.querySelectorAll(
+                'button'
+              )
+            ) as HTMLButtonElement[]
+          ) {
+            if (
+              button ===
+              divisionButton
+            ) {
+              continue;
+            }
+
+            if (
+              !button.dataset.divisionRestoreBound
+            ) {
+              button.dataset.divisionRestoreBound =
+                'true';
+
+              button.addEventListener(
+                'click',
+                restoreContent
+              );
+            }
+          }
         };
 
       const observer =
@@ -359,6 +468,14 @@ export default function MasterDataRequirementsEnhancer() {
       return () => {
         observer.disconnect();
 
+        divisionButton?.removeEventListener(
+          'click',
+          showDivision
+        );
+
+        restoreContent();
+
+        divisionButton?.remove();
         host?.remove();
 
         setMount(
@@ -519,31 +636,11 @@ export default function MasterDataRequirementsEnhancer() {
       if (
         !name
       ) {
-        setMessage(
-          'Division name is required.'
-        );
-
-        return;
-      }
-
-      if (
-        !isRealDivision(
-          name
-        )
-      ) {
-        setMessage(
-          'Admin, Manager and Employee are Portal Access values, not Divisions.'
-        );
-
         return;
       }
 
       setBusyKey(
         division._id
-      );
-
-      setMessage(
-        ''
       );
 
       try {
@@ -588,23 +685,16 @@ export default function MasterDataRequirementsEnhancer() {
       division:
         DivisionRow
     ) => {
-      const confirmed =
-        window.confirm(
-          `Delete Division "${division.name}"? This will be blocked if employees or departments still use it.`
-        );
-
       if (
-        !confirmed
+        !window.confirm(
+          `Delete Division "${division.name}"?`
+        )
       ) {
         return;
       }
 
       setBusyKey(
         division._id
-      );
-
-      setMessage(
-        ''
       );
 
       try {
@@ -644,10 +734,6 @@ export default function MasterDataRequirementsEnhancer() {
         `department-${department._id}`
       );
 
-      setMessage(
-        ''
-      );
-
       try {
         await api.patch(
           `/departments/${department._id}`,
@@ -679,22 +765,23 @@ export default function MasterDataRequirementsEnhancer() {
       }
     };
 
-  if (!mount) {
+  if (
+    !mount ||
+    !active
+  ) {
     return null;
   }
 
   return createPortal(
-    <section className="mb-6 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+    <section className="mt-5 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">
-            Divisions & Departments
+            Divisions
           </h2>
 
           <p className="mt-1 text-sm text-gray-500">
-            Division is the parent organizational unit. Every Department can
-            be assigned to one Division, and employee creation filters
-            Departments by the selected Division.
+            Manage Divisions and assign Departments under them.
           </p>
         </div>
 
@@ -739,8 +826,7 @@ export default function MasterDataRequirementsEnhancer() {
       {divisions.length ===
         0 && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          No real Divisions exist yet. Add one above. Portal Access values
-          such as Employee / Manager / Admin are not treated as Divisions.
+          No real Divisions exist yet.
         </div>
       )}
 
@@ -786,7 +872,6 @@ export default function MasterDataRequirementsEnhancer() {
                         )
                       }
                       className="rounded-lg bg-emerald-50 p-2 text-emerald-700"
-                      title="Save Division"
                     >
                       <Save
                         size={
@@ -807,7 +892,6 @@ export default function MasterDataRequirementsEnhancer() {
                         );
                       }}
                       className="rounded-lg bg-gray-50 p-2 text-gray-600"
-                      title="Cancel"
                     >
                       <X
                         size={
@@ -849,7 +933,6 @@ export default function MasterDataRequirementsEnhancer() {
                           );
                         }}
                         className="rounded-lg p-2 text-amber-600 hover:bg-amber-50"
-                        title="Edit Division"
                       >
                         <Pencil
                           size={
@@ -870,7 +953,6 @@ export default function MasterDataRequirementsEnhancer() {
                           )
                         }
                         className="rounded-lg p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                        title="Delete Division"
                       >
                         <Trash2
                           size={
@@ -975,11 +1057,6 @@ export default function MasterDataRequirementsEnhancer() {
           <h3 className="text-sm font-semibold text-amber-900">
             Unassigned Departments
           </h3>
-
-          <p className="mt-1 text-xs text-amber-700">
-            Assign these Departments to a Division before creating new
-            employees under them.
-          </p>
 
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {unassigned.map(
