@@ -154,6 +154,31 @@ export default function MasterData() {
       false
     );
 
+
+  const [
+    editingLeaveYear,
+    setEditingLeaveYear,
+  ] =
+    useState(
+      false
+    );
+
+  const [
+    savedLeaveYearDay,
+    setSavedLeaveYearDay,
+  ] =
+    useState(
+      1
+    );
+
+  const [
+    savedLeaveYearMonth,
+    setSavedLeaveYearMonth,
+  ] =
+    useState(
+      1
+    );
+
   const [
     showAdd,
     setShowAdd,
@@ -303,6 +328,22 @@ export default function MasterData() {
         setLeaveYearDisplay(
           settings.leaveYearStart
         );
+
+        setSavedLeaveYearDay(
+          settings.leaveYearStartDay
+        );
+
+        setSavedLeaveYearMonth(
+          settings.leaveYearStartMonth
+        );
+
+        setEditingLeaveYear(
+          false
+        );
+
+        setLeaveYearChangeReason(
+          ''
+        );
       } catch (
         error
       ) {
@@ -311,7 +352,7 @@ export default function MasterData() {
          * unavailable. The current saved value can be retried from Others.
          */
         console.warn(
-          'Unable to load Organization Start year date.',
+          'Unable to load Organization Leave Year Start.',
           error
         );
       }
@@ -832,8 +873,62 @@ export default function MasterData() {
       }
     };
 
+  const beginLeaveYearEdit =
+    () => {
+      setLeaveYearDay(
+        savedLeaveYearDay
+      );
+
+      setLeaveYearMonth(
+        savedLeaveYearMonth
+      );
+
+      setEditingLeaveYear(
+        true
+      );
+    };
+
+  const cancelLeaveYearEdit =
+    () => {
+      if (
+        savingLeaveYear
+      ) {
+        return;
+      }
+
+      setLeaveYearDay(
+        savedLeaveYearDay
+      );
+
+      setLeaveYearMonth(
+        savedLeaveYearMonth
+      );
+
+      setEditingLeaveYear(
+        false
+      );
+    };
+
   const saveLeaveYearStart =
     async () => {
+      const changed =
+        leaveYearDay !==
+          savedLeaveYearDay ||
+        leaveYearMonth !==
+          savedLeaveYearMonth;
+
+      if (
+        !changed
+      ) {
+        showMessage(
+          'warning',
+          'No Change Detected',
+          'Select a different Start year date before saving.'
+        );
+
+        return;
+      }
+
       setSavingLeaveYear(
         true
       );
@@ -853,14 +948,30 @@ export default function MasterData() {
           settings.leaveYearStartMonth
         );
 
+        setSavedLeaveYearDay(
+          settings.leaveYearStartDay
+        );
+
+        setSavedLeaveYearMonth(
+          settings.leaveYearStartMonth
+        );
+
         setLeaveYearDisplay(
           settings.leaveYearStart
         );
 
+        setEditingLeaveYear(
+          false
+        );
+
+        setLeaveYearChangeReason(
+          ''
+        );
+
         showMessage(
           'success',
-          'Leave Year Updated',
-          'Organization Start year date has been saved successfully.'
+          'Start Year Date Updated',
+          'Organization Start year date has been changed successfully.'
         );
       } catch (
         error
@@ -1041,115 +1152,175 @@ export default function MasterData() {
       ) {
         return (
           <div className="max-w-3xl rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-            <div className="flex flex-col gap-1">
-              <h2 className="text-base font-semibold text-gray-900">
-                Start year date
-              </h2>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="max-w-2xl">
+                <h2 className="text-base font-semibold text-gray-900">
+                  Start year date
+                </h2>
 
-              <p className="text-sm leading-6 text-gray-500">
-                Set this once for the organization. The system uses this date with each employee&apos;s Date of Joining to calculate prorated leave. Decimal results are always rounded down.
-              </p>
-            </div>
-
-            <div className="mt-5 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Day
-                </label>
-
-                <input
-                  type="number"
-                  min={
-                    1
-                  }
-                  max={
-                    31
-                  }
-                  value={
-                    leaveYearDay
-                  }
-                  onChange={
-                    (
-                      event
-                    ) =>
-                      setLeaveYearDay(
-                        Number(
-                          event.target.value
-                        )
-                      )
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                />
+                <p className="mt-1 text-sm leading-6 text-gray-500">
+                  This is an organization-wide setting used with each employee&apos;s Date of Joining to calculate prorated leave. Changing it can affect leave balances across the company.
+                </p>
               </div>
 
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Month
-                </label>
-
-                <select
-                  value={
-                    leaveYearMonth
+              {!editingLeaveYear && (
+                <Button
+                  variant="secondary"
+                  onClick={
+                    beginLeaveYearEdit
                   }
-                  onChange={
-                    (
-                      event
-                    ) =>
-                      setLeaveYearMonth(
-                        Number(
-                          event.target.value
-                        )
-                      )
-                  }
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 >
-                  {months.map(
-                    (
-                      month,
-                      index
-                    ) => (
-                      <option
-                        key={
-                          month
-                        }
-                        value={
-                          index +
-                          1
-                        }
-                      >
-                        {
-                          month
-                        }
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
+                  <Pencil
+                    size={
+                      15
+                    }
+                  />
+                  Edit
+                </Button>
+              )}
             </div>
 
-            <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-5">
-              <Button
-                disabled={
-                  savingLeaveYear
-                }
-                onClick={() =>
-                  void saveLeaveYearStart()
-                }
-              >
-                {savingLeaveYear
-                  ? 'Saving...'
-                  : 'Save Changes'}
-              </Button>
+            {!editingLeaveYear ? (
+              <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 px-5 py-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Current Start year date
+                </p>
 
-              <span className="text-sm text-gray-500">
-                Current Start year date:{' '}
-                <strong className="font-semibold text-gray-800">
+                <p className="mt-1 text-2xl font-semibold text-gray-900">
                   {
                     leaveYearDisplay
                   }
-                </strong>
-              </span>
-            </div>
+                </p>
+
+                <p className="mt-2 text-xs leading-5 text-gray-500">
+                  Editing is locked by default to reduce accidental company-wide leave balance changes.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-6 space-y-5">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <p className="text-sm font-semibold text-amber-900">
+                    Company-wide change
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-amber-800">
+                    Change this only when the organization&apos;s official leave year changes. This can affect prorated leave balances across the company.
+                  </p>
+                </div>
+
+                <div className="grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                      Day
+                    </label>
+
+                    <input
+                      type="number"
+                      min={
+                        1
+                      }
+                      max={
+                        31
+                      }
+                      value={
+                        leaveYearDay
+                      }
+                      onChange={
+                        (
+                          event
+                        ) =>
+                          setLeaveYearDay(
+                            Number(
+                              event.target.value
+                            )
+                          )
+                      }
+                      className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                      Month
+                    </label>
+
+                    <select
+                      value={
+                        leaveYearMonth
+                      }
+                      onChange={
+                        (
+                          event
+                        ) =>
+                          setLeaveYearMonth(
+                            Number(
+                              event.target.value
+                            )
+                          )
+                      }
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      {months.map(
+                        (
+                          month,
+                          index
+                        ) => (
+                          <option
+                            key={
+                              month
+                            }
+                            value={
+                              index +
+                              1
+                            }
+                          >
+                            {
+                              month
+                            }
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 border-t border-gray-100 pt-5">
+                  <Button
+                    disabled={
+                      savingLeaveYear
+                    }
+                    onClick={() =>
+                      void saveLeaveYearStart()
+                    }
+                  >
+                    {savingLeaveYear
+                      ? 'Saving...'
+                      : 'Confirm Change'}
+                  </Button>
+
+                  <Button
+                    variant="secondary"
+                    disabled={
+                      savingLeaveYear
+                    }
+                    onClick={
+                      cancelLeaveYearEdit
+                    }
+                  >
+                    Cancel
+                  </Button>
+
+                  <span className="text-xs text-gray-500">
+                    Current saved value:{' '}
+                    <strong className="font-semibold text-gray-700">
+                      {
+                        leaveYearDisplay
+                      }
+                    </strong>
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         );
       }
