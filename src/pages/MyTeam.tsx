@@ -13,8 +13,13 @@ import {
   XCircle,
 } from 'lucide-react';
 
-import { useAuth } from '../context/AuthContext';
-import { useAppData } from '../context/AppDataContext';
+import {
+  useAuth,
+} from '../context/AuthContext';
+
+import {
+  useAppData,
+} from '../context/AppDataContext';
 
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
@@ -29,7 +34,13 @@ import {
   approveLeaveRequest,
   rejectLeaveRequest,
   actOnBehalfOfApprover,
+  adminOverrideFinalDecision,
+  adminStopApprovedLeave,
 } from '../services/leaveApprovalActions';
+
+import {
+  getApiErrorMessage,
+} from '../services/api';
 
 import {
   formatDate,
@@ -41,24 +52,35 @@ import type {
 } from '../types';
 
 function getCurrentTurnApproverIds(
-  req: LeaveRequest
-): string[] {
-  if (req.status !== 'pending') {
+  req:
+    LeaveRequest
+):
+  string[] {
+  if (
+    req.status !==
+    'pending'
+  ) {
     return [];
   }
 
   const required =
-    req.requiredApproverIds || [];
+    req.requiredApproverIds ||
+    [];
 
-  if (required.length === 0) {
+  if (
+    required.length ===
+    0
+  ) {
     return [];
   }
 
   const approved =
-    req.approvedByIds || [];
+    req.approvedByIds ||
+    [];
 
   const rejected =
-    req.rejectedByIds || [];
+    req.rejectedByIds ||
+    [];
 
   const gatekeeperId =
     required[0];
@@ -71,20 +93,39 @@ function getCurrentTurnApproverIds(
       gatekeeperId
     )
   ) {
-    return [gatekeeperId];
+    return [
+      gatekeeperId,
+    ];
   }
 
   return required
-    .slice(1)
+    .slice(
+      1
+    )
     .filter(
-      (id) =>
-        !approved.includes(id) &&
-        !rejected.includes(id)
+      (
+        id
+      ) =>
+        !approved.includes(
+          id
+        ) &&
+        !rejected.includes(
+          id
+        )
     );
 }
 
+type FinalAction =
+  | 'approve'
+  | 'reject'
+  | 'stop'
+  | null;
+
 export default function MyTeam() {
-  const { user } = useAuth();
+  const {
+    user,
+  } =
+    useAuth();
 
   const {
     users,
@@ -94,160 +135,240 @@ export default function MyTeam() {
     getUserById,
     refreshEmployees,
     refreshLeaveRequests,
-  } = useAppData();
+  } =
+    useAppData();
 
   const isAdmin =
-    user?.role === 'admin';
+    user?.role ===
+    'admin';
 
   const [
     departmentFilter,
     setDepartmentFilter,
-  ] = useState(
-    'All Departments'
-  );
+  ] =
+    useState(
+      'All Departments'
+    );
 
   const [
     selectedManagerId,
     setSelectedManagerId,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     activeTab,
     setActiveTab,
-  ] = useState<
-    'team' | 'requests'
-  >('team');
+  ] =
+    useState<
+      | 'team'
+      | 'requests'
+    >(
+      'team'
+    );
 
   const [
     requestStatusFilter,
     setRequestStatusFilter,
-  ] = useState<
-    | 'all'
-    | 'pending'
-    | 'approved'
-    | 'rejected'
-  >('all');
+  ] =
+    useState<
+      | 'all'
+      | 'pending'
+      | 'approved'
+      | 'rejected'
+    >(
+      'all'
+    );
 
   const [
     requestSearchQuery,
     setRequestSearchQuery,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     teamBalances,
     setTeamBalances,
-  ] = useState<
-    Record<
-      string,
-      LeaveBalance[]
-    >
-  >({});
+  ] =
+    useState<
+      Record<
+        string,
+        LeaveBalance[]
+      >
+    >({});
 
   const [
     balancesLoading,
     setBalancesLoading,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const [
     balancesError,
     setBalancesError,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     actionRequestId,
     setActionRequestId,
-  ] = useState<string | null>(null);
+  ] =
+    useState<string | null>(
+      null
+    );
 
   const [
     rejectRequestId,
     setRejectRequestId,
-  ] = useState<string | null>(null);
+  ] =
+    useState<string | null>(
+      null
+    );
 
-  /*
-   * When Admin rejects on behalf of a Manager/approver, the same
-   * rejection modal is used as the Manager flow. This stores whose
-   * approval slot the Admin is filling.
-   */
   const [
     adminRejectTargetApproverId,
     setAdminRejectTargetApproverId,
-  ] = useState<string | null>(null);
+  ] =
+    useState<string | null>(
+      null
+    );
 
   const [
     rejectionReason,
     setRejectionReason,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     actionError,
     setActionError,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     actionSuccess,
     setActionSuccess,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     actionLoading,
     setActionLoading,
-  ] = useState(false);
+  ] =
+    useState(false);
 
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
+  const [
+    finalTarget,
+    setFinalTarget,
+  ] =
+    useState<LeaveRequest | null>(
+      null
+    );
 
-    if (
-      user.role !== 'admin'
-    ) {
-      setSelectedManagerId(
-        user.id
-      );
-    }
-  }, [
-    user?.id,
-    user?.role,
-  ]);
+  const [
+    finalAction,
+    setFinalAction,
+  ] =
+    useState<FinalAction>(
+      null
+    );
 
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
+  const [
+    finalReason,
+    setFinalReason,
+  ] =
+    useState('');
 
-    const loadPage =
-      async () => {
-        try {
-          await Promise.all([
-            refreshEmployees(),
-            refreshLeaveRequests(),
-          ]);
-        } catch (error) {
-          console.error(
-            'Unable to load team data:',
+  const [
+    finalReturnDate,
+    setFinalReturnDate,
+  ] =
+    useState('');
+
+  const [
+    finalBusy,
+    setFinalBusy,
+  ] =
+    useState(false);
+
+  const [
+    finalError,
+    setFinalError,
+  ] =
+    useState('');
+
+  useEffect(
+    () => {
+      if (
+        !user
+      ) {
+        return;
+      }
+
+      if (
+        user.role !==
+        'admin'
+      ) {
+        setSelectedManagerId(
+          user.id
+        );
+      }
+    },
+    [
+      user?.id,
+      user?.role,
+    ]
+  );
+
+  useEffect(
+    () => {
+      if (
+        !user
+      ) {
+        return;
+      }
+
+      const loadPage =
+        async () => {
+          try {
+            await Promise.all([
+              refreshEmployees(),
+              refreshLeaveRequests(),
+            ]);
+          } catch (
             error
-          );
-        }
-      };
+          ) {
+            console.error(
+              'Unable to load team data:',
+              error
+            );
+          }
+        };
 
-    void loadPage();
-  }, [
-    user?.id,
-    refreshEmployees,
-    refreshLeaveRequests,
-  ]);
+      void loadPage();
+    },
+    [
+      user?.id,
+      refreshEmployees,
+      refreshLeaveRequests,
+    ]
+  );
 
   const allManagers =
     useMemo(
       () =>
         users.filter(
-          (candidate) =>
+          (
+            candidate
+          ) =>
             candidate.role ===
               'manager' &&
             candidate.status ===
               'active'
         ),
-      [users]
+      [
+        users,
+      ]
     );
 
   const managers =
@@ -257,7 +378,9 @@ export default function MyTeam() {
         'All Departments'
           ? allManagers
           : allManagers.filter(
-              (manager) =>
+              (
+                manager
+              ) =>
                 manager.department ===
                 departmentFilter
             ),
@@ -270,14 +393,16 @@ export default function MyTeam() {
   const activeManagerId =
     isAdmin
       ? selectedManagerId
-      : user?.id || '';
-
+      : user?.id ||
+        '';
 
   const team =
     useMemo(
       () =>
         users.filter(
-          (candidate) =>
+          (
+            candidate
+          ) =>
             candidate.managerId ===
               activeManagerId &&
             candidate.status ===
@@ -289,252 +414,338 @@ export default function MyTeam() {
       ]
     );
 
-  useEffect(() => {
-    if (
-      !user ||
-      !activeManagerId
-    ) {
-      setTeamBalances({});
-      return;
-    }
+  useEffect(
+    () => {
+      if (
+        !user ||
+        !activeManagerId
+      ) {
+        setTeamBalances(
+          {}
+        );
 
-    let cancelled = false;
+        return;
+      }
 
-    const loadBalances =
-      async () => {
-        setBalancesLoading(true);
-        setBalancesError('');
+      let cancelled =
+        false;
 
-        try {
-          const entries =
-            await Promise.all(
-              team.map(
-                async (
-                  member
-                ) => {
-                  const balances =
-                    await getEmployeeLeaveBalance(
-                      member.id
-                    );
-
-                  return [
-                    member.id,
-                    balances,
-                  ] as const;
-                }
-              )
-            );
-
-          if (!cancelled) {
-            setTeamBalances(
-              Object.fromEntries(
-                entries
-              )
-            );
-          }
-        } catch (error) {
-          console.error(
-            'Unable to load team leave balances:',
-            error
+      const loadBalances =
+        async () => {
+          setBalancesLoading(
+            true
           );
 
-          if (!cancelled) {
-            setBalancesError(
-              'Unable to load leave balances from the database.'
+          setBalancesError(
+            ''
+          );
+
+          try {
+            const entries =
+              await Promise.all(
+                team.map(
+                  async (
+                    member
+                  ) => {
+                    const balances =
+                      await getEmployeeLeaveBalance(
+                        member.id
+                      );
+
+                    return [
+                      member.id,
+                      balances,
+                    ] as const;
+                  }
+                )
+              );
+
+            if (
+              !cancelled
+            ) {
+              setTeamBalances(
+                Object.fromEntries(
+                  entries
+                )
+              );
+            }
+          } catch (
+            error
+          ) {
+            console.error(
+              'Unable to load team leave balances:',
+              error
             );
+
+            if (
+              !cancelled
+            ) {
+              setBalancesError(
+                'Unable to load leave balances from the database.'
+              );
+            }
+          } finally {
+            if (
+              !cancelled
+            ) {
+              setBalancesLoading(
+                false
+              );
+            }
           }
-        } finally {
-          if (!cancelled) {
-            setBalancesLoading(
-              false
-            );
-          }
-        }
+        };
+
+      void loadBalances();
+
+      return () => {
+        cancelled =
+          true;
       };
-
-    void loadBalances();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    user?.id,
-    activeManagerId,
-    team,
-  ]);
+    },
+    [
+      user?.id,
+      activeManagerId,
+      team,
+    ]
+  );
 
   const teamIds =
     useMemo(
       () =>
         team.map(
-          (member) =>
+          (
+            member
+          ) =>
             member.id
         ),
-      [team]
+      [
+        team,
+      ]
     );
 
   const teamRequests =
-    useMemo(() => {
-      const idSet =
-        new Set(teamIds);
+    useMemo(
+      () => {
+        const idSet =
+          new Set(
+            teamIds
+          );
 
-      return leaveRequests
-        .filter(
-          (request) =>
-            idSet.has(
-              request.employeeId
-            )
-        )
-        .filter(
-          (request) =>
-            request.status ===
-              'pending' ||
-            request.status ===
-              'approved' ||
-            request.status ===
-              'rejected'
-        )
-        .sort(
-          (a, b) =>
-            new Date(
-              b.createdAt
-            ).getTime() -
-            new Date(
-              a.createdAt
-            ).getTime()
-        );
-    }, [
-      leaveRequests,
-      teamIds,
-    ]);
+        return leaveRequests
+          .filter(
+            (
+              request
+            ) =>
+              idSet.has(
+                request.employeeId
+              )
+          )
+          .filter(
+            (
+              request
+            ) =>
+              request.status ===
+                'pending' ||
+              request.status ===
+                'approved' ||
+              request.status ===
+                'rejected'
+          )
+          .sort(
+            (
+              a,
+              b
+            ) =>
+              new Date(
+                b.createdAt
+              ).getTime() -
+              new Date(
+                a.createdAt
+              ).getTime()
+          );
+      },
+      [
+        leaveRequests,
+        teamIds,
+      ]
+    );
 
   const pendingCount =
     useMemo(
       () =>
         teamRequests.filter(
-          (request) =>
+          (
+            request
+          ) =>
             request.status ===
             'pending'
         ).length,
-      [teamRequests]
+      [
+        teamRequests,
+      ]
     );
 
   const filteredTeamRequests =
-    useMemo(() => {
-      return teamRequests.filter(
-        (request) => {
-          if (
-            requestStatusFilter !==
-              'all' &&
-            request.status !==
-              requestStatusFilter
-          ) {
-            return false;
-          }
-
-          if (
-            requestSearchQuery.trim()
-          ) {
-            const employee =
-              getUserById(
-                request.employeeId
-              );
-
-            const query =
-              requestSearchQuery
-                .trim()
-                .toLowerCase();
-
+    useMemo(
+      () =>
+        teamRequests.filter(
+          (
+            request
+          ) => {
             if (
-              !employee?.fullName
-                .toLowerCase()
-                .includes(query) &&
-              !request.leaveType
-                .toLowerCase()
-                .includes(query)
+              requestStatusFilter !==
+                'all' &&
+              request.status !==
+                requestStatusFilter
             ) {
               return false;
             }
+
+            if (
+              requestSearchQuery.trim()
+            ) {
+              const employee =
+                getUserById(
+                  request.employeeId
+                );
+
+              const query =
+                requestSearchQuery
+                  .trim()
+                  .toLowerCase();
+
+              if (
+                !employee?.fullName
+                  .toLowerCase()
+                  .includes(
+                    query
+                  ) &&
+                !request.leaveType
+                  .toLowerCase()
+                  .includes(
+                    query
+                  )
+              ) {
+                return false;
+              }
+            }
+
+            return true;
           }
+        ),
+      [
+        teamRequests,
+        requestStatusFilter,
+        requestSearchQuery,
+        getUserById,
+      ]
+    );
 
-          return true;
-        }
-      );
-    }, [
-      teamRequests,
-      requestStatusFilter,
-      requestSearchQuery,
-      getUserById,
-    ]);
-
-  if (!user) {
+  if (
+    !user
+  ) {
     return null;
   }
 
-  const handleApprove = async (
-    requestId: string
-  ) => {
-    if (actionLoading) {
-      return;
-    }
+  const handleApprove =
+    async (
+      requestId:
+        string
+    ) => {
+      if (
+        actionLoading
+      ) {
+        return;
+      }
 
-    try {
-      setActionLoading(true);
-      setActionRequestId(
-        requestId
-      );
-      setActionError('');
+      try {
+        setActionLoading(
+          true
+        );
 
-      await approveLeaveRequest(
-        requestId
-      );
+        setActionRequestId(
+          requestId
+        );
 
-      await refreshLeaveRequests();
+        setActionError(
+          ''
+        );
 
-      setActionSuccess(
-        'Leave request approved successfully.'
-      );
-    } catch (error: any) {
-      setActionError(
-        error?.response?.data
-          ?.message ||
+        await approveLeaveRequest(
+          requestId
+        );
+
+        await refreshLeaveRequests();
+
+        setActionSuccess(
+          'Leave request approved successfully.'
+        );
+      } catch (
+        error:
+          any
+      ) {
+        setActionError(
+          error?.response?.data
+            ?.message ||
           error?.message ||
           'Unable to approve this leave request.'
+        );
+      } finally {
+        setActionLoading(
+          false
+        );
+
+        setActionRequestId(
+          null
+        );
+      }
+    };
+
+  const openRejectModal =
+    (
+      requestId:
+        string,
+      adminTargetApproverId?:
+        string
+    ) => {
+      setRejectRequestId(
+        requestId
       );
-    } finally {
-      setActionLoading(false);
-      setActionRequestId(null);
-    }
-  };
 
-  const openRejectModal = (
-    requestId: string,
-    adminTargetApproverId?: string
-  ) => {
-    setRejectRequestId(
-      requestId
-    );
+      setAdminRejectTargetApproverId(
+        adminTargetApproverId ||
+          null
+      );
 
-    setAdminRejectTargetApproverId(
-      adminTargetApproverId ||
+      setRejectionReason(
+        ''
+      );
+
+      setActionError(
+        ''
+      );
+    };
+
+  const closeRejectModal =
+    () => {
+      if (
+        actionLoading
+      ) {
+        return;
+      }
+
+      setRejectRequestId(
         null
-    );
+      );
 
-    setRejectionReason('');
-    setActionError('');
-  };
+      setAdminRejectTargetApproverId(
+        null
+      );
 
-  const closeRejectModal = () => {
-    if (actionLoading) {
-      return;
-    }
-
-    setRejectRequestId(null);
-    setAdminRejectTargetApproverId(
-      null
-    );
-    setRejectionReason('');
-  };
+      setRejectionReason(
+        ''
+      );
+    };
 
   const handleRejectSubmit =
     async () => {
@@ -548,19 +759,28 @@ export default function MyTeam() {
       const comment =
         rejectionReason.trim();
 
-      if (!comment) {
+      if (
+        !comment
+      ) {
         setActionError(
           'Please enter a reason for rejection.'
         );
+
         return;
       }
 
       try {
-        setActionLoading(true);
+        setActionLoading(
+          true
+        );
+
         setActionRequestId(
           rejectRequestId
         );
-        setActionError('');
+
+        setActionError(
+          ''
+        );
 
         if (
           adminRejectTargetApproverId
@@ -583,45 +803,67 @@ export default function MyTeam() {
         setRejectRequestId(
           null
         );
+
         setAdminRejectTargetApproverId(
           null
         );
-        setRejectionReason('');
+
+        setRejectionReason(
+          ''
+        );
 
         setActionSuccess(
           'Leave request rejected successfully.'
         );
-      } catch (error: any) {
+      } catch (
+        error:
+          any
+      ) {
         setActionError(
           error?.response?.data
             ?.message ||
-            error?.message ||
-            'Unable to reject this leave request.'
+          error?.message ||
+          'Unable to reject this leave request.'
         );
       } finally {
-        setActionLoading(false);
-        setActionRequestId(null);
+        setActionLoading(
+          false
+        );
+
+        setActionRequestId(
+          null
+        );
       }
     };
 
   const handleActOnBehalf =
     async (
-      requestId: string,
-      targetApproverId: string,
+      requestId:
+        string,
+      targetApproverId:
+        string,
       action:
         | 'approved'
         | 'rejected'
     ) => {
-      if (actionLoading) {
+      if (
+        actionLoading
+      ) {
         return;
       }
 
       try {
-        setActionLoading(true);
+        setActionLoading(
+          true
+        );
+
         setActionRequestId(
           requestId
         );
-        setActionError('');
+
+        setActionError(
+          ''
+        );
 
         await actOnBehalfOfApprover(
           requestId,
@@ -632,20 +874,184 @@ export default function MyTeam() {
         await refreshLeaveRequests();
 
         setActionSuccess(
-          action === 'approved'
+          action ===
+            'approved'
             ? 'Leave request approved successfully.'
             : 'Leave request rejected successfully.'
         );
-      } catch (error: any) {
+      } catch (
+        error:
+          any
+      ) {
         setActionError(
           error?.response?.data
             ?.message ||
-            error?.message ||
-            'Unable to update this leave request.'
+          error?.message ||
+          'Unable to update this leave request.'
         );
       } finally {
-        setActionLoading(false);
-        setActionRequestId(null);
+        setActionLoading(
+          false
+        );
+
+        setActionRequestId(
+          null
+        );
+      }
+    };
+
+  const openFinalAction =
+    (
+      request:
+        LeaveRequest,
+      action:
+        Exclude<
+          FinalAction,
+          null
+        >
+    ) => {
+      setFinalTarget(
+        request
+      );
+
+      setFinalAction(
+        action
+      );
+
+      setFinalReason(
+        ''
+      );
+
+      setFinalReturnDate(
+        ''
+      );
+
+      setFinalError(
+        ''
+      );
+    };
+
+  const closeFinalAction =
+    () => {
+      if (
+        finalBusy
+      ) {
+        return;
+      }
+
+      setFinalTarget(
+        null
+      );
+
+      setFinalAction(
+        null
+      );
+
+      setFinalReason(
+        ''
+      );
+
+      setFinalReturnDate(
+        ''
+      );
+
+      setFinalError(
+        ''
+      );
+    };
+
+  const submitFinalAction =
+    async () => {
+      if (
+        !finalTarget ||
+        !finalAction ||
+        !finalReason.trim()
+      ) {
+        setFinalError(
+          'Reason is required.'
+        );
+
+        return;
+      }
+
+      if (
+        finalAction ===
+          'stop' &&
+        !finalReturnDate
+      ) {
+        setFinalError(
+          'Return / Join Date is required.'
+        );
+
+        return;
+      }
+
+      setFinalBusy(
+        true
+      );
+
+      setFinalError(
+        ''
+      );
+
+      try {
+        if (
+          finalAction ===
+          'stop'
+        ) {
+          await adminStopApprovedLeave(
+            finalTarget.id,
+            finalReturnDate,
+            finalReason.trim()
+          );
+        } else {
+          await adminOverrideFinalDecision(
+            finalTarget.id,
+            finalAction ===
+              'approve'
+              ? 'approved'
+              : 'rejected',
+            finalReason.trim()
+          );
+        }
+
+        await refreshLeaveRequests();
+
+        setFinalTarget(
+          null
+        );
+
+        setFinalAction(
+          null
+        );
+
+        setFinalReason(
+          ''
+        );
+
+        setFinalReturnDate(
+          ''
+        );
+
+        setActionSuccess(
+          finalAction ===
+            'stop'
+            ? 'Approved leave stopped successfully.'
+            : 'Final leave decision updated successfully.'
+        );
+      } catch (
+        error
+      ) {
+        setFinalError(
+          getApiErrorMessage(
+            error,
+            'Unable to complete Admin final action.'
+          )
+        );
+      } finally {
+        setFinalBusy(
+          false
+        );
       }
     };
 
@@ -676,10 +1082,13 @@ export default function MyTeam() {
               value={
                 departmentFilter
               }
-              onChange={(event) =>
-                setDepartmentFilter(
-                  event.target.value
-                )
+              onChange={
+                (
+                  event
+                ) =>
+                  setDepartmentFilter(
+                    event.target.value
+                  )
               }
               className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             >
@@ -688,7 +1097,9 @@ export default function MyTeam() {
               </option>
 
               {departments.map(
-                (department) => (
+                (
+                  department
+                ) => (
                   <option
                     key={
                       department
@@ -697,7 +1108,9 @@ export default function MyTeam() {
                       department
                     }
                   >
-                    {department}
+                    {
+                      department
+                    }
                   </option>
                 )
               )}
@@ -718,7 +1131,9 @@ export default function MyTeam() {
               }
             >
               {managers.map(
-                (manager) => {
+                (
+                  manager
+                ) => {
                   const isSelected =
                     manager.id ===
                     activeManagerId;
@@ -744,6 +1159,7 @@ export default function MyTeam() {
                         setSelectedManagerId(
                           manager.id
                         );
+
                         setActiveTab(
                           'team'
                         );
@@ -825,8 +1241,10 @@ export default function MyTeam() {
         </>
       )}
 
-      {(!isAdmin ||
-        selectedManagerId) && (
+      {(
+        !isAdmin ||
+        selectedManagerId
+      ) && (
         <>
           <div className="flex gap-1.5 border-b border-gray-100">
             <button
@@ -873,7 +1291,8 @@ export default function MyTeam() {
             </button>
           </div>
 
-          {team.length === 0 ? (
+          {team.length ===
+          0 ? (
             <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-400">
               {isAdmin
                 ? 'This manager has no one assigned to them yet.'
@@ -894,12 +1313,14 @@ export default function MyTeam() {
 
                   <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                     {team.map(
-                      (member) => {
+                      (
+                        member
+                      ) => {
                         const balances =
                           teamBalances[
-                            member
-                              .id
-                          ] || [];
+                            member.id
+                          ] ||
+                          [];
 
                         const grade =
                           grades.find(
@@ -1051,8 +1472,7 @@ export default function MyTeam() {
                                   ) =>
                                     request.status ===
                                     status
-                                )
-                                  .length;
+                                ).length;
 
                           return (
                             <button
@@ -1090,14 +1510,13 @@ export default function MyTeam() {
                       value={
                         requestSearchQuery
                       }
-                      onChange={(
-                        event
-                      ) =>
-                        setRequestSearchQuery(
+                      onChange={
+                        (
                           event
-                            .target
-                            .value
-                        )
+                        ) =>
+                          setRequestSearchQuery(
+                            event.target.value
+                          )
                       }
                       placeholder="Search by employee name or leave type..."
                       className="min-w-[220px] flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -1252,9 +1671,15 @@ export default function MyTeam() {
                                   </p>
 
                                   <LeaveAttachmentButton
-                                    leaveRequestId={request.id}
-                                    hasAttachment={request.hasAttachment}
-                                    attachmentName={request.attachmentName}
+                                    leaveRequestId={
+                                      request.id
+                                    }
+                                    hasAttachment={
+                                      request.hasAttachment
+                                    }
+                                    attachmentName={
+                                      request.attachmentName
+                                    }
                                   />
                                 </div>
                               )}
@@ -1462,6 +1887,62 @@ export default function MyTeam() {
                                     )}
                                   </div>
                                 )}
+
+                              {isAdmin &&
+                                !request.isStopRequest &&
+                                request.status ===
+                                  'approved' && (
+                                  <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-50 pt-3">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        openFinalAction(
+                                          request,
+                                          'reject'
+                                        )
+                                      }
+                                      className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 ring-1 ring-inset ring-rose-200 hover:bg-rose-100"
+                                    >
+                                      Reject Approved Leave
+                                    </button>
+
+                                    {!request.cancelledBy &&
+                                      !request.actualEndDate && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            openFinalAction(
+                                              request,
+                                              'stop'
+                                            )
+                                          }
+                                          className="rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-200 hover:bg-amber-100"
+                                        >
+                                          Stop Leave
+                                        </button>
+                                      )}
+                                  </div>
+                                )}
+
+                              {isAdmin &&
+                                !request.isStopRequest &&
+                                request.status ===
+                                  'rejected' && (
+                                  <div className="mt-3 border-t border-gray-50 pt-3">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        openFinalAction(
+                                          request,
+                                          'approve'
+                                        )
+                                      }
+                                      className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-100"
+                                    >
+                                      Approve Rejected Leave
+                                    </button>
+                                  </div>
+                                )}
                             </div>
                           );
                         }
@@ -1476,16 +1957,26 @@ export default function MyTeam() {
       )}
 
       <Modal
-        open={Boolean(rejectRequestId)}
-        onClose={closeRejectModal}
+        open={
+          Boolean(
+            rejectRequestId
+          )
+        }
+        onClose={
+          closeRejectModal
+        }
         title="Reject Leave Request"
         size="sm"
         footer={
           <>
             <Button
               variant="secondary"
-              disabled={actionLoading}
-              onClick={closeRejectModal}
+              disabled={
+                actionLoading
+              }
+              onClick={
+                closeRejectModal
+              }
             >
               Cancel
             </Button>
@@ -1516,17 +2007,29 @@ export default function MyTeam() {
           </p>
 
           <textarea
-            value={rejectionReason}
-            onChange={(event) => {
-              setRejectionReason(
-                event.target.value
-              );
+            value={
+              rejectionReason
+            }
+            onChange={
+              (
+                event
+              ) => {
+                setRejectionReason(
+                  event.target.value
+                );
 
-              if (actionError) {
-                setActionError('');
+                if (
+                  actionError
+                ) {
+                  setActionError(
+                    ''
+                  );
+                }
               }
-            }}
-            rows={4}
+            }
+            rows={
+              4
+            }
             autoFocus
             placeholder="Reason for rejection..."
             className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -1534,7 +2037,9 @@ export default function MyTeam() {
 
           {actionError && (
             <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              {actionError}
+              {
+                actionError
+              }
             </div>
           )}
         </div>
@@ -1542,18 +2047,176 @@ export default function MyTeam() {
 
       <Modal
         open={
-          Boolean(actionError) &&
-          !rejectRequestId
+          Boolean(
+            finalTarget &&
+            finalAction
+          )
+        }
+        onClose={
+          closeFinalAction
+        }
+        title={
+          finalAction ===
+            'approve'
+            ? 'Admin Approve Rejected Leave'
+            : finalAction ===
+                'reject'
+              ? 'Admin Reject Approved Leave'
+              : 'Admin Stop Approved Leave'
+        }
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              disabled={
+                finalBusy
+              }
+              onClick={
+                closeFinalAction
+              }
+            >
+              Cancel
+            </Button>
+
+            <Button
+              variant={
+                finalAction ===
+                  'approve'
+                  ? 'success'
+                  : 'danger'
+              }
+              disabled={
+                finalBusy ||
+                !finalReason.trim() ||
+                (
+                  finalAction ===
+                    'stop' &&
+                  !finalReturnDate
+                )
+              }
+              onClick={() =>
+                void submitFinalAction()
+              }
+            >
+              {finalBusy
+                ? 'Saving...'
+                : finalAction ===
+                    'approve'
+                  ? 'Approve Leave'
+                  : finalAction ===
+                      'reject'
+                    ? 'Reject Leave'
+                    : 'Stop Leave'}
+            </Button>
+          </>
+        }
+      >
+        {finalTarget && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-gray-50 p-3 text-sm">
+              <p className="font-medium text-gray-900">
+                {
+                  finalTarget.employeeName
+                }{' '}
+                ·{' '}
+                {
+                  finalTarget.leaveType
+                }
+              </p>
+
+              <p className="mt-1 text-xs text-gray-500">
+                The Manager's original decision remains in approval history.
+              </p>
+            </div>
+
+            {finalError && (
+              <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {
+                  finalError
+                }
+              </div>
+            )}
+
+            {finalAction ===
+              'stop' && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Return / Join Date
+                </label>
+
+                <input
+                  type="date"
+                  min={
+                    finalTarget.startDate
+                  }
+                  max={
+                    finalTarget.endDate
+                  }
+                  value={
+                    finalReturnDate
+                  }
+                  onChange={
+                    (
+                      event
+                    ) =>
+                      setFinalReturnDate(
+                        event.target.value
+                      )
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Mandatory reason
+              </label>
+
+              <textarea
+                rows={
+                  3
+                }
+                value={
+                  finalReason
+                }
+                onChange={
+                  (
+                    event
+                  ) =>
+                    setFinalReason(
+                      event.target.value
+                    )
+                }
+                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm"
+              />
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={
+          Boolean(
+            actionError
+          ) &&
+          !rejectRequestId &&
+          !finalTarget
         }
         onClose={() =>
-          setActionError('')
+          setActionError(
+            ''
+          )
         }
         title="Action Failed"
         size="sm"
         footer={
           <Button
             onClick={() =>
-              setActionError('')
+              setActionError(
+                ''
+              )
             }
           >
             OK
@@ -1561,21 +2224,31 @@ export default function MyTeam() {
         }
       >
         <p className="text-sm text-gray-600">
-          {actionError}
+          {
+            actionError
+          }
         </p>
       </Modal>
 
       <Modal
-        open={Boolean(actionSuccess)}
+        open={
+          Boolean(
+            actionSuccess
+          )
+        }
         onClose={() =>
-          setActionSuccess('')
+          setActionSuccess(
+            ''
+          )
         }
         title="Leave Request Updated"
         size="sm"
         footer={
           <Button
             onClick={() =>
-              setActionSuccess('')
+              setActionSuccess(
+                ''
+              )
             }
           >
             OK
@@ -1583,7 +2256,9 @@ export default function MyTeam() {
         }
       >
         <p className="text-sm text-gray-600">
-          {actionSuccess}
+          {
+            actionSuccess
+          }
         </p>
       </Modal>
     </div>

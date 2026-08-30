@@ -14,11 +14,6 @@ import Topbar from './Topbar';
 
 import ChangePasswordRequired from './auth/ChangePasswordRequired';
 import SmartCsvImportEnhancer from './import/SmartCsvImportEnhancer';
-import EmployeeRequirementsEnhancer from './enhancers/EmployeeRequirementsEnhancer';
-import MasterDataRequirementsEnhancer from './enhancers/MasterDataRequirementsEnhancer';
-import YearlyReportEnhancer from './enhancers/YearlyReportEnhancer';
-import ApprovalAdminEnhancer from './enhancers/ApprovalAdminEnhancer';
-import DivisionTerminologyEnhancer from './enhancers/DivisionTerminologyEnhancer';
 
 import api, {
   getApiErrorMessage,
@@ -26,6 +21,7 @@ import api, {
 
 export default function Layout() {
   const location = useLocation();
+
   const [
     sidebarOpen,
     setSidebarOpen,
@@ -152,28 +148,14 @@ export default function Layout() {
         </main>
       </div>
 
-      <DivisionTerminologyEnhancer />
-
+      {/*
+       * Smart CSV remains exactly where it was. The old DOM-injection
+       * UI enhancers are intentionally removed because the corresponding
+       * changes now live directly inside Employees, MasterData, Approvals
+       * and MyTeam.
+       */}
       {location.pathname === '/employees' && (
-        <>
-          <SmartCsvImportEnhancer />
-          <EmployeeRequirementsEnhancer />
-        </>
-      )}
-
-      {location.pathname === '/create' && (
-        <MasterDataRequirementsEnhancer />
-      )}
-
-      {location.pathname === '/approvals' && (
-        <YearlyReportEnhancer />
-      )}
-
-      {[
-        '/approvals',
-        '/my-team',
-      ].includes(location.pathname) && (
-        <ApprovalAdminEnhancer />
+        <SmartCsvImportEnhancer />
       )}
     </div>
   );

@@ -13,8 +13,8 @@ export interface BackendEmployee {
   role: Role;
 
   /*
-   * HR / Master Data role label.
-   * Separate from access-control role above.
+   * Backward-compatible database field for Division.
+   * Portal Access remains separate in `role`.
    */
   roleLabel?: string;
 
@@ -73,12 +73,13 @@ export interface CreateEmployeePayload {
   cnic: string;
 
   /*
-   * Portal access: employee / manager only.
+   * Portal Access: employee / manager only.
    */
   role: 'employee' | 'manager';
 
   /*
-   * HR role selected from Master Data -> Roles.
+   * Division selected from Master Data -> Divisions.
+   * Stored in roleLabel for backward database compatibility.
    */
   roleLabel: string;
 
@@ -93,6 +94,12 @@ export interface CreateEmployeePayload {
   managerId?: string | null;
 
   canApproveOtherDepartments?: boolean;
+
+  /*
+   * Organization Leave Year Start shown in Create Employee.
+   * Backend validates this value against the organization setting.
+   */
+  leaveYearStart?: string;
 
   profilePhotoUrl?: string;
 }
@@ -327,9 +334,8 @@ export async function updateEmployee(
 }
 
 /*
- * HR RoleLabel is deliberately updated through its own small endpoint.
- * This avoids changing the mature employee update controller and keeps
- * access-control role separate from the Master Data role label.
+ * Division is deliberately updated through the existing small
+ * role-label endpoint so access-control role remains separate.
  */
 export async function updateEmployeeRoleLabel(
   id: string,

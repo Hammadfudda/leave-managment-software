@@ -1,25 +1,40 @@
-import { useEffect, useState } from 'react';
-import { useAppData } from '../context/AppDataContext';
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
+import {
+  useAppData,
+} from '../context/AppDataContext';
+
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import Badge from '../components/ui/Badge';
+
 import {
   Plus,
   Briefcase,
   Building2,
   GraduationCap,
-  ShieldCheck,
+  Network,
   Pencil,
   Trash2,
 } from 'lucide-react';
-import type { Grade } from '../types';
-import { getApiErrorMessage } from '../services/api';
+
+import type {
+  Grade,
+} from '../types';
+
+import api, {
+  getApiErrorMessage,
+} from '../services/api';
 
 type Tab =
   | 'designations'
   | 'departments'
   | 'grades'
-  | 'roles';
+  | 'divisions';
 
 type MessageType =
   | 'success'
@@ -34,10 +49,24 @@ interface MessageState {
   message: string;
 }
 
+interface DepartmentRow {
+  _id: string;
+  name: string;
+  saturdayOff?: boolean;
+  divisionName?: string;
+}
+
 const emptyGradeForm = {
   name: '',
   description: '',
 };
+
+const RESERVED_DIVISIONS =
+  new Set([
+    'admin',
+    'manager',
+    'employee',
+  ]);
 
 export default function MasterData() {
   const {
@@ -69,154 +98,316 @@ export default function MasterData() {
     refreshLookups,
   } = useAppData();
 
-  const [tab, setTab] =
-    useState<Tab>('roles');
+  const [
+    tab,
+    setTab,
+  ] =
+    useState<Tab>(
+      'designations'
+    );
 
-  const [showAdd, setShowAdd] =
+  const [
+    departmentRows,
+    setDepartmentRows,
+  ] =
+    useState<DepartmentRow[]>(
+      []
+    );
+
+  const [
+    showAdd,
+    setShowAdd,
+  ] =
     useState(false);
 
-  const [loading, setLoading] =
+  const [
+    loading,
+    setLoading,
+  ] =
     useState(true);
 
-  const [saving, setSaving] =
+  const [
+    saving,
+    setSaving,
+  ] =
     useState(false);
 
-  const [deleting, setDeleting] =
+  const [
+    deleting,
+    setDeleting,
+  ] =
     useState(false);
 
-  const [name, setName] =
+  const [
+    name,
+    setName,
+  ] =
+    useState('');
+
+  const [
+    selectedDivision,
+    setSelectedDivision,
+  ] =
     useState('');
 
   const [
     saturdayOffValue,
     setSaturdayOffValue,
-  ] = useState(true);
+  ] =
+    useState(true);
 
   const [
     editingItem,
     setEditingItem,
-  ] = useState<string | null>(
-    null
-  );
+  ] =
+    useState<string | null>(
+      null
+    );
 
   const [
     editingGrade,
     setEditingGrade,
-  ] = useState<Grade | null>(
-    null
-  );
+  ] =
+    useState<Grade | null>(
+      null
+    );
 
   const [
     gradeForm,
     setGradeForm,
-  ] = useState(
-    emptyGradeForm
-  );
-
-  const [message, setMessage] =
-    useState<MessageState>({
-      open: false,
-      type: 'info',
-      title: '',
-      message: '',
-    });
-
-  const showMessage = (
-    type: MessageType,
-    title: string,
-    messageText: string
-  ) => {
-    setMessage({
-      open: true,
-      type,
-      title,
-      message: messageText,
-    });
-  };
-
-  useEffect(() => {
-    const loadMasterData =
-      async () => {
-        setLoading(true);
-
-        try {
-          await refreshLookups();
-        } catch (error) {
-          showMessage(
-            'error',
-            'Unable to Load Data',
-            getApiErrorMessage(
-              error,
-              'Master data could not be loaded from the database.'
-            )
-          );
-        } finally {
-          setLoading(false);
-        }
-      };
-
-    void loadMasterData();
-  }, [refreshLookups]);
-
-  const resetGradeForm = () =>
-    setGradeForm(
+  ] =
+    useState(
       emptyGradeForm
     );
 
-  const resetModalState = () => {
-    setShowAdd(false);
-    setName('');
-    setEditingItem(null);
-    setEditingGrade(null);
-    setSaturdayOffValue(true);
-    resetGradeForm();
-  };
-
-  const openAdd = () => {
-    setName('');
-    setEditingItem(null);
-    setEditingGrade(null);
-    setSaturdayOffValue(true);
-    resetGradeForm();
-    setShowAdd(true);
-  };
-
-  const openEditItem = (
-    item: string
-  ) => {
-    setName(item);
-    setEditingItem(item);
-
-    if (tab === 'departments') {
-      setSaturdayOffValue(
-        departmentSaturdayOff[
-          item
-        ] ?? true
-      );
-    }
-
-    setShowAdd(true);
-  };
-
-  const openEditGrade = (
-    grade: Grade
-  ) => {
-    setEditingGrade(grade);
-
-    setGradeForm({
-      name: grade.name,
-      description:
-        grade.description || '',
+  const [
+    message,
+    setMessage,
+  ] =
+    useState<MessageState>({
+      open:
+        false,
+      type:
+        'info',
+      title:
+        '',
+      message:
+        '',
     });
 
-    setShowAdd(true);
-  };
+  const divisions =
+    useMemo(
+      () =>
+        roles.filter(
+          (
+            role
+          ) =>
+            !RESERVED_DIVISIONS.has(
+              role
+                .trim()
+                .toLowerCase()
+            )
+        ),
+      [
+        roles,
+      ]
+    );
+
+  const showMessage =
+    (
+      type:
+        MessageType,
+      title:
+        string,
+      messageText:
+        string
+    ) => {
+      setMessage({
+        open:
+          true,
+        type,
+        title,
+        message:
+          messageText,
+      });
+    };
+
+  const loadDepartmentHierarchy =
+    async () => {
+      const response =
+        await api.get(
+          '/departments'
+        );
+
+      setDepartmentRows(
+        response.data?.data ||
+        []
+      );
+    };
+
+  useEffect(
+    () => {
+      const loadMasterData =
+        async () => {
+          setLoading(
+            true
+          );
+
+          try {
+            await Promise.all([
+              refreshLookups(),
+              loadDepartmentHierarchy(),
+            ]);
+          } catch (
+            error
+          ) {
+            showMessage(
+              'error',
+              'Unable to Load Data',
+              getApiErrorMessage(
+                error,
+                'Master data could not be loaded from the database.'
+              )
+            );
+          } finally {
+            setLoading(
+              false
+            );
+          }
+        };
+
+      void loadMasterData();
+    },
+    [
+      refreshLookups,
+    ]
+  );
+
+  const resetGradeForm =
+    () =>
+      setGradeForm(
+        emptyGradeForm
+      );
+
+  const resetModalState =
+    () => {
+      setShowAdd(
+        false
+      );
+      setName(
+        ''
+      );
+      setSelectedDivision(
+        ''
+      );
+      setEditingItem(
+        null
+      );
+      setEditingGrade(
+        null
+      );
+      setSaturdayOffValue(
+        true
+      );
+      resetGradeForm();
+    };
+
+  const openAdd =
+    () => {
+      setName(
+        ''
+      );
+      setSelectedDivision(
+        ''
+      );
+      setEditingItem(
+        null
+      );
+      setEditingGrade(
+        null
+      );
+      setSaturdayOffValue(
+        true
+      );
+      resetGradeForm();
+      setShowAdd(
+        true
+      );
+    };
+
+  const openEditItem =
+    (
+      item:
+        string
+    ) => {
+      setName(
+        item
+      );
+      setEditingItem(
+        item
+      );
+
+      if (
+        tab ===
+        'departments'
+      ) {
+        setSaturdayOffValue(
+          departmentSaturdayOff[
+            item
+          ] ??
+          true
+        );
+
+        const current =
+          departmentRows.find(
+            (
+              department
+            ) =>
+              department.name ===
+              item
+          );
+
+        setSelectedDivision(
+          current?.divisionName ||
+          ''
+        );
+      }
+
+      setShowAdd(
+        true
+      );
+    };
+
+  const openEditGrade =
+    (
+      grade:
+        Grade
+    ) => {
+      setEditingGrade(
+        grade
+      );
+
+      setGradeForm({
+        name:
+          grade.name,
+        description:
+          grade.description ||
+          '',
+      });
+
+      setShowAdd(
+        true
+      );
+    };
 
   const handleDeleteItem =
     async (
-      item: string
+      item:
+        string
     ) => {
-      setDeleting(true);
+      setDeleting(
+        true
+      );
 
       try {
         if (
@@ -234,19 +425,27 @@ export default function MasterData() {
             item
           );
         } else if (
-          tab === 'roles'
+          tab ===
+          'divisions'
         ) {
-          await deleteRole(item);
+          await deleteRole(
+            item
+          );
         }
 
-        await refreshLookups();
+        await Promise.all([
+          refreshLookups(),
+          loadDepartmentHierarchy(),
+        ]);
 
         showMessage(
           'success',
           'Deleted',
           `${item} has been removed successfully.`
         );
-      } catch (error) {
+      } catch (
+        error
+      ) {
         showMessage(
           'error',
           'Delete Failed',
@@ -256,15 +455,20 @@ export default function MasterData() {
           )
         );
       } finally {
-        setDeleting(false);
+        setDeleting(
+          false
+        );
       }
     };
 
   const handleDeleteGrade =
     async (
-      grade: Grade
+      grade:
+        Grade
     ) => {
-      setDeleting(true);
+      setDeleting(
+        true
+      );
 
       try {
         await deleteGrade(
@@ -278,7 +482,9 @@ export default function MasterData() {
           'Grade Deleted',
           `${grade.name} has been removed successfully.`
         );
-      } catch (error) {
+      } catch (
+        error
+      ) {
         showMessage(
           'error',
           'Delete Failed',
@@ -288,13 +494,17 @@ export default function MasterData() {
           )
         );
       } finally {
-        setDeleting(false);
+        setDeleting(
+          false
+        );
       }
     };
 
   const handleAdd =
     async () => {
-      if (!name.trim()) {
+      if (
+        !name.trim()
+      ) {
         showMessage(
           'warning',
           'Name Required',
@@ -307,10 +517,30 @@ export default function MasterData() {
       const trimmedName =
         name.trim();
 
-      setSaving(true);
+      if (
+        tab ===
+        'divisions' &&
+        RESERVED_DIVISIONS.has(
+          trimmedName.toLowerCase()
+        )
+      ) {
+        showMessage(
+          'warning',
+          'Invalid Division',
+          'Admin, Manager and Employee are Portal Access values, not Divisions.'
+        );
+
+        return;
+      }
+
+      setSaving(
+        true
+      );
 
       try {
-        if (editingItem) {
+        if (
+          editingItem
+        ) {
           if (
             tab ===
             'designations'
@@ -328,7 +558,8 @@ export default function MasterData() {
               trimmedName
             );
           } else if (
-            tab === 'roles'
+            tab ===
+            'divisions'
           ) {
             await updateRole(
               editingItem,
@@ -351,7 +582,8 @@ export default function MasterData() {
               trimmedName
             );
           } else if (
-            tab === 'roles'
+            tab ===
+            'divisions'
           ) {
             await addRole(
               trimmedName
@@ -365,10 +597,47 @@ export default function MasterData() {
         ) {
           await refreshLookups();
 
+          const response =
+            await api.get(
+              '/departments'
+            );
+
+          const currentDepartment:
+            DepartmentRow | undefined =
+            (
+              response.data?.data ||
+              []
+            ).find(
+              (
+                department:
+                  DepartmentRow
+              ) =>
+                department.name ===
+                trimmedName
+            );
+
+          if (
+            currentDepartment?._id &&
+            (
+              currentDepartment.divisionName ||
+              ''
+            ) !==
+              selectedDivision
+          ) {
+            await api.patch(
+              `/departments/${currentDepartment._id}`,
+              {
+                divisionName:
+                  selectedDivision,
+              }
+            );
+          }
+
           const currentValue =
             departmentSaturdayOff[
               trimmedName
-            ] ?? true;
+            ] ??
+            true;
 
           if (
             currentValue !==
@@ -380,7 +649,10 @@ export default function MasterData() {
           }
         }
 
-        await refreshLookups();
+        await Promise.all([
+          refreshLookups(),
+          loadDepartmentHierarchy(),
+        ]);
 
         resetModalState();
 
@@ -391,7 +663,9 @@ export default function MasterData() {
             : 'Created',
           `${trimmedName} has been saved successfully.`
         );
-      } catch (error) {
+      } catch (
+        error
+      ) {
         showMessage(
           'error',
           editingItem
@@ -403,7 +677,9 @@ export default function MasterData() {
           )
         );
       } finally {
-        setSaving(false);
+        setSaving(
+          false
+        );
       }
     };
 
@@ -421,10 +697,13 @@ export default function MasterData() {
         return;
       }
 
-      setSaving(true);
+      setSaving(
+        true
+      );
 
       try {
-        const payload: Grade = {
+        const payload:
+          Grade = {
           id:
             editingGrade?.id ||
             '',
@@ -434,7 +713,9 @@ export default function MasterData() {
             gradeForm.description.trim(),
         };
 
-        if (editingGrade) {
+        if (
+          editingGrade
+        ) {
           await updateGrade(
             payload
           );
@@ -458,7 +739,9 @@ export default function MasterData() {
             : 'Grade Created',
           `${savedName} has been saved successfully.`
         );
-      } catch (error) {
+      } catch (
+        error
+      ) {
         showMessage(
           'error',
           editingGrade
@@ -470,9 +753,96 @@ export default function MasterData() {
           )
         );
       } finally {
-        setSaving(false);
+        setSaving(
+          false
+        );
       }
     };
+
+  const assignDepartmentToDivision =
+    async (
+      department:
+        DepartmentRow,
+      divisionName:
+        string
+    ) => {
+      try {
+        await api.patch(
+          `/departments/${department._id}`,
+          {
+            divisionName,
+          }
+        );
+
+        await loadDepartmentHierarchy();
+
+        showMessage(
+          'success',
+          'Department Updated',
+          divisionName
+            ? `${department.name} is now under ${divisionName}.`
+            : `${department.name} is now unassigned.`
+        );
+      } catch (
+        error
+      ) {
+        showMessage(
+          'error',
+          'Update Failed',
+          getApiErrorMessage(
+            error,
+            'Unable to update Department Division.'
+          )
+        );
+      }
+    };
+
+  const groupedDepartments =
+    useMemo(
+      () =>
+        Object.fromEntries(
+          divisions.map(
+            (
+              division
+            ) => [
+              division,
+              departmentRows.filter(
+                (
+                  department
+                ) =>
+                  department.divisionName ===
+                  division
+              ),
+            ]
+          )
+        ) as
+          Record<
+            string,
+            DepartmentRow[]
+          >,
+      [
+        divisions,
+        departmentRows,
+      ]
+    );
+
+  const unassignedDepartments =
+    useMemo(
+      () =>
+        departmentRows.filter(
+          (
+            department
+          ) =>
+            !department.divisionName ||
+            !divisions.includes(
+              department.divisionName
+            )
+        ),
+      [
+        departmentRows,
+        divisions,
+      ]
+    );
 
   const tabs = [
     {
@@ -480,14 +850,16 @@ export default function MasterData() {
         'designations' as const,
       label:
         'Designations',
-      icon: Briefcase,
+      icon:
+        Briefcase,
     },
     {
       key:
         'departments' as const,
       label:
         'Departments',
-      icon: Building2,
+      icon:
+        Building2,
     },
     {
       key:
@@ -499,37 +871,43 @@ export default function MasterData() {
     },
     {
       key:
-        'roles' as const,
+        'divisions' as const,
       label:
-        'Roles',
-      icon: ShieldCheck,
+        'Divisions',
+      icon:
+        Network,
     },
   ];
 
   const renderContent =
     () => {
-      if (loading) {
+      if (
+        loading
+      ) {
         return (
           <div className="rounded-2xl border border-gray-100 bg-white px-5 py-12 text-center text-sm text-gray-500 shadow-sm">
-            Loading master data
-            from database...
+            Loading master data from database...
           </div>
         );
       }
 
-      if (tab === 'grades') {
+      if (
+        tab ===
+        'grades'
+      ) {
         return (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {grades.length ===
               0 && (
               <div className="lg:col-span-2 rounded-2xl border border-gray-100 bg-white px-5 py-12 text-center text-sm text-gray-400 shadow-sm">
-                No grades found
-                in the database.
+                No grades found in the database.
               </div>
             )}
 
             {grades.map(
-              (grade) => (
+              (
+                grade
+              ) => (
                 <div
                   key={
                     grade.id
@@ -602,102 +980,367 @@ export default function MasterData() {
         );
       }
 
+      if (
+        tab ===
+        'divisions'
+      ) {
+        return (
+          <div className="space-y-4">
+            {divisions.length ===
+              0 && (
+              <div className="rounded-2xl border border-gray-100 bg-white px-5 py-12 text-center text-sm text-gray-400 shadow-sm">
+                No Divisions found in the database.
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {divisions.map(
+                (
+                  division
+                ) => (
+                  <div
+                    key={
+                      division
+                    }
+                    className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <h3 className="font-semibold text-gray-900">
+                          {
+                            division
+                          }
+                        </h3>
+
+                        <p className="mt-1 text-xs text-gray-500">
+                          {
+                            groupedDepartments[
+                              division
+                            ]?.length ||
+                            0
+                          } Department(s)
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openEditItem(
+                              division
+                            )
+                          }
+                          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                          aria-label={`Edit ${division}`}
+                        >
+                          <Pencil
+                            size={
+                              13
+                            }
+                          />
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={
+                            deleting
+                          }
+                          onClick={() =>
+                            void handleDeleteItem(
+                              division
+                            )
+                          }
+                          className="rounded-lg p-1.5 text-gray-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                          aria-label={`Delete ${division}`}
+                        >
+                          <Trash2
+                            size={
+                              13
+                            }
+                          />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-2">
+                      {(
+                        groupedDepartments[
+                          division
+                        ] ||
+                        []
+                      ).length ===
+                        0 && (
+                        <p className="text-sm text-gray-400">
+                          No Departments assigned yet.
+                        </p>
+                      )}
+
+                      {(
+                        groupedDepartments[
+                          division
+                        ] ||
+                        []
+                      ).map(
+                        (
+                          department
+                        ) => (
+                          <div
+                            key={
+                              department._id
+                            }
+                            className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2"
+                          >
+                            <span className="text-sm text-gray-700">
+                              {
+                                department.name
+                              }
+                            </span>
+
+                            <select
+                              value={
+                                department.divisionName ||
+                                ''
+                              }
+                              onChange={
+                                (
+                                  event
+                                ) =>
+                                  void assignDepartmentToDivision(
+                                    department,
+                                    event.target.value
+                                  )
+                              }
+                              className="max-w-[180px] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs"
+                            >
+                              <option value="">
+                                Unassigned
+                              </option>
+
+                              {divisions.map(
+                                (
+                                  option
+                                ) => (
+                                  <option
+                                    key={
+                                      option
+                                    }
+                                    value={
+                                      option
+                                    }
+                                  >
+                                    {
+                                      option
+                                    }
+                                  </option>
+                                )
+                              )}
+                            </select>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+
+            {unassignedDepartments.length >
+              0 && (
+              <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-5">
+                <h3 className="text-sm font-semibold text-amber-900">
+                  Unassigned Departments
+                </h3>
+
+                <p className="mt-1 text-xs text-amber-700">
+                  Assign these Departments to a Division before using them for new employees.
+                </p>
+
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {unassignedDepartments.map(
+                    (
+                      department
+                    ) => (
+                      <div
+                        key={
+                          department._id
+                        }
+                        className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2"
+                      >
+                        <span className="text-sm text-gray-700">
+                          {
+                            department.name
+                          }
+                        </span>
+
+                        <select
+                          value=""
+                          onChange={
+                            (
+                              event
+                            ) =>
+                              void assignDepartmentToDivision(
+                                department,
+                                event.target.value
+                              )
+                          }
+                          className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs"
+                        >
+                          <option value="">
+                            Select Division
+                          </option>
+
+                          {divisions.map(
+                            (
+                              division
+                            ) => (
+                              <option
+                                key={
+                                  division
+                                }
+                                value={
+                                  division
+                                }
+                              >
+                                {
+                                  division
+                                }
+                              </option>
+                            )
+                          )}
+                        </select>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
       const items =
-        tab === 'designations'
+        tab ===
+        'designations'
           ? designations
-          : tab ===
-              'departments'
-            ? departments
-            : roles;
+          : departments;
 
       return (
         <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
           {items.length ===
             0 && (
             <div className="px-5 py-12 text-center text-sm text-gray-400">
-              No {tab} found
-              in the database.
+              No {tab} found in the database.
             </div>
           )}
 
           <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 lg:grid-cols-3">
             {items.map(
-              (item) => (
-                <div
-                  key={item}
-                  className="flex items-center justify-between border-b border-r border-gray-50 px-5 py-3 text-sm text-gray-800"
-                >
-                  <div className="flex items-center gap-2">
-                    <span>
-                      {item}
-                    </span>
-
-                    {tab ===
-                      'departments' &&
-                      (
-                        departmentSaturdayOff[
+              (
+                item
+              ) => {
+                const department =
+                  tab ===
+                  'departments'
+                    ? departmentRows.find(
+                        (
+                          row
+                        ) =>
+                          row.name ===
                           item
-                        ] ?? true
-                      ) && (
-                        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
-                          Saturday
-                          off
+                      )
+                    : undefined;
+
+                return (
+                  <div
+                    key={
+                      item
+                    }
+                    className="flex items-center justify-between border-b border-r border-gray-50 px-5 py-3 text-sm text-gray-800"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>
+                          {
+                            item
+                          }
                         </span>
+
+                        {tab ===
+                          'departments' &&
+                          (
+                            departmentSaturdayOff[
+                              item
+                            ] ??
+                            true
+                          ) && (
+                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                              Saturday off
+                            </span>
+                          )}
+
+                        {tab ===
+                          'departments' &&
+                          !(
+                            departmentSaturdayOff[
+                              item
+                            ] ??
+                            true
+                          ) && (
+                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                              Saturday on · 6-day week
+                            </span>
+                          )}
+                      </div>
+
+                      {tab ===
+                        'departments' && (
+                        <p className="mt-1 text-xs text-gray-400">
+                          Division:{' '}
+                          {department?.divisionName ||
+                            'Unassigned'}
+                        </p>
                       )}
+                    </div>
 
-                    {tab ===
-                      'departments' &&
-                      !(
-                        departmentSaturdayOff[
-                          item
-                        ] ?? true
-                      ) && (
-                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                          Saturday
-                          on ·
-                          6-day week
-                        </span>
-                      )}
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openEditItem(
-                          item
-                        )
-                      }
-                      className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                    >
-                      <Pencil
-                        size={
-                          13
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openEditItem(
+                            item
+                          )
                         }
-                      />
-                    </button>
+                        className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                      >
+                        <Pencil
+                          size={
+                            13
+                          }
+                        />
+                      </button>
 
-                    <button
-                      type="button"
-                      disabled={
-                        deleting
-                      }
-                      onClick={() =>
-                        void handleDeleteItem(
-                          item
-                        )
-                      }
-                      className="rounded-lg p-1.5 text-gray-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
-                    >
-                      <Trash2
-                        size={
-                          13
+                      <button
+                        type="button"
+                        disabled={
+                          deleting
                         }
-                      />
-                    </button>
+                        onClick={() =>
+                          void handleDeleteItem(
+                            item
+                          )
+                        }
+                        className="rounded-lg p-1.5 text-gray-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                      >
+                        <Trash2
+                          size={
+                            13
+                          }
+                        />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )
+                );
+              }
             )}
           </div>
         </div>
@@ -712,16 +1355,16 @@ export default function MasterData() {
         </h1>
 
         <p className="mt-1 text-sm text-gray-500">
-          Manage database-backed
-          HR references and system
-          roles.
+          Manage database-backed organizational references.
         </p>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-1.5">
           {tabs.map(
-            (item) => {
+            (
+              item
+            ) => {
               const Icon =
                 item.icon;
 
@@ -744,10 +1387,14 @@ export default function MasterData() {
                   }`}
                 >
                   <Icon
-                    size={15}
+                    size={
+                      15
+                    }
                   />
 
-                  {item.label}
+                  {
+                    item.label
+                  }
                 </button>
               );
             }
@@ -755,10 +1402,18 @@ export default function MasterData() {
         </div>
 
         <Button
-          onClick={openAdd}
-          disabled={loading}
+          onClick={
+            openAdd
+          }
+          disabled={
+            loading
+          }
         >
-          <Plus size={16} />
+          <Plus
+            size={
+              16
+            }
+          />
 
           {tab ===
           'designations'
@@ -769,21 +1424,26 @@ export default function MasterData() {
               : tab ===
                   'grades'
                 ? 'Add Grade'
-                : 'Add Role'}
+                : 'Add Division'}
         </Button>
       </div>
 
       {renderContent()}
 
       <Modal
-        open={showAdd}
+        open={
+          showAdd
+        }
         onClose={() => {
-          if (!saving) {
+          if (
+            !saving
+          ) {
             resetModalState();
           }
         }}
         title={
-          tab === 'grades'
+          tab ===
+          'grades'
             ? editingGrade
               ? 'Edit Grade'
               : 'Add Grade'
@@ -795,7 +1455,7 @@ export default function MasterData() {
                     : tab ===
                         'departments'
                       ? 'Department'
-                      : 'Role'
+                      : 'Division'
                 }`
               : tab ===
                   'designations'
@@ -803,13 +1463,15 @@ export default function MasterData() {
                 : tab ===
                     'departments'
                   ? 'Add Department'
-                  : 'Add Role'
+                  : 'Add Division'
         }
         footer={
           <>
             <Button
               variant="secondary"
-              disabled={saving}
+              disabled={
+                saving
+              }
               onClick={
                 resetModalState
               }
@@ -818,7 +1480,9 @@ export default function MasterData() {
             </Button>
 
             <Button
-              disabled={saving}
+              disabled={
+                saving
+              }
               onClick={() =>
                 void (
                   tab ===
@@ -842,7 +1506,8 @@ export default function MasterData() {
           </>
         }
       >
-        {tab === 'grades' ? (
+        {tab ===
+        'grades' ? (
           <div className="space-y-4">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -853,16 +1518,15 @@ export default function MasterData() {
                 value={
                   gradeForm.name
                 }
-                onChange={(
-                  event
-                ) =>
-                  setGradeForm({
-                    ...gradeForm,
-                    name:
-                      event
-                        .target
-                        .value,
-                  })
+                onChange={
+                  (
+                    event
+                  ) =>
+                    setGradeForm({
+                      ...gradeForm,
+                      name:
+                        event.target.value,
+                    })
                 }
                 className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 autoFocus
@@ -878,16 +1542,15 @@ export default function MasterData() {
                 value={
                   gradeForm.description
                 }
-                onChange={(
-                  event
-                ) =>
-                  setGradeForm({
-                    ...gradeForm,
-                    description:
-                      event
-                        .target
-                        .value,
-                  })
+                onChange={
+                  (
+                    event
+                  ) =>
+                    setGradeForm({
+                      ...gradeForm,
+                      description:
+                        event.target.value,
+                    })
                 }
                 placeholder="Optional description"
                 className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -901,15 +1564,16 @@ export default function MasterData() {
         ) : (
           <div className="space-y-4">
             <input
-              value={name}
-              onChange={(
-                event
-              ) =>
-                setName(
+              value={
+                name
+              }
+              onChange={
+                (
                   event
-                    .target
-                    .value
-                )
+                ) =>
+                  setName(
+                    event.target.value
+                  )
               }
               placeholder={
                 tab ===
@@ -918,7 +1582,7 @@ export default function MasterData() {
                   : tab ===
                       'departments'
                     ? 'e.g. Research'
-                    : 'e.g. Team Lead'
+                    : 'e.g. Technology'
               }
               className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               autoFocus
@@ -926,44 +1590,94 @@ export default function MasterData() {
 
             {tab ===
               'departments' && (
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={
-                      saturdayOffValue
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setSaturdayOffValue(
-                        event
-                          .target
-                          .checked
-                      )
-                    }
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
+                <>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                      Parent Division
+                    </label>
 
-                  Saturday is a
-                  day off for this
-                  department
-                </label>
+                    <select
+                      value={
+                        selectedDivision
+                      }
+                      onChange={
+                        (
+                          event
+                        ) =>
+                          setSelectedDivision(
+                            event.target.value
+                          )
+                      }
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      <option value="">
+                        Unassigned
+                      </option>
+
+                      {divisions.map(
+                        (
+                          division
+                        ) => (
+                          <option
+                            key={
+                              division
+                            }
+                            value={
+                              division
+                            }
+                          >
+                            {
+                              division
+                            }
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </div>
+
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={
+                        saturdayOffValue
+                      }
+                      onChange={
+                        (
+                          event
+                        ) =>
+                          setSaturdayOffValue(
+                            event.target.checked
+                          )
+                      }
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+
+                    Saturday is a day off for this department
+                  </label>
+                </>
               )}
           </div>
         )}
       </Modal>
 
       <Modal
-        open={message.open}
+        open={
+          message.open
+        }
         onClose={() =>
           setMessage(
-            (previous) => ({
+            (
+              previous
+            ) => ({
               ...previous,
-              open: false,
+              open:
+                false,
             })
           )
         }
-        title={message.title}
+        title={
+          message.title
+        }
         footer={
           <Button
             onClick={() =>
@@ -972,7 +1686,8 @@ export default function MasterData() {
                   previous
                 ) => ({
                   ...previous,
-                  open: false,
+                  open:
+                    false,
                 })
               )
             }
@@ -995,7 +1710,9 @@ export default function MasterData() {
                   : 'bg-blue-50 text-blue-700'
           }`}
         >
-          {message.message}
+          {
+            message.message
+          }
         </div>
       </Modal>
     </div>

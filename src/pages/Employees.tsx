@@ -38,6 +38,11 @@ import {
   type UpdateEmployeePayload,
 } from '../services/employees';
 
+import {
+  getOrganizationSettings,
+  updateOrganizationSettings,
+} from '../services/organizationSettings';
+
 import api, {
   getApiErrorMessage,
 } from '../services/api';
@@ -58,7 +63,7 @@ type MessageType =
   | 'info';
 
 type AddMasterField =
-  | 'roleLabel'
+  | 'division'
   | 'grade'
   | 'designation'
   | 'department';
@@ -70,43 +75,82 @@ interface MessageState {
   message: string;
 }
 
-const portalAccessLabel: Record<Role, string> = {
-  admin: 'Admin',
-  manager: 'Manager',
-  employee: 'Employee',
-};
+interface DepartmentRow {
+  _id: string;
+  name: string;
+  divisionName?: string;
+  saturdayOff?: boolean;
+}
+
+const portalAccessLabel:
+  Record<Role, string> = {
+    admin:
+      'Admin',
+    manager:
+      'Manager',
+    employee:
+      'Employee',
+  };
+
+const RESERVED_DIVISIONS =
+  new Set([
+    'admin',
+    'manager',
+    'employee',
+  ]);
 
 const emptyForm = {
-  fullName: '',
-  email: '',
-  employeeId: '',
-  cnic: '',
-  phone: '',
-  role: 'employee' as Role,
-  roleLabel: '',
-  designation: '',
-  grade: '',
-  department: '',
-  dateOfJoining: '',
-  status: 'active' as 'active' | 'inactive',
-  managerId: '',
-  canApproveOtherDepartments: false,
+  fullName:
+    '',
+  email:
+    '',
+  employeeId:
+    '',
+  cnic:
+    '',
+  phone:
+    '',
+  role:
+    'employee' as Role,
+  roleLabel:
+    '',
+  designation:
+    '',
+  grade:
+    '',
+  department:
+    '',
+  dateOfJoining:
+    '',
+  status:
+    'active' as
+      | 'active'
+      | 'inactive',
+  managerId:
+    '',
+  canApproveOtherDepartments:
+    false,
 };
 
 function getBlockingCsvErrors(
-  error: unknown
-): CsvHardError[] {
+  error:
+    unknown
+):
+  CsvHardError[] {
   const maybe =
     error as {
       response?: {
         data?: {
-          hardErrors?: CsvHardError[];
+          hardErrors?:
+            CsvHardError[];
         };
       };
     };
 
   return (
-    maybe.response?.data?.hardErrors ||
+    maybe.response
+      ?.data
+      ?.hardErrors ||
     []
   );
 }
@@ -116,194 +160,517 @@ export default function Employees() {
     users,
     grades,
     designations,
-    departments,
     roles,
     employeesLoading,
     refreshEmployees,
     refreshLookups,
     removeUser,
     addDesignation,
-    addDepartment,
     addRole,
     getUserById,
-  } = useAppData();
+  } =
+    useAppData();
 
-  const [query, setQuery] = useState('');
-  const [deptFilter, setDeptFilter] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [gradeFilter, setGradeFilter] = useState('');
+  const [
+    departmentRows,
+    setDepartmentRows,
+  ] =
+    useState<DepartmentRow[]>(
+      []
+    );
 
-  const [showAdd, setShowAdd] = useState(false);
-  const [viewUser, setViewUser] = useState<User | null>(null);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [removeTarget, setRemoveTarget] = useState<User | null>(null);
+  const [
+    leaveYearDay,
+    setLeaveYearDay,
+  ] =
+    useState(
+      1
+    );
 
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [addingMaster, setAddingMaster] = useState(false);
+  const [
+    leaveYearMonth,
+    setLeaveYearMonth,
+  ] =
+    useState(
+      1
+    );
 
-  const [csvReview, setCsvReview] =
-    useState<CsvImportResponse | null>(null);
-
-  const [csvFile, setCsvFile] =
-    useState<File | null>(null);
-
-  const [csvBlockingErrors, setCsvBlockingErrors] =
-    useState<CsvHardError[]>([]);
-
-  const [form, setForm] = useState(emptyForm);
-
-  const [errors, setErrors] =
-    useState<Record<string, string>>({});
-
-  const [addNewField, setAddNewField] =
-    useState<AddMasterField | null>(null);
-
-  const [newItemName, setNewItemName] =
+  const [
+    leaveYearDisplay,
+    setLeaveYearDisplay,
+  ] =
     useState('');
 
-  const [message, setMessage] =
+  const [
+    savingLeaveYear,
+    setSavingLeaveYear,
+  ] =
+    useState(false);
+
+  const [
+    query,
+    setQuery,
+  ] =
+    useState('');
+
+  const [
+    divisionFilter,
+    setDivisionFilter,
+  ] =
+    useState('');
+
+  const [
+    deptFilter,
+    setDeptFilter,
+  ] =
+    useState('');
+
+  const [
+    roleFilter,
+    setRoleFilter,
+  ] =
+    useState('');
+
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] =
+    useState('');
+
+  const [
+    gradeFilter,
+    setGradeFilter,
+  ] =
+    useState('');
+
+  const [
+    showAdd,
+    setShowAdd,
+  ] =
+    useState(false);
+
+  const [
+    viewUser,
+    setViewUser,
+  ] =
+    useState<User | null>(
+      null
+    );
+
+  const [
+    editingUser,
+    setEditingUser,
+  ] =
+    useState<User | null>(
+      null
+    );
+
+  const [
+    removeTarget,
+    setRemoveTarget,
+  ] =
+    useState<User | null>(
+      null
+    );
+
+  const [
+    saving,
+    setSaving,
+  ] =
+    useState(false);
+
+  const [
+    deleting,
+    setDeleting,
+  ] =
+    useState(false);
+
+  const [
+    importing,
+    setImporting,
+  ] =
+    useState(false);
+
+  const [
+    exporting,
+    setExporting,
+  ] =
+    useState(false);
+
+  const [
+    addingMaster,
+    setAddingMaster,
+  ] =
+    useState(false);
+
+  const [
+    csvReview,
+    setCsvReview,
+  ] =
+    useState<CsvImportResponse | null>(
+      null
+    );
+
+  const [
+    csvFile,
+    setCsvFile,
+  ] =
+    useState<File | null>(
+      null
+    );
+
+  const [
+    csvBlockingErrors,
+    setCsvBlockingErrors,
+  ] =
+    useState<CsvHardError[]>(
+      []
+    );
+
+  const [
+    form,
+    setForm,
+  ] =
+    useState(
+      emptyForm
+    );
+
+  const [
+    errors,
+    setErrors,
+  ] =
+    useState<
+      Record<string, string>
+    >({});
+
+  const [
+    addNewField,
+    setAddNewField,
+  ] =
+    useState<AddMasterField | null>(
+      null
+    );
+
+  const [
+    newItemName,
+    setNewItemName,
+  ] =
+    useState('');
+
+  const [
+    message,
+    setMessage,
+  ] =
     useState<MessageState>({
-      open: false,
-      type: 'info',
-      title: '',
-      message: '',
+      open:
+        false,
+      type:
+        'info',
+      title:
+        '',
+      message:
+        '',
     });
 
-  const showMessage = (
-    type: MessageType,
-    title: string,
-    text: string
-  ) => {
-    setMessage({
-      open: true,
-      type,
-      title,
-      message: text,
-    });
-  };
+  const divisions =
+    useMemo(
+      () =>
+        roles.filter(
+          (
+            role
+          ) =>
+            !RESERVED_DIVISIONS.has(
+              role
+                .trim()
+                .toLowerCase()
+            )
+        ),
+      [
+        roles,
+      ]
+    );
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        await Promise.all([
-          refreshEmployees(),
-          refreshLookups(),
-        ]);
-      } catch (error) {
-        showMessage(
-          'error',
-          'Unable to Load Employees',
-          getApiErrorMessage(
-            error,
-            'Employee data could not be loaded.'
-          )
-        );
-      }
+  const showMessage =
+    (
+      type:
+        MessageType,
+      title:
+        string,
+      text:
+        string
+    ) => {
+      setMessage({
+        open:
+          true,
+        type,
+        title,
+        message:
+          text,
+      });
     };
 
-    void load();
-  }, [
-    refreshEmployees,
-    refreshLookups,
-  ]);
+  const loadHierarchyAndSettings =
+    async () => {
+      const [
+        departmentResponse,
+        settings,
+      ] =
+        await Promise.all([
+          api.get(
+            '/departments'
+          ),
+          getOrganizationSettings(),
+        ]);
 
-  const filtered = useMemo(() => {
-    const search =
-      query
-        .trim()
-        .toLowerCase();
+      setDepartmentRows(
+        departmentResponse.data?.data ||
+        []
+      );
 
-    return users
-      .filter(
-        (user) =>
-          user.role !== 'admin'
-      )
-      .filter((user) => {
-        const matchesSearch =
-          !search ||
-          user.fullName
-            .toLowerCase()
-            .includes(search) ||
-          user.email
-            .toLowerCase()
-            .includes(search) ||
-          user.employeeId
-            .toLowerCase()
-            .includes(search) ||
-          (user.designation || '')
-            .toLowerCase()
-            .includes(search) ||
-          (user.roleLabel || '')
-            .toLowerCase()
-            .includes(search);
+      setLeaveYearDay(
+        settings.leaveYearStartDay
+      );
 
-        const matchesDepartment =
-          !deptFilter ||
-          user.department ===
-            deptFilter;
+      setLeaveYearMonth(
+        settings.leaveYearStartMonth
+      );
 
-        const matchesRole =
-          !roleFilter ||
-          user.role ===
-            roleFilter;
+      setLeaveYearDisplay(
+        settings.leaveYearStart
+      );
+    };
 
-        const matchesStatus =
-          !statusFilter ||
-          user.status ===
-            statusFilter;
+  useEffect(
+    () => {
+      const load =
+        async () => {
+          try {
+            await Promise.all([
+              refreshEmployees(),
+              refreshLookups(),
+              loadHierarchyAndSettings(),
+            ]);
+          } catch (
+            error
+          ) {
+            showMessage(
+              'error',
+              'Unable to Load Employees',
+              getApiErrorMessage(
+                error,
+                'Employee data could not be loaded.'
+              )
+            );
+          }
+        };
 
-        const matchesGrade =
-          !gradeFilter ||
-          user.grade ===
-            gradeFilter;
+      void load();
+    },
+    [
+      refreshEmployees,
+      refreshLookups,
+    ]
+  );
 
-        return (
-          matchesSearch &&
-          matchesDepartment &&
-          matchesRole &&
-          matchesStatus &&
-          matchesGrade
-        );
-      });
-  }, [
-    users,
-    query,
-    deptFilter,
-    roleFilter,
-    statusFilter,
-    gradeFilter,
-  ]);
+  const filteredDepartments =
+    useMemo(
+      () =>
+        departmentRows.filter(
+          (
+            department
+          ) =>
+            !divisionFilter ||
+            department.divisionName ===
+              divisionFilter
+        ),
+      [
+        departmentRows,
+        divisionFilter,
+      ]
+    );
+
+  const formDepartments =
+    useMemo(
+      () =>
+        departmentRows.filter(
+          (
+            department
+          ) => {
+            if (
+              !form.roleLabel
+            ) {
+              return false;
+            }
+
+            if (
+              department.divisionName ===
+              form.roleLabel
+            ) {
+              return true;
+            }
+
+            /*
+             * Legacy unassigned Department remains selectable so old
+             * production records do not break. Backend safely links it
+             * to the selected Division on a valid employee create.
+             */
+            return (
+              !department.divisionName &&
+              (
+                editingUser?.department ===
+                  department.name ||
+                !editingUser
+              )
+            );
+          }
+        ),
+      [
+        departmentRows,
+        form.roleLabel,
+        editingUser,
+      ]
+    );
+
+  const filtered =
+    useMemo(
+      () => {
+        const search =
+          query
+            .trim()
+            .toLowerCase();
+
+        return users
+          .filter(
+            (
+              user
+            ) =>
+              user.role !==
+              'admin'
+          )
+          .filter(
+            (
+              user
+            ) => {
+              const matchesSearch =
+                !search ||
+                user.fullName
+                  .toLowerCase()
+                  .includes(
+                    search
+                  ) ||
+                user.email
+                  .toLowerCase()
+                  .includes(
+                    search
+                  ) ||
+                user.employeeId
+                  .toLowerCase()
+                  .includes(
+                    search
+                  ) ||
+                (
+                  user.designation ||
+                  ''
+                )
+                  .toLowerCase()
+                  .includes(
+                    search
+                  ) ||
+                (
+                  user.roleLabel ||
+                  ''
+                )
+                  .toLowerCase()
+                  .includes(
+                    search
+                  );
+
+              const matchesDivision =
+                !divisionFilter ||
+                user.roleLabel ===
+                  divisionFilter;
+
+              const matchesDepartment =
+                !deptFilter ||
+                user.department ===
+                  deptFilter;
+
+              const matchesRole =
+                !roleFilter ||
+                user.role ===
+                  roleFilter;
+
+              const matchesStatus =
+                !statusFilter ||
+                user.status ===
+                  statusFilter;
+
+              const matchesGrade =
+                !gradeFilter ||
+                user.grade ===
+                  gradeFilter;
+
+              return (
+                matchesSearch &&
+                matchesDivision &&
+                matchesDepartment &&
+                matchesRole &&
+                matchesStatus &&
+                matchesGrade
+              );
+            }
+          );
+      },
+      [
+        users,
+        query,
+        divisionFilter,
+        deptFilter,
+        roleFilter,
+        statusFilter,
+        gradeFilter,
+      ]
+    );
 
   /*
-   * Existing manager rule is preserved:
-   * only active Managers from the selected department.
+   * Existing manager rule is preserved and tightened only by Division:
+   * active Managers from the selected Department and selected Division.
    */
   const availableManagers =
-    useMemo(() => {
-      if (!form.department) {
-        return [];
-      }
+    useMemo(
+      () => {
+        if (
+          !form.department
+        ) {
+          return [];
+        }
 
-      return users.filter(
-        (candidate) =>
-          candidate.role ===
-            'manager' &&
-          candidate.status ===
-            'active' &&
-          candidate.department ===
-            form.department &&
-          candidate.id !==
-            editingUser?.id
-      );
-    }, [
-      users,
-      form.department,
-      editingUser?.id,
-    ]);
+        return users.filter(
+          (
+            candidate
+          ) =>
+            candidate.role ===
+              'manager' &&
+            candidate.status ===
+              'active' &&
+            candidate.department ===
+              form.department &&
+            (
+              !form.roleLabel ||
+              candidate.roleLabel ===
+                form.roleLabel
+            ) &&
+            candidate.id !==
+              editingUser?.id
+        );
+      },
+      [
+        users,
+        form.department,
+        form.roleLabel,
+        editingUser?.id,
+      ]
+    );
 
   const pendingSet =
     useMemo(
@@ -323,418 +690,491 @@ export default function Employees() {
   const filterCls =
     'rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20';
 
-  const pendingInputClass = (
-    field: string
-  ) =>
-    pendingSet.has(field)
-      ? `${inputCls} border-rose-400 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20`
-      : inputCls;
-
-  const validate = () => {
-    const next: Record<string, string> = {};
-
-    if (!form.fullName.trim()) {
-      next.fullName =
-        'Full name is required';
-    }
-
-    if (!form.email.trim()) {
-      next.email =
-        'Email is required';
-    } else if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-        form.email
+  const pendingInputClass =
+    (
+      field:
+        string
+    ) =>
+      pendingSet.has(
+        field
       )
-    ) {
-      next.email =
-        'Invalid email format';
-    }
+        ? `${inputCls} border-rose-400 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20`
+        : inputCls;
 
-    if (!form.employeeId.trim()) {
-      next.employeeId =
-        'Employee ID is required';
-    }
+  const validate =
+    () => {
+      const next:
+        Record<string, string> = {};
 
-    if (!form.cnic.trim()) {
-      next.cnic =
-        'CNIC is required';
-    } else if (
-      !/^\d{5}-\d{7}-\d$/.test(
-        form.cnic
-      )
-    ) {
-      next.cnic =
-        'Format: 12345-1234567-1';
-    }
-
-    if (!form.phone.trim()) {
-      next.phone =
-        'Phone is required';
-    }
-
-    if (!form.roleLabel) {
-      next.roleLabel =
-        'Role is required';
-    }
-
-    if (!form.designation) {
-      next.designation =
-        'Designation is required';
-    }
-
-    if (!form.grade) {
-      next.grade =
-        'Grade is required';
-    }
-
-    if (!form.department) {
-      next.department =
-        'Department is required';
-    }
-
-    if (!form.dateOfJoining) {
-      next.dateOfJoining =
-        'Date of joining is required';
-    }
-
-    setErrors(next);
-
-    if (
-      Object.keys(next).length >
-      0
-    ) {
-      showMessage(
-        'warning',
-        'Missing Information',
-        'Please complete all required fields correctly.'
-      );
-
-      return false;
-    }
-
-    return true;
-  };
-
-  const resetForm = () => {
-    setForm({
-      ...emptyForm,
-    });
-
-    setErrors({});
-    setEditingUser(null);
-  };
-
-  const openCreate = () => {
-    setEditingUser(null);
-    setErrors({});
-
-    setForm({
-      ...emptyForm,
-      roleLabel:
-        roles[0] || '',
-      grade:
-        grades[0]?.name || '',
-    });
-
-    setShowAdd(true);
-  };
-
-  const handleEdit = (
-    user: User
-  ) => {
-    setEditingUser(user);
-    setErrors({});
-
-    setForm({
-      fullName:
-        user.fullName,
-
-      email:
-        user.email,
-
-      employeeId:
-        user.employeeId,
-
-      cnic:
-        user.cnic || '',
-
-      phone:
-        user.phone || '',
-
-      role:
-        user.role,
-
-      roleLabel:
-        user.roleLabel || '',
-
-      designation:
-        user.designation || '',
-
-      grade:
-        user.grade || '',
-
-      department:
-        user.department || '',
-
-      dateOfJoining:
-        user.dateOfJoining || '',
-
-      status:
-        user.status,
-
-      managerId:
-        user.managerId || '',
-
-      canApproveOtherDepartments:
-        user.canApproveOtherDepartments ||
-        false,
-    });
-
-    setShowAdd(true);
-  };
-
-  const handleSubmit = async (
-    event:
-      FormEvent<HTMLFormElement>
-  ) => {
-    event.preventDefault();
-
-    if (!validate()) {
-      return;
-    }
-
-    setSaving(true);
-
-    const isEdit =
-      Boolean(
-        editingUser?.id
-      );
-
-    try {
-      const selectedGrade =
-        grades.find(
-          (grade) =>
-            grade.name ===
-            form.grade
-        );
-
-      if (!selectedGrade) {
-        throw new Error(
-          'Please select a valid grade.'
-        );
+      if (
+        !form.fullName.trim()
+      ) {
+        next.fullName =
+          'Full name is required';
       }
 
-      if (isEdit) {
-        if (!editingUser?.id) {
-          throw new Error(
-            'Employee ID is missing for update.'
+      if (
+        !form.email.trim()
+      ) {
+        next.email =
+          'Email is required';
+      } else if (
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+          form.email
+        )
+      ) {
+        next.email =
+          'Invalid email format';
+      }
+
+      if (
+        !form.employeeId.trim()
+      ) {
+        next.employeeId =
+          'Employee ID is required';
+      }
+
+      if (
+        !form.cnic.trim()
+      ) {
+        next.cnic =
+          'CNIC is required';
+      } else if (
+        !/^\d{5}-\d{7}-\d$/.test(
+          form.cnic
+        )
+      ) {
+        next.cnic =
+          'Format: 12345-1234567-1';
+      }
+
+      if (
+        !form.phone.trim()
+      ) {
+        next.phone =
+          'Phone is required';
+      }
+
+      if (
+        !form.roleLabel
+      ) {
+        next.roleLabel =
+          'Division is required';
+      }
+
+      if (
+        !form.designation
+      ) {
+        next.designation =
+          'Designation is required';
+      }
+
+      if (
+        !form.grade
+      ) {
+        next.grade =
+          'Grade is required';
+      }
+
+      if (
+        !form.department
+      ) {
+        next.department =
+          'Department is required';
+      }
+
+      if (
+        !form.dateOfJoining
+      ) {
+        next.dateOfJoining =
+          'Date of joining is required';
+      }
+
+      setErrors(
+        next
+      );
+
+      if (
+        Object.keys(
+          next
+        ).length >
+        0
+      ) {
+        showMessage(
+          'warning',
+          'Missing Information',
+          'Please complete all required fields correctly.'
+        );
+
+        return false;
+      }
+
+      return true;
+    };
+
+  const resetForm =
+    () => {
+      setForm({
+        ...emptyForm,
+      });
+
+      setErrors(
+        {}
+      );
+
+      setEditingUser(
+        null
+      );
+    };
+
+  const openCreate =
+    () => {
+      setEditingUser(
+        null
+      );
+
+      setErrors(
+        {}
+      );
+
+      setForm({
+        ...emptyForm,
+        roleLabel:
+          divisions[0] ||
+          '',
+        grade:
+          grades[0]?.name ||
+          '',
+      });
+
+      setShowAdd(
+        true
+      );
+    };
+
+  const handleEdit =
+    (
+      user:
+        User
+    ) => {
+      setEditingUser(
+        user
+      );
+
+      setErrors(
+        {}
+      );
+
+      setForm({
+        fullName:
+          user.fullName,
+        email:
+          user.email,
+        employeeId:
+          user.employeeId,
+        cnic:
+          user.cnic ||
+          '',
+        phone:
+          user.phone ||
+          '',
+        role:
+          user.role,
+        roleLabel:
+          user.roleLabel ||
+          '',
+        designation:
+          user.designation ||
+          '',
+        grade:
+          user.grade ||
+          '',
+        department:
+          user.department ||
+          '',
+        dateOfJoining:
+          user.dateOfJoining ||
+          '',
+        status:
+          user.status,
+        managerId:
+          user.managerId ||
+          '',
+        canApproveOtherDepartments:
+          user.canApproveOtherDepartments ||
+          false,
+      });
+
+      setShowAdd(
+        true
+      );
+    };
+
+  const handleSubmit =
+    async (
+      event:
+        FormEvent<HTMLFormElement>
+    ) => {
+      event.preventDefault();
+
+      if (
+        !validate()
+      ) {
+        return;
+      }
+
+      setSaving(
+        true
+      );
+
+      const isEdit =
+        Boolean(
+          editingUser?.id
+        );
+
+      try {
+        const selectedGrade =
+          grades.find(
+            (
+              grade
+            ) =>
+              grade.name ===
+              form.grade
           );
-        }
-
-        const updatePayload:
-          UpdateEmployeePayload = {
-          fullName:
-            form.fullName.trim(),
-
-          email:
-            form.email
-              .trim()
-              .toLowerCase(),
-
-          role:
-            form.role,
-
-          gradeId:
-            selectedGrade.id,
-
-          employeeId:
-            form.employeeId.trim(),
-
-          designation:
-            form.designation,
-
-          department:
-            form.department,
-
-          dateOfJoining:
-            form.dateOfJoining,
-
-          phone:
-            form.phone.trim(),
-
-          managerId:
-            form.managerId ||
-            null,
-
-          canApproveOtherDepartments:
-            form.canApproveOtherDepartments,
-
-          status:
-            form.status,
-        };
-
-        /*
-         * Mature employee update flow remains unchanged.
-         */
-        await apiUpdateEmployee(
-          editingUser.id,
-          updatePayload
-        );
-
-        /*
-         * HR Role is separate from access-control role and is updated
-         * through its dedicated endpoint.
-         */
-        await updateEmployeeRoleLabel(
-          editingUser.id,
-          form.roleLabel
-        );
 
         if (
-          editingUser.detailsStatus ===
-          'pending'
+          !selectedGrade
         ) {
-          await completePendingEmployee(
-            editingUser.id,
-            {
-              cnic:
-                form.cnic.trim(),
-            }
+          throw new Error(
+            'Please select a valid grade.'
           );
         }
 
-        showMessage(
-          'success',
-          editingUser.detailsStatus ===
+        if (
+          isEdit
+        ) {
+          if (
+            !editingUser?.id
+          ) {
+            throw new Error(
+              'Employee ID is missing for update.'
+            );
+          }
+
+          const updatePayload:
+            UpdateEmployeePayload = {
+            fullName:
+              form.fullName.trim(),
+            email:
+              form.email
+                .trim()
+                .toLowerCase(),
+            role:
+              form.role,
+            gradeId:
+              selectedGrade.id,
+            employeeId:
+              form.employeeId.trim(),
+            designation:
+              form.designation,
+            department:
+              form.department,
+            dateOfJoining:
+              form.dateOfJoining,
+            phone:
+              form.phone.trim(),
+            managerId:
+              form.managerId ||
+              null,
+            canApproveOtherDepartments:
+              form.canApproveOtherDepartments,
+            status:
+              form.status,
+          };
+
+          await apiUpdateEmployee(
+            editingUser.id,
+            updatePayload
+          );
+
+          /*
+           * Existing dedicated endpoint is retained; only user-facing
+           * terminology changes from Role to Division.
+           */
+          await updateEmployeeRoleLabel(
+            editingUser.id,
+            form.roleLabel
+          );
+
+          if (
+            editingUser.detailsStatus ===
             'pending'
-            ? 'Employee Details Completed'
-            : 'Employee Updated',
-          `${form.fullName.trim()} has been updated successfully.`
+          ) {
+            await completePendingEmployee(
+              editingUser.id,
+              {
+                cnic:
+                  form.cnic.trim(),
+              }
+            );
+          }
+
+          showMessage(
+            'success',
+            editingUser.detailsStatus ===
+              'pending'
+              ? 'Employee Details Completed'
+              : 'Employee Updated',
+            `${form.fullName.trim()} has been updated successfully.`
+          );
+        } else {
+          const createPayload:
+            CreateEmployeePayload = {
+            fullName:
+              form.fullName.trim(),
+            email:
+              form.email
+                .trim()
+                .toLowerCase(),
+            cnic:
+              form.cnic.trim(),
+            role:
+              form.role ===
+              'manager'
+                ? 'manager'
+                : 'employee',
+            roleLabel:
+              form.roleLabel,
+            gradeId:
+              selectedGrade.id,
+            employeeId:
+              form.employeeId.trim(),
+            designation:
+              form.designation,
+            department:
+              form.department,
+            dateOfJoining:
+              form.dateOfJoining,
+            phone:
+              form.phone.trim() ||
+              undefined,
+            managerId:
+              form.managerId ||
+              null,
+            canApproveOtherDepartments:
+              form.canApproveOtherDepartments,
+            leaveYearStart:
+              `${String(
+                leaveYearDay
+              ).padStart(
+                2,
+                '0'
+              )}-${String(
+                leaveYearMonth
+              ).padStart(
+                2,
+                '0'
+              )}`,
+          };
+
+          await apiCreateEmployee(
+            createPayload
+          );
+
+          showMessage(
+            'success',
+            'Employee Created',
+            `${form.fullName.trim()} has been created successfully.`
+          );
+        }
+
+        setShowAdd(
+          false
         );
-      } else {
-        const createPayload:
-          CreateEmployeePayload = {
-          fullName:
-            form.fullName.trim(),
 
-          email:
-            form.email
-              .trim()
-              .toLowerCase(),
+        resetForm();
 
-          cnic:
-            form.cnic.trim(),
-
-          role:
-            form.role ===
-            'manager'
-              ? 'manager'
-              : 'employee',
-
-          roleLabel:
-            form.roleLabel,
-
-          gradeId:
-            selectedGrade.id,
-
-          employeeId:
-            form.employeeId.trim(),
-
-          designation:
-            form.designation,
-
-          department:
-            form.department,
-
-          dateOfJoining:
-            form.dateOfJoining,
-
-          phone:
-            form.phone.trim() ||
-            undefined,
-
-          managerId:
-            form.managerId ||
-            null,
-
-          canApproveOtherDepartments:
-            form.canApproveOtherDepartments,
-        };
-
-        await apiCreateEmployee(
-          createPayload
-        );
-
+        await refreshEmployees();
+      } catch (
+        error
+      ) {
         showMessage(
-          'success',
-          'Employee Created',
-          `${form.fullName.trim()} has been created successfully.`
+          'error',
+          isEdit
+            ? 'Update Failed'
+            : 'Create Failed',
+          getApiErrorMessage(
+            error,
+            isEdit
+              ? 'Unable to update employee.'
+              : 'Unable to create employee.'
+          )
+        );
+      } finally {
+        setSaving(
+          false
         );
       }
+    };
 
-      setShowAdd(false);
-      resetForm();
+  const handleRemove =
+    async () => {
+      if (
+        !removeTarget
+      ) {
+        return;
+      }
 
-      await refreshEmployees();
-    } catch (error) {
-      showMessage(
-        'error',
-        isEdit
-          ? 'Update Failed'
-          : 'Create Failed',
-        getApiErrorMessage(
-          error,
-          isEdit
-            ? 'Unable to update employee.'
-            : 'Unable to create employee.'
-        )
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleRemove = async () => {
-    if (!removeTarget) {
-      return;
-    }
-
-    setDeleting(true);
-
-    try {
-      await removeUser(
-        removeTarget.id
+      setDeleting(
+        true
       );
 
-      showMessage(
-        'success',
-        'Employee Removed',
-        `${removeTarget.fullName} has been removed.`
+      try {
+        await removeUser(
+          removeTarget.id
+        );
+
+        showMessage(
+          'success',
+          'Employee Removed',
+          `${removeTarget.fullName} has been removed.`
+        );
+
+        setRemoveTarget(
+          null
+        );
+
+        await refreshEmployees();
+      } catch (
+        error
+      ) {
+        showMessage(
+          'error',
+          'Remove Failed',
+          getApiErrorMessage(
+            error,
+            'Unable to remove employee.'
+          )
+        );
+      } finally {
+        setDeleting(
+          false
+        );
+      }
+    };
+
+  const openAddMaster =
+    (
+      field:
+        AddMasterField
+    ) => {
+      setNewItemName(
+        ''
       );
-
-      setRemoveTarget(null);
-
-      await refreshEmployees();
-    } catch (error) {
-      showMessage(
-        'error',
-        'Remove Failed',
-        getApiErrorMessage(
-          error,
-          'Unable to remove employee.'
-        )
+      setAddNewField(
+        field
       );
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const openAddMaster = (
-    field: AddMasterField
-  ) => {
-    setNewItemName('');
-    setAddNewField(field);
-  };
+    };
 
   const handleAddNewItem =
     async () => {
@@ -750,23 +1190,46 @@ export default function Employees() {
           'Name Required',
           'Please enter a name.'
         );
+
         return;
       }
 
-      setAddingMaster(true);
+      setAddingMaster(
+        true
+      );
 
       try {
         if (
           addNewField ===
-          'roleLabel'
+          'division'
         ) {
-          await addRole(name);
+          if (
+            RESERVED_DIVISIONS.has(
+              name.toLowerCase()
+            )
+          ) {
+            throw new Error(
+              'Admin, Manager and Employee are Portal Access values, not Divisions.'
+            );
+          }
+
+          await addRole(
+            name
+          );
+
+          await refreshLookups();
 
           setForm(
-            (previous) => ({
+            (
+              previous
+            ) => ({
               ...previous,
               roleLabel:
                 name,
+              department:
+                '',
+              managerId:
+                '',
             })
           );
         } else if (
@@ -777,14 +1240,17 @@ export default function Employees() {
             '/grades',
             {
               name,
-              description: '',
+              description:
+                '',
             }
           );
 
           await refreshLookups();
 
           setForm(
-            (previous) => ({
+            (
+              previous
+            ) => ({
               ...previous,
               grade:
                 name,
@@ -799,36 +1265,68 @@ export default function Employees() {
           );
 
           setForm(
-            (previous) => ({
+            (
+              previous
+            ) => ({
               ...previous,
               designation:
                 name,
             })
           );
         } else {
-          await addDepartment(
-            name
-          );
+          if (
+            !form.roleLabel
+          ) {
+            throw new Error(
+              'Select a Division before adding a Department.'
+            );
+          }
+
+          const response =
+            await api.post(
+              '/departments',
+              {
+                name,
+                divisionName:
+                  form.roleLabel,
+              }
+            );
+
+          await Promise.all([
+            refreshLookups(),
+            loadHierarchyAndSettings(),
+          ]);
 
           setForm(
-            (previous) => ({
+            (
+              previous
+            ) => ({
               ...previous,
               department:
+                response.data?.data?.name ||
                 name,
-              managerId: '',
+              managerId:
+                '',
             })
           );
         }
 
-        setAddNewField(null);
-        setNewItemName('');
+        setAddNewField(
+          null
+        );
+
+        setNewItemName(
+          ''
+        );
 
         showMessage(
           'success',
           'Added Successfully',
           `${name} has been added and selected.`
         );
-      } catch (error) {
+      } catch (
+        error
+      ) {
         showMessage(
           'error',
           'Unable to Add',
@@ -838,147 +1336,160 @@ export default function Employees() {
           )
         );
       } finally {
-        setAddingMaster(false);
+        setAddingMaster(
+          false
+        );
       }
     };
 
-  const handleImport = async (
-    event:
-      ChangeEvent<HTMLInputElement>
-  ) => {
-    const file =
-      event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    if (
-      !file.name
-        .toLowerCase()
-        .endsWith('.csv')
-    ) {
-      showMessage(
-        'error',
-        'Invalid File',
-        'Please select a CSV file.'
+  const saveLeaveYearStart =
+    async () => {
+      setSavingLeaveYear(
+        true
       );
 
-      event.target.value =
-        '';
-
-      return;
-    }
-
-    if (
-      file.size >
-      5 * 1024 * 1024
-    ) {
-      showMessage(
-        'error',
-        'File Too Large',
-        'CSV file must be 5 MB or smaller.'
-      );
-
-      event.target.value =
-        '';
-
-      return;
-    }
-
-    setImporting(true);
-    setCsvBlockingErrors([]);
-
-    try {
-      const preview =
-        await importEmployeesCsv(
-          file,
-          'preview'
-        );
-
-      if (
-        preview.requiresConfirmation ||
-        (
-          preview.summary.pending ||
-          0
-        ) > 0
-      ) {
-        setCsvFile(file);
-        setCsvReview(
-          preview
-        );
-      } else {
-        const result =
-          await importEmployeesCsv(
-            file,
-            'commit'
+      try {
+        const settings =
+          await updateOrganizationSettings(
+            leaveYearDay,
+            leaveYearMonth
           );
 
-        await refreshEmployees();
+        setLeaveYearDay(
+          settings.leaveYearStartDay
+        );
+
+        setLeaveYearMonth(
+          settings.leaveYearStartMonth
+        );
+
+        setLeaveYearDisplay(
+          settings.leaveYearStart
+        );
 
         showMessage(
           'success',
-          'Import Complete',
-          result.message ||
-            'Employees were imported successfully.'
+          'Leave Year Updated',
+          'Organization Leave Year Start has been saved.'
         );
-      }
-    } catch (error) {
-      const hardErrors =
-        getBlockingCsvErrors(
-          error
-        );
-
-      if (
-        hardErrors.length
+      } catch (
+        error
       ) {
-        setCsvBlockingErrors(
-          hardErrors
-        );
-      } else {
         showMessage(
           'error',
-          'Import Failed',
+          'Unable to Save Leave Year',
           getApiErrorMessage(
             error,
-            'Unable to import employee CSV.'
+            'Unable to save Organization Leave Year Start.'
           )
         );
+      } finally {
+        setSavingLeaveYear(
+          false
+        );
       }
-    } finally {
-      setImporting(false);
-      event.target.value =
-        '';
-    }
-  };
+    };
 
-  const confirmPendingImport =
-    async () => {
-      if (!csvFile) {
+  const handleImport =
+    async (
+      event:
+        ChangeEvent<HTMLInputElement>
+    ) => {
+      const file =
+        event.target.files?.[0];
+
+      if (
+        !file
+      ) {
         return;
       }
 
-      setImporting(true);
+      if (
+        !file.name
+          .toLowerCase()
+          .endsWith(
+            '.csv'
+          )
+      ) {
+        showMessage(
+          'error',
+          'Invalid File',
+          'Please select a CSV file.'
+        );
+
+        event.target.value =
+          '';
+
+        return;
+      }
+
+      if (
+        file.size >
+        5 *
+          1024 *
+          1024
+      ) {
+        showMessage(
+          'error',
+          'File Too Large',
+          'CSV file must be 5 MB or smaller.'
+        );
+
+        event.target.value =
+          '';
+
+        return;
+      }
+
+      setImporting(
+        true
+      );
+
+      setCsvBlockingErrors(
+        []
+      );
 
       try {
-        const result =
+        const preview =
           await importEmployeesCsv(
-            csvFile,
-            'commit'
+            file,
+            'preview'
           );
 
-        setCsvReview(null);
-        setCsvFile(null);
+        if (
+          preview.requiresConfirmation ||
+          (
+            preview.summary.pending ||
+            0
+          ) >
+            0
+        ) {
+          setCsvFile(
+            file
+          );
 
-        await refreshEmployees();
+          setCsvReview(
+            preview
+          );
+        } else {
+          const result =
+            await importEmployeesCsv(
+              file,
+              'commit'
+            );
 
-        showMessage(
-          'success',
-          'Import Complete',
-          result.message ||
-            'Employees were imported successfully.'
-        );
-      } catch (error) {
+          await refreshEmployees();
+
+          showMessage(
+            'success',
+            'Import Complete',
+            result.message ||
+              'Employees were imported successfully.'
+          );
+        }
+      } catch (
+        error
+      ) {
         const hardErrors =
           getBlockingCsvErrors(
             error
@@ -987,8 +1498,6 @@ export default function Employees() {
         if (
           hardErrors.length
         ) {
-          setCsvReview(null);
-          setCsvFile(null);
           setCsvBlockingErrors(
             hardErrors
           );
@@ -1003,13 +1512,92 @@ export default function Employees() {
           );
         }
       } finally {
-        setImporting(false);
+        setImporting(
+          false
+        );
+
+        event.target.value =
+          '';
+      }
+    };
+
+  const confirmPendingImport =
+    async () => {
+      if (
+        !csvFile
+      ) {
+        return;
+      }
+
+      setImporting(
+        true
+      );
+
+      try {
+        const result =
+          await importEmployeesCsv(
+            csvFile,
+            'commit'
+          );
+
+        setCsvReview(
+          null
+        );
+
+        setCsvFile(
+          null
+        );
+
+        await refreshEmployees();
+
+        showMessage(
+          'success',
+          'Import Complete',
+          result.message ||
+            'Employees were imported successfully.'
+        );
+      } catch (
+        error
+      ) {
+        const hardErrors =
+          getBlockingCsvErrors(
+            error
+          );
+
+        if (
+          hardErrors.length
+        ) {
+          setCsvReview(
+            null
+          );
+          setCsvFile(
+            null
+          );
+          setCsvBlockingErrors(
+            hardErrors
+          );
+        } else {
+          showMessage(
+            'error',
+            'Import Failed',
+            getApiErrorMessage(
+              error,
+              'Unable to import employee CSV.'
+            )
+          );
+        }
+      } finally {
+        setImporting(
+          false
+        );
       }
     };
 
   const handleExport =
     async () => {
-      setExporting(true);
+      setExporting(
+        true
+      );
 
       try {
         await exportEmployeesCsv();
@@ -1019,7 +1607,9 @@ export default function Employees() {
           'Export Complete',
           'Employee CSV has been exported successfully.'
         );
-      } catch (error) {
+      } catch (
+        error
+      ) {
         showMessage(
           'error',
           'Export Failed',
@@ -1029,26 +1619,60 @@ export default function Employees() {
           )
         );
       } finally {
-        setExporting(false);
+        setExporting(
+          false
+        );
       }
     };
 
-  const clearFilters = () => {
-    setQuery('');
-    setDeptFilter('');
-    setRoleFilter('');
-    setStatusFilter('');
-    setGradeFilter('');
-  };
+  const clearFilters =
+    () => {
+      setQuery(
+        ''
+      );
+      setDivisionFilter(
+        ''
+      );
+      setDeptFilter(
+        ''
+      );
+      setRoleFilter(
+        ''
+      );
+      setStatusFilter(
+        ''
+      );
+      setGradeFilter(
+        ''
+      );
+    };
 
   const addModalTitle =
-    addNewField === 'roleLabel'
-      ? 'Add Role'
-      : addNewField === 'grade'
+    addNewField ===
+      'division'
+      ? 'Add Division'
+      : addNewField ===
+          'grade'
         ? 'Add Grade'
-        : addNewField === 'designation'
+        : addNewField ===
+            'designation'
           ? 'Add Designation'
           : 'Add Department';
+
+  const months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
 
   return (
     <div className="space-y-6">
@@ -1103,7 +1727,9 @@ export default function Employees() {
             }
           >
             <UserPlus
-              size={16}
+              size={
+                16
+              }
             />
             Create Employee
           </Button>
@@ -1113,7 +1739,9 @@ export default function Employees() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[230px] flex-1">
           <Search
-            size={16}
+            size={
+              16
+            }
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
           />
 
@@ -1122,27 +1750,77 @@ export default function Employees() {
               query
             }
             onChange={
-              (event) =>
+              (
+                event
+              ) =>
                 setQuery(
                   event.target.value
                 )
             }
-            placeholder="Search name, email, ID, role, designation"
+            placeholder="Search name, email, ID, division, designation"
             className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           />
         </div>
 
         <Filter
-          size={15}
+          size={
+            15
+          }
           className="text-gray-400"
         />
+
+        <select
+          value={
+            divisionFilter
+          }
+          onChange={
+            (
+              event
+            ) => {
+              setDivisionFilter(
+                event.target.value
+              );
+              setDeptFilter(
+                ''
+              );
+            }
+          }
+          className={
+            filterCls
+          }
+        >
+          <option value="">
+            All Divisions
+          </option>
+
+          {divisions.map(
+            (
+              division
+            ) => (
+              <option
+                key={
+                  division
+                }
+                value={
+                  division
+                }
+              >
+                {
+                  division
+                }
+              </option>
+            )
+          )}
+        </select>
 
         <select
           value={
             deptFilter
           }
           onChange={
-            (event) =>
+            (
+              event
+            ) =>
               setDeptFilter(
                 event.target.value
               )
@@ -1155,17 +1833,21 @@ export default function Employees() {
             All Departments
           </option>
 
-          {departments.map(
-            (department) => (
+          {filteredDepartments.map(
+            (
+              department
+            ) => (
               <option
                 key={
-                  department
+                  department._id
                 }
                 value={
-                  department
+                  department.name
                 }
               >
-                {department}
+                {
+                  department.name
+                }
               </option>
             )
           )}
@@ -1176,7 +1858,9 @@ export default function Employees() {
             roleFilter
           }
           onChange={
-            (event) =>
+            (
+              event
+            ) =>
               setRoleFilter(
                 event.target.value
               )
@@ -1203,7 +1887,9 @@ export default function Employees() {
             statusFilter
           }
           onChange={
-            (event) =>
+            (
+              event
+            ) =>
               setStatusFilter(
                 event.target.value
               )
@@ -1230,7 +1916,9 @@ export default function Employees() {
             gradeFilter
           }
           onChange={
-            (event) =>
+            (
+              event
+            ) =>
               setGradeFilter(
                 event.target.value
               )
@@ -1244,7 +1932,9 @@ export default function Employees() {
           </option>
 
           {grades.map(
-            (grade) => (
+            (
+              grade
+            ) => (
               <option
                 key={
                   grade.id
@@ -1253,7 +1943,9 @@ export default function Employees() {
                   grade.name
                 }
               >
-                {grade.name}
+                {
+                  grade.name
+                }
               </option>
             )
           )}
@@ -1293,10 +1985,10 @@ export default function Employees() {
                     Grade
                   </th>
                   <th className="px-5 py-3 font-medium">
-                    Dept
+                    Division
                   </th>
                   <th className="px-5 py-3 font-medium">
-                    Role
+                    Department
                   </th>
                   <th className="px-5 py-3 font-medium">
                     Portal Access
@@ -1315,7 +2007,9 @@ export default function Employees() {
                   0 && (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={
+                        9
+                      }
                       className="px-5 py-10 text-center text-sm text-gray-400"
                     >
                       No employees match the selected filters.
@@ -1324,7 +2018,9 @@ export default function Employees() {
                 )}
 
                 {filtered.map(
-                  (user) => (
+                  (
+                    user
+                  ) => (
                     <tr
                       key={
                         user.id
@@ -1332,7 +2028,9 @@ export default function Employees() {
                       className="animate-fade-in hover:bg-gray-50/50"
                     >
                       <td className="px-5 py-3 font-mono text-xs text-gray-500">
-                        {user.employeeId}
+                        {
+                          user.employeeId
+                        }
                       </td>
 
                       <td className="px-5 py-3">
@@ -1345,11 +2043,15 @@ export default function Employees() {
 
                           <div>
                             <p className="font-medium text-gray-900">
-                              {user.fullName}
+                              {
+                                user.fullName
+                              }
                             </p>
 
                             <p className="text-xs text-gray-500">
-                              {user.email}
+                              {
+                                user.email
+                              }
                             </p>
                           </div>
                         </div>
@@ -1363,7 +2065,9 @@ export default function Employees() {
                       <td className="px-5 py-3">
                         {user.grade ? (
                           <Badge variant="teal">
-                            {user.grade}
+                            {
+                              user.grade
+                            }
                           </Badge>
                         ) : (
                           <span className="text-gray-400">
@@ -1373,19 +2077,21 @@ export default function Employees() {
                       </td>
 
                       <td className="px-5 py-3 text-gray-600">
-                        {user.department ||
-                          '—'}
-                      </td>
-
-                      <td className="px-5 py-3 text-gray-600">
                         {user.roleLabel ||
                           '—'}
                       </td>
 
                       <td className="px-5 py-3 text-gray-600">
-                        {portalAccessLabel[
-                          user.role
-                        ]}
+                        {user.department ||
+                          '—'}
+                      </td>
+
+                      <td className="px-5 py-3 text-gray-600">
+                        {
+                          portalAccessLabel[
+                            user.role
+                          ]
+                        }
                       </td>
 
                       <td className="px-5 py-3">
@@ -1422,7 +2128,9 @@ export default function Employees() {
                             className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
                           >
                             <Eye
-                              size={14}
+                              size={
+                                14
+                              }
                             />
                             View
                           </button>
@@ -1449,7 +2157,9 @@ export default function Employees() {
                             className="inline-flex items-center gap-1 text-sm font-medium text-rose-600 hover:text-rose-700"
                           >
                             <Trash2
-                              size={14}
+                              size={
+                                14
+                              }
                             />
                             Remove
                           </button>
@@ -1469,12 +2179,18 @@ export default function Employees() {
           showAdd
         }
         onClose={() => {
-          if (saving) {
+          if (
+            saving
+          ) {
             return;
           }
 
-          setShowAdd(false);
-          setAddNewField(null);
+          setShowAdd(
+            false
+          );
+          setAddNewField(
+            null
+          );
           resetForm();
         }}
         title={
@@ -1536,7 +2252,9 @@ export default function Employees() {
                 {(
                   editingUser.pendingFields ||
                   []
-                ).join(', ') ||
+                ).join(
+                  ', '
+                ) ||
                   'required employee details'}
                 .
               </p>
@@ -1544,19 +2262,19 @@ export default function Employees() {
           )}
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[0.9fr_1.6fr]">
-            {/* MASTER DATA — ALL TOGETHER ON LEFT */}
             <div className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
               <div>
                 <p className="text-sm font-semibold text-gray-900">
                   Employee Classification
                 </p>
+
                 <p className="mt-1 text-xs text-gray-500">
-                  Role, Grade, Designation and Department
+                  Division, Department, Grade and Designation
                 </p>
               </div>
 
               <FormField
-                label="Role"
+                label="Division"
                 error={
                   errors.roleLabel
                 }
@@ -1565,28 +2283,90 @@ export default function Employees() {
                   value={
                     form.roleLabel
                   }
-                  onChange={(
-                    value
-                  ) =>
-                    setForm(
-                      (previous) => ({
-                        ...previous,
-                        roleLabel:
-                          value,
-                      })
-                    )
+                  onChange={
+                    (
+                      value
+                    ) =>
+                      setForm(
+                        (
+                          previous
+                        ) => ({
+                          ...previous,
+                          roleLabel:
+                            value,
+                          department:
+                            '',
+                          managerId:
+                            '',
+                        })
+                      )
                   }
-                  placeholder="Select role"
+                  placeholder="Select division"
                   options={
-                    roles
+                    divisions
                   }
                   inputClass={
                     inputCls
                   }
                   onAdd={() =>
                     openAddMaster(
-                      'roleLabel'
+                      'division'
                     )
+                  }
+                />
+              </FormField>
+
+              <FormField
+                label="Department"
+                error={
+                  errors.department
+                }
+              >
+                <SelectWithAdd
+                  value={
+                    form.department
+                  }
+                  onChange={
+                    (
+                      value
+                    ) =>
+                      setForm(
+                        (
+                          previous
+                        ) => ({
+                          ...previous,
+                          department:
+                            value,
+                          managerId:
+                            '',
+                        })
+                      )
+                  }
+                  placeholder={
+                    form.roleLabel
+                      ? 'Select department'
+                      : 'Select division first'
+                  }
+                  options={
+                    formDepartments.map(
+                      (
+                        department
+                      ) =>
+                        department.name
+                    )
+                  }
+                  inputClass={
+                    pendingInputClass(
+                      'department'
+                    )
+                  }
+                  onAdd={() =>
+                    openAddMaster(
+                      'department'
+                    )
+                  }
+                  disabled={
+                    !form.roleLabel
                   }
                 />
               </FormField>
@@ -1601,21 +2381,26 @@ export default function Employees() {
                   value={
                     form.grade
                   }
-                  onChange={(
-                    value
-                  ) =>
-                    setForm(
-                      (previous) => ({
-                        ...previous,
-                        grade:
-                          value,
-                      })
-                    )
+                  onChange={
+                    (
+                      value
+                    ) =>
+                      setForm(
+                        (
+                          previous
+                        ) => ({
+                          ...previous,
+                          grade:
+                            value,
+                        })
+                      )
                   }
                   placeholder="Select grade"
                   options={
                     grades.map(
-                      (grade) =>
+                      (
+                        grade
+                      ) =>
                         grade.name
                     )
                   }
@@ -1642,16 +2427,19 @@ export default function Employees() {
                   value={
                     form.designation
                   }
-                  onChange={(
-                    value
-                  ) =>
-                    setForm(
-                      (previous) => ({
-                        ...previous,
-                        designation:
-                          value,
-                      })
-                    )
+                  onChange={
+                    (
+                      value
+                    ) =>
+                      setForm(
+                        (
+                          previous
+                        ) => ({
+                          ...previous,
+                          designation:
+                            value,
+                        })
+                      )
                   }
                   placeholder="Select designation"
                   options={
@@ -1669,49 +2457,8 @@ export default function Employees() {
                   }
                 />
               </FormField>
-
-              <FormField
-                label="Department"
-                error={
-                  errors.department
-                }
-              >
-                <SelectWithAdd
-                  value={
-                    form.department
-                  }
-                  onChange={(
-                    value
-                  ) =>
-                    setForm(
-                      (previous) => ({
-                        ...previous,
-                        department:
-                          value,
-                        managerId:
-                          '',
-                      })
-                    )
-                  }
-                  placeholder="Select department"
-                  options={
-                    departments
-                  }
-                  inputClass={
-                    pendingInputClass(
-                      'department'
-                    )
-                  }
-                  onAdd={() =>
-                    openAddMaster(
-                      'department'
-                    )
-                  }
-                />
-              </FormField>
             </div>
 
-            {/* ALL OTHER EMPLOYEE DETAILS ON RIGHT */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField
                 label="Full Name"
@@ -1724,9 +2471,13 @@ export default function Employees() {
                     form.fullName
                   }
                   onChange={
-                    (event) =>
+                    (
+                      event
+                    ) =>
                       setForm(
-                        (previous) => ({
+                        (
+                          previous
+                        ) => ({
                           ...previous,
                           fullName:
                             event.target.value,
@@ -1751,9 +2502,13 @@ export default function Employees() {
                     form.email
                   }
                   onChange={
-                    (event) =>
+                    (
+                      event
+                    ) =>
                       setForm(
-                        (previous) => ({
+                        (
+                          previous
+                        ) => ({
                           ...previous,
                           email:
                             event.target.value,
@@ -1784,9 +2539,13 @@ export default function Employees() {
                     )
                   }
                   onChange={
-                    (event) =>
+                    (
+                      event
+                    ) =>
                       setForm(
-                        (previous) => ({
+                        (
+                          previous
+                        ) => ({
                           ...previous,
                           cnic:
                             event.target.value,
@@ -1809,9 +2568,13 @@ export default function Employees() {
                     form.phone
                   }
                   onChange={
-                    (event) =>
+                    (
+                      event
+                    ) =>
                       setForm(
-                        (previous) => ({
+                        (
+                          previous
+                        ) => ({
                           ...previous,
                           phone:
                             event.target.value,
@@ -1837,9 +2600,13 @@ export default function Employees() {
                     form.employeeId
                   }
                   onChange={
-                    (event) =>
+                    (
+                      event
+                    ) =>
                       setForm(
-                        (previous) => ({
+                        (
+                          previous
+                        ) => ({
                           ...previous,
                           employeeId:
                             event.target.value,
@@ -1858,13 +2625,17 @@ export default function Employees() {
                     form.role
                   }
                   onChange={
-                    (event) =>
+                    (
+                      event
+                    ) =>
                       setForm(
-                        (previous) => ({
+                        (
+                          previous
+                        ) => ({
                           ...previous,
                           role:
-                            event.target
-                              .value as Role,
+                            event.target.value as
+                              Role,
                         })
                       )
                   }
@@ -1894,9 +2665,13 @@ export default function Employees() {
                     form.dateOfJoining
                   }
                   onChange={
-                    (event) =>
+                    (
+                      event
+                    ) =>
                       setForm(
-                        (previous) => ({
+                        (
+                          previous
+                        ) => ({
                           ...previous,
                           dateOfJoining:
                             event.target.value,
@@ -1917,9 +2692,13 @@ export default function Employees() {
                     form.managerId
                   }
                   onChange={
-                    (event) =>
+                    (
+                      event
+                    ) =>
                       setForm(
-                        (previous) => ({
+                        (
+                          previous
+                        ) => ({
                           ...previous,
                           managerId:
                             event.target.value,
@@ -1938,7 +2717,9 @@ export default function Employees() {
                   </option>
 
                   {availableManagers.map(
-                    (manager) => (
+                    (
+                      manager
+                    ) => (
                       <option
                         key={
                           manager.id
@@ -1959,10 +2740,133 @@ export default function Employees() {
                   availableManagers.length ===
                     0 && (
                   <p className="mt-1 text-xs text-gray-400">
-                    No active manager is available in this department.
+                    No active manager is available in this Division and Department.
                   </p>
                 )}
               </FormField>
+
+              <div className="sm:col-span-2 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+                <p className="text-sm font-semibold text-blue-950">
+                  Leave Year Start
+                </p>
+
+                <p className="mt-1 text-xs text-blue-700">
+                  Company-wide setting used with Date of Joining for prorated leave. Decimal results are always rounded down.
+                </p>
+
+                <div className="mt-3 grid max-w-md grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-blue-900">
+                      Day
+                    </label>
+
+                    <input
+                      type="number"
+                      min={
+                        1
+                      }
+                      max={
+                        31
+                      }
+                      value={
+                        leaveYearDay
+                      }
+                      onChange={
+                        (
+                          event
+                        ) =>
+                          setLeaveYearDay(
+                            Number(
+                              event.target.value
+                            )
+                          )
+                      }
+                      className={
+                        inputCls
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-blue-900">
+                      Month
+                    </label>
+
+                    <select
+                      value={
+                        leaveYearMonth
+                      }
+                      onChange={
+                        (
+                          event
+                        ) =>
+                          setLeaveYearMonth(
+                            Number(
+                              event.target.value
+                            )
+                          )
+                      }
+                      className={
+                        inputCls
+                      }
+                    >
+                      {months.map(
+                        (
+                          month,
+                          index
+                        ) => (
+                          <option
+                            key={
+                              month
+                            }
+                            value={
+                              index +
+                              1
+                            }
+                          >
+                            {
+                              month
+                            }
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={
+                      savingLeaveYear
+                    }
+                    onClick={() =>
+                      void saveLeaveYearStart()
+                    }
+                    className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {savingLeaveYear
+                      ? 'Saving...'
+                      : 'Save Leave Year Start'}
+                  </button>
+
+                  <span className="text-xs text-blue-700">
+                    Current:{' '}
+                    {leaveYearDisplay ||
+                      `${String(
+                        leaveYearDay
+                      ).padStart(
+                        2,
+                        '0'
+                      )}-${String(
+                        leaveYearMonth
+                      ).padStart(
+                        2,
+                        '0'
+                      )}`}
+                  </span>
+                </div>
+              </div>
 
               {editingUser?.id && (
                 <FormField label="Status">
@@ -1971,13 +2875,16 @@ export default function Employees() {
                       form.status
                     }
                     onChange={
-                      (event) =>
+                      (
+                        event
+                      ) =>
                         setForm(
-                          (previous) => ({
+                          (
+                            previous
+                          ) => ({
                             ...previous,
                             status:
-                              event.target
-                                .value as
+                              event.target.value as
                                 | 'active'
                                 | 'inactive',
                           })
@@ -2008,9 +2915,13 @@ export default function Employees() {
                         form.canApproveOtherDepartments
                       }
                       onChange={
-                        (event) =>
+                        (
+                          event
+                        ) =>
                           setForm(
-                            (previous) => ({
+                            (
+                              previous
+                            ) => ({
                               ...previous,
                               canApproveOtherDepartments:
                                 event.target.checked,
@@ -2042,8 +2953,12 @@ export default function Employees() {
             return;
           }
 
-          setAddNewField(null);
-          setNewItemName('');
+          setAddNewField(
+            null
+          );
+          setNewItemName(
+            ''
+          );
         }}
         title={
           addModalTitle
@@ -2059,7 +2974,6 @@ export default function Employees() {
                 setAddNewField(
                   null
                 );
-
                 setNewItemName(
                   ''
                 );
@@ -2088,13 +3002,17 @@ export default function Employees() {
             newItemName
           }
           onChange={
-            (event) =>
+            (
+              event
+            ) =>
               setNewItemName(
                 event.target.value
               )
           }
           onKeyDown={
-            (event) => {
+            (
+              event
+            ) => {
               if (
                 event.key ===
                   'Enter' &&
@@ -2148,7 +3066,9 @@ export default function Employees() {
                     {(
                       viewUser.pendingFields ||
                       []
-                    ).join(', ') ||
+                    ).join(
+                      ', '
+                    ) ||
                       'required employee details'}
                   </div>
                 )}
@@ -2191,7 +3111,7 @@ export default function Employees() {
                 />
 
                 <Detail
-                  label="Role"
+                  label="Division"
                   value={
                     viewUser.roleLabel ||
                     '—'
@@ -2312,7 +3232,9 @@ export default function Employees() {
         <p className="text-sm leading-6 text-gray-600">
           Are you sure you want to remove{' '}
           <strong className="text-gray-900">
-            {removeTarget?.fullName}
+            {
+              removeTarget?.fullName
+            }
           </strong>
           ? This uses the backend soft-remove flow.
         </p>
@@ -2404,8 +3326,7 @@ export default function Employees() {
 
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               These employees can be imported now and completed later.
-              Unknown Department, Designation or Grade values will not be
-              created in Master Data automatically.
+              Unknown Division, Department, Designation or Grade values follow the Smart CSV review rules.
             </div>
 
             <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
@@ -2435,7 +3356,9 @@ export default function Employees() {
                         </strong>
 
                         <span className="text-xs text-gray-500">
-                          Row {employee.row}
+                          Row {
+                            employee.row
+                          }
                         </span>
                       </div>
 
@@ -2448,7 +3371,9 @@ export default function Employees() {
                             <li
                               key={`${employee.row}-${issue.field}-${index}`}
                             >
-                              • {issue.message}
+                              • {
+                                issue.message
+                              }
                             </li>
                           )
                         )}
@@ -2462,7 +3387,8 @@ export default function Employees() {
                   .pendingEmployees
                   ?.length ||
                 0
-              ) > 10 && (
+              ) >
+                10 && (
                 <p className="text-xs text-gray-500">
                   Showing first 10 pending employees. Total pending:{' '}
                   {
@@ -2523,13 +3449,19 @@ export default function Employees() {
                     className="rounded-lg border border-gray-100 px-3 py-2 text-sm"
                   >
                     <strong>
-                      Row {item.row}
+                      Row {
+                        item.row
+                      }
                     </strong>
                     {' — '}
-                    {item.employee}
+                    {
+                      item.employee
+                    }
                     {' — '}
                     <span className="text-rose-700">
-                      {item.message}
+                      {
+                        item.message
+                      }
                     </span>
                   </div>
                 )
@@ -2539,7 +3471,9 @@ export default function Employees() {
               20 && (
               <p className="text-xs text-gray-500">
                 Showing first 20 errors. Total errors:{' '}
-                {csvBlockingErrors.length}
+                {
+                  csvBlockingErrors.length
+                }
               </p>
             )}
           </div>
@@ -2552,9 +3486,12 @@ export default function Employees() {
         }
         onClose={() =>
           setMessage(
-            (previous) => ({
+            (
+              previous
+            ) => ({
               ...previous,
-              open: false,
+              open:
+                false,
             })
           )
         }
@@ -2565,9 +3502,12 @@ export default function Employees() {
           <Button
             onClick={() =>
               setMessage(
-                (previous) => ({
+                (
+                  previous
+                ) => ({
                   ...previous,
-                  open: false,
+                  open:
+                    false,
                 })
               )
             }
@@ -2590,7 +3530,9 @@ export default function Employees() {
                   : 'bg-blue-50 text-blue-700'
           }`}
         >
-          {message.message}
+          {
+            message.message
+          }
         </div>
       </Modal>
     </div>
@@ -2604,13 +3546,25 @@ function SelectWithAdd({
   inputClass,
   onChange,
   onAdd,
+  disabled = false,
 }: {
-  value: string;
-  options: string[];
-  placeholder: string;
-  inputClass: string;
-  onChange: (value: string) => void;
-  onAdd: () => void;
+  value:
+    string;
+  options:
+    string[];
+  placeholder:
+    string;
+  inputClass:
+    string;
+  onChange:
+    (
+      value:
+        string
+    ) => void;
+  onAdd:
+    () => void;
+  disabled?:
+    boolean;
 }) {
   return (
     <div className="flex gap-2">
@@ -2618,22 +3572,29 @@ function SelectWithAdd({
         value={
           value
         }
+        disabled={
+          disabled
+        }
         onChange={
-          (event) =>
+          (
+            event
+          ) =>
             onChange(
               event.target.value
             )
         }
-        className={
-          inputClass
-        }
+        className={`${inputClass} disabled:cursor-not-allowed disabled:bg-gray-100`}
       >
         <option value="">
-          {placeholder}
+          {
+            placeholder
+          }
         </option>
 
         {options.map(
-          (name) => (
+          (
+            name
+          ) => (
             <option
               key={
                 name
@@ -2642,7 +3603,9 @@ function SelectWithAdd({
                 name
               }
             >
-              {name}
+              {
+                name
+              }
             </option>
           )
         )}
@@ -2650,14 +3613,19 @@ function SelectWithAdd({
 
       <button
         type="button"
+        disabled={
+          disabled
+        }
         onClick={
           onAdd
         }
         aria-label={`Add ${placeholder.replace('Select ', '')}`}
-        className="flex w-11 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-blue-600 hover:bg-blue-50"
+        className="flex w-11 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Plus
-          size={17}
+          size={
+            17
+          }
         />
       </button>
     </div>
@@ -2669,21 +3637,30 @@ function FormField({
   error,
   children,
 }: {
-  label: string;
-  error?: string;
-  children: ReactNode;
+  label:
+    string;
+  error?:
+    string;
+  children:
+    ReactNode;
 }) {
   return (
     <div>
       <label className="mb-1.5 block text-sm font-medium text-gray-700">
-        {label}
+        {
+          label
+        }
       </label>
 
-      {children}
+      {
+        children
+      }
 
       {error && (
         <p className="mt-1 text-xs text-rose-600">
-          {error}
+          {
+            error
+          }
         </p>
       )}
     </div>
@@ -2694,17 +3671,63 @@ function Detail({
   label,
   value,
 }: {
-  label: string;
-  value: string;
+  label:
+    string;
+  value:
+    string;
 }) {
   return (
     <div className="rounded-lg border border-gray-100 bg-gray-50/50 px-4 py-3">
       <p className="text-xs text-gray-500">
-        {label}
+        {
+          label
+        }
       </p>
 
       <p className="mt-0.5 text-sm font-medium text-gray-900">
-        {value}
+        {
+          value
+        }
+      </p>
+    </div>
+  );
+}
+
+function SummaryCard({
+  label,
+  value,
+  danger = false,
+}: {
+  label:
+    string;
+  value:
+    number;
+  danger?:
+    boolean;
+}) {
+  return (
+    <div
+      className={`rounded-xl border px-4 py-3 ${
+        danger
+          ? 'border-rose-100 bg-rose-50'
+          : 'border-gray-100 bg-gray-50'
+      }`}
+    >
+      <p className="text-xs text-gray-500">
+        {
+          label
+        }
+      </p>
+      <p
+        className={`mt-1 text-xl font-semibold ${
+          danger
+            ? 'text-rose-700'
+            : 'text-gray-900'
+        }`}
+      >
+        {
+          value
+        }
       </p>
     </div>
   );
@@ -2713,88 +3736,133 @@ function Detail({
 function EmployeeLeaveBalanceSummary({
   employeeId,
 }: {
-  employeeId: string;
+  employeeId:
+    string;
 }) {
   const [
     balances,
     setBalances,
-  ] = useState<
-    Record<
-      string,
-      {
-        quota: number;
-        used: number;
-        remaining: number;
-      }
-    >
-  >({});
+  ] =
+    useState<
+      Record<
+        string,
+        {
+          quota: number;
+          used: number;
+          remaining: number;
+        }
+      >
+    >({});
 
   const [
     loading,
     setLoading,
-  ] = useState(true);
+  ] =
+    useState(true);
 
   const [
     balanceError,
     setBalanceError,
-  ] = useState('');
+  ] =
+    useState('');
 
-  useEffect(() => {
-    let active = true;
+  useEffect(
+    () => {
+      let active =
+        true;
 
-    setLoading(true);
-    setBalanceError('');
+      setLoading(
+        true
+      );
+      setBalanceError(
+        ''
+      );
 
-    void api
-      .get(
-        `/leave-requests/balance/${employeeId}`
-      )
-      .then((response) => {
-        if (!active) {
-          return;
-        }
+      void api
+        .get(
+          `/leave-requests/balance/${employeeId}`
+        )
+        .then(
+          (
+            response
+          ) => {
+            if (
+              !active
+            ) {
+              return;
+            }
 
-        setBalances(
-          response.data?.data ||
-            {}
+            setBalances(
+              response.data?.data ||
+                {}
+            );
+          }
+        )
+        .catch(
+          (
+            error
+          ) => {
+            if (
+              !active
+            ) {
+              return;
+            }
+
+            setBalanceError(
+              getApiErrorMessage(
+                error,
+                'Unable to load leave balances.'
+              )
+            );
+          }
+        )
+        .finally(
+          () => {
+            if (
+              active
+            ) {
+              setLoading(
+                false
+              );
+            }
+          }
         );
-      })
-      .catch((error) => {
-        if (!active) {
-          return;
-        }
 
-        setBalanceError(
-          getApiErrorMessage(
-            error,
-            'Unable to load leave balances.'
-          )
-        );
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [employeeId]);
+      return () => {
+        active =
+          false;
+      };
+    },
+    [
+      employeeId,
+    ]
+  );
 
   const rows =
     Object.entries(
       balances
     ).sort(
-      ([a], [b]) =>
-        a.localeCompare(b)
+      (
+        [
+          a,
+        ],
+        [
+          b,
+        ]
+      ) =>
+        a.localeCompare(
+          b
+        )
     );
 
   const totals =
     rows.reduce(
       (
         total,
-        [, balance]
+        [
+          ,
+          balance,
+        ]
       ) => ({
         quota:
           total.quota +
@@ -2816,9 +3884,12 @@ function EmployeeLeaveBalanceSummary({
           ),
       }),
       {
-        quota: 0,
-        used: 0,
-        remaining: 0,
+        quota:
+          0,
+        used:
+          0,
+        remaining:
+          0,
       }
     );
 
@@ -2828,6 +3899,7 @@ function EmployeeLeaveBalanceSummary({
         <p className="text-sm font-semibold text-gray-900">
           Leave Balance
         </p>
+
         <p className="mt-1 text-xs text-gray-500">
           Granted, used and remaining leave for the current leave year.
         </p>
@@ -2839,9 +3911,12 @@ function EmployeeLeaveBalanceSummary({
         </p>
       ) : balanceError ? (
         <p className="text-sm text-rose-600">
-          {balanceError}
+          {
+            balanceError
+          }
         </p>
-      ) : rows.length === 0 ? (
+      ) : rows.length ===
+        0 ? (
         <p className="text-sm text-gray-500">
           No leave balance is available for this employee.
         </p>
@@ -2867,8 +3942,15 @@ function EmployeeLeaveBalanceSummary({
 
             <tbody className="divide-y divide-gray-100">
               {rows.map(
-                ([leaveType, balance]) => (
-                  <tr key={leaveType}>
+                ([
+                  leaveType,
+                  balance,
+                ]) => (
+                  <tr
+                    key={
+                      leaveType
+                    }
+                  >
                     <td className="px-3 py-2 font-medium capitalize text-gray-800">
                       {leaveType.replace(
                         /_/g,
@@ -2876,13 +3958,19 @@ function EmployeeLeaveBalanceSummary({
                       )}
                     </td>
                     <td className="px-3 py-2 text-right text-gray-700">
-                      {balance.quota}
+                      {
+                        balance.quota
+                      }
                     </td>
                     <td className="px-3 py-2 text-right text-gray-700">
-                      {balance.used}
+                      {
+                        balance.used
+                      }
                     </td>
                     <td className="px-3 py-2 text-right font-medium text-emerald-700">
-                      {balance.remaining}
+                      {
+                        balance.remaining
+                      }
                     </td>
                   </tr>
                 )
@@ -2893,53 +3981,25 @@ function EmployeeLeaveBalanceSummary({
                   Total
                 </td>
                 <td className="px-3 py-2 text-right text-gray-900">
-                  {totals.quota}
+                  {
+                    totals.quota
+                  }
                 </td>
                 <td className="px-3 py-2 text-right text-gray-900">
-                  {totals.used}
+                  {
+                    totals.used
+                  }
                 </td>
                 <td className="px-3 py-2 text-right text-emerald-700">
-                  {totals.remaining}
+                  {
+                    totals.remaining
+                  }
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
       )}
-    </div>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  danger = false,
-}: {
-  label: string;
-  value: number;
-  danger?: boolean;
-}) {
-  return (
-    <div
-      className={
-        danger
-          ? 'rounded-lg border border-rose-200 bg-rose-50 p-3'
-          : 'rounded-lg border border-gray-100 bg-gray-50 p-3'
-      }
-    >
-      <p className="text-xs text-gray-500">
-        {label}
-      </p>
-
-      <p
-        className={
-          danger
-            ? 'mt-1 text-xl font-semibold text-rose-700'
-            : 'mt-1 text-xl font-semibold text-gray-900'
-        }
-      >
-        {value}
-      </p>
     </div>
   );
 }
