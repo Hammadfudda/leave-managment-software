@@ -297,6 +297,15 @@ export default function MyTeam() {
   ] =
     useState('');
 
+
+  const [
+    manageDecisionTarget,
+    setManageDecisionTarget,
+  ] =
+    useState<LeaveRequest | null>(
+      null
+    );
+
   useEffect(
     () => {
       if (
@@ -900,6 +909,33 @@ export default function MyTeam() {
       }
     };
 
+  const openManageDecision =
+    (
+      request:
+        LeaveRequest
+    ) => {
+      setManageDecisionTarget(
+        request
+      );
+
+      setFinalError(
+        ''
+      );
+    };
+
+  const closeManageDecision =
+    () => {
+      if (
+        finalBusy
+      ) {
+        return;
+      }
+
+      setManageDecisionTarget(
+        null
+      );
+    };
+
   const openFinalAction =
     (
       request:
@@ -910,6 +946,10 @@ export default function MyTeam() {
           null
         >
     ) => {
+      setManageDecisionTarget(
+        null
+      );
+
       setFinalTarget(
         request
       );
@@ -1890,56 +1930,23 @@ export default function MyTeam() {
 
                               {isAdmin &&
                                 !request.isStopRequest &&
-                                request.status ===
-                                  'approved' && (
-                                  <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-50 pt-3">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        openFinalAction(
-                                          request,
-                                          'reject'
-                                        )
-                                      }
-                                      className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 ring-1 ring-inset ring-rose-200 hover:bg-rose-100"
-                                    >
-                                      Reject Approved Leave
-                                    </button>
-
-                                    {!request.cancelledBy &&
-                                      !request.actualEndDate && (
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            openFinalAction(
-                                              request,
-                                              'stop'
-                                            )
-                                          }
-                                          className="rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-200 hover:bg-amber-100"
-                                        >
-                                          Stop Leave
-                                        </button>
-                                      )}
-                                  </div>
-                                )}
-
-                              {isAdmin &&
-                                !request.isStopRequest &&
-                                request.status ===
-                                  'rejected' && (
+                                (
+                                  request.status ===
+                                    'approved' ||
+                                  request.status ===
+                                    'rejected'
+                                ) && (
                                   <div className="mt-3 border-t border-gray-50 pt-3">
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        openFinalAction(
-                                          request,
-                                          'approve'
+                                        openManageDecision(
+                                          request
                                         )
                                       }
-                                      className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-100"
+                                      className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-200 hover:bg-blue-100"
                                     >
-                                      Approve Rejected Leave
+                                      Manage Decision
                                     </button>
                                   </div>
                                 )}
@@ -1955,6 +1962,111 @@ export default function MyTeam() {
           )}
         </>
       )}
+
+      <Modal
+        open={
+          Boolean(
+            manageDecisionTarget
+          )
+        }
+        onClose={
+          closeManageDecision
+        }
+        title="Manage Final Decision"
+        size="sm"
+        footer={
+          <Button
+            variant="secondary"
+            onClick={
+              closeManageDecision
+            }
+          >
+            Close
+          </Button>
+        }
+      >
+        {manageDecisionTarget && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-gray-50 p-3 text-sm">
+              <p className="font-medium text-gray-900">
+                {
+                  manageDecisionTarget.employeeName
+                }{' '}
+                ·{' '}
+                {
+                  manageDecisionTarget.leaveType
+                }
+              </p>
+
+              <p className="mt-1 text-xs text-gray-500">
+                Current status:{' '}
+                <span className="font-semibold capitalize">
+                  {
+                    manageDecisionTarget.status
+                  }
+                </span>
+              </p>
+            </div>
+
+            <p className="text-xs leading-5 text-gray-500">
+              The Manager's original decision is preserved in approval history.
+              Admin action creates a new audited final decision.
+            </p>
+
+            <div className="flex flex-wrap gap-2">
+              {manageDecisionTarget.status ===
+                'approved' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openFinalAction(
+                        manageDecisionTarget,
+                        'reject'
+                      )
+                    }
+                    className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 ring-1 ring-inset ring-rose-200 hover:bg-rose-100"
+                  >
+                    Reject Leave
+                  </button>
+
+                  {!manageDecisionTarget.cancelledBy &&
+                    !manageDecisionTarget.actualEndDate && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openFinalAction(
+                            manageDecisionTarget,
+                            'stop'
+                          )
+                        }
+                        className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-200 hover:bg-amber-100"
+                      >
+                        Stop Leave
+                      </button>
+                    )}
+                </>
+              )}
+
+              {manageDecisionTarget.status ===
+                'rejected' && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    openFinalAction(
+                      manageDecisionTarget,
+                      'approve'
+                    )
+                  }
+                  className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-100"
+                >
+                  Approve Leave
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={

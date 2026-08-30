@@ -228,6 +228,12 @@ export default function Approvals() {
     useState('');
 
   const [
+    divisionFilter,
+    setDivisionFilter,
+  ] =
+    useState('');
+
+  const [
     departmentFilter,
     setDepartmentFilter,
   ] =
@@ -353,6 +359,32 @@ export default function Approvals() {
       ? pending
       : history;
 
+  const divisions =
+    useMemo(
+      () =>
+        Array.from(
+          new Set(
+            leaveRequests
+              .map(
+                (
+                  leave
+                ) =>
+                  getUserById(
+                    leave.employeeId
+                  )?.roleLabel ||
+                  ''
+              )
+              .filter(
+                Boolean
+              )
+          )
+        ).sort(),
+      [
+        leaveRequests,
+        getUserById,
+      ]
+    );
+
   const departments =
     useMemo(
       () =>
@@ -442,6 +474,11 @@ export default function Approvals() {
             return (
               matchesSearch &&
               (
+                !divisionFilter ||
+                employee?.roleLabel ===
+                  divisionFilter
+              ) &&
+              (
                 !departmentFilter ||
                 leave.department ===
                   departmentFilter
@@ -463,6 +500,7 @@ export default function Approvals() {
       [
         baseList,
         query,
+        divisionFilter,
         departmentFilter,
         typeFilter,
         statusFilter,
@@ -812,6 +850,10 @@ export default function Approvals() {
         ''
       );
 
+      setDivisionFilter(
+        ''
+      );
+
       setDepartmentFilter(
         ''
       );
@@ -914,6 +956,49 @@ export default function Approvals() {
 
           <select
             value={
+              divisionFilter
+            }
+            onChange={
+              (
+                event
+              ) => {
+                setDivisionFilter(
+                  event.target.value
+                );
+
+                setDepartmentFilter(
+                  ''
+                );
+              }
+            }
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">
+              All Divisions
+            </option>
+
+            {divisions.map(
+              (
+                division
+              ) => (
+                <option
+                  key={
+                    division
+                  }
+                  value={
+                    division
+                  }
+                >
+                  {
+                    division
+                  }
+                </option>
+              )
+            )}
+          </select>
+
+          <select
+            value={
               departmentFilter
             }
             onChange={
@@ -930,7 +1015,25 @@ export default function Approvals() {
               All Departments
             </option>
 
-            {departments.map(
+            {departments
+              .filter(
+                (
+                  department
+                ) =>
+                  !divisionFilter ||
+                  leaveRequests.some(
+                    (
+                      leave
+                    ) =>
+                      leave.department ===
+                        department &&
+                      getUserById(
+                        leave.employeeId
+                      )?.roleLabel ===
+                        divisionFilter
+                  )
+              )
+              .map(
               (
                 department
               ) => (
@@ -1041,6 +1144,9 @@ export default function Approvals() {
                   Employee
                 </th>
                 <th className="px-5 py-3 font-medium">
+                  Division
+                </th>
+                <th className="px-5 py-3 font-medium">
                   Type
                 </th>
                 <th className="px-5 py-3 font-medium">
@@ -1067,7 +1173,7 @@ export default function Approvals() {
                 <tr>
                   <td
                     colSpan={
-                      7
+                      8
                     }
                     className="px-5 py-8 text-center text-gray-400"
                   >
@@ -1090,6 +1196,13 @@ export default function Approvals() {
                       {
                         leave.employeeName
                       }
+                    </td>
+
+                    <td className="px-5 py-3 text-gray-600">
+                      {getUserById(
+                        leave.employeeId
+                      )?.roleLabel ||
+                        '—'}
                     </td>
 
                     <td className="px-5 py-3 capitalize text-gray-600">

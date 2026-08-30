@@ -179,6 +179,15 @@ export default function Employees() {
       []
     );
 
+
+  const [
+    directDivisionRows,
+    setDirectDivisionRows,
+  ] =
+    useState<string[]>(
+      []
+    );
+
   const [
     leaveYearDay,
     setLeaveYearDay,
@@ -375,17 +384,33 @@ export default function Employees() {
   const divisions =
     useMemo(
       () =>
-        roles.filter(
-          (
-            role
-          ) =>
-            !RESERVED_DIVISIONS.has(
+        Array.from(
+          new Set([
+            ...directDivisionRows,
+            ...roles,
+          ])
+        )
+          .filter(
+            (
               role
-                .trim()
-                .toLowerCase()
-            )
-        ),
+            ) =>
+              !RESERVED_DIVISIONS.has(
+                role
+                  .trim()
+                  .toLowerCase()
+              )
+          )
+          .sort(
+            (
+              a,
+              b
+            ) =>
+              a.localeCompare(
+                b
+              )
+          ),
       [
+        directDivisionRows,
         roles,
       ]
     );
@@ -413,11 +438,15 @@ export default function Employees() {
     async () => {
       const [
         departmentResponse,
+        divisionResponse,
         settings,
       ] =
         await Promise.all([
           api.get(
             '/departments'
+          ),
+          api.get(
+            '/roles'
           ),
           getOrganizationSettings(),
         ]);
@@ -425,6 +454,28 @@ export default function Employees() {
       setDepartmentRows(
         departmentResponse.data?.data ||
         []
+      );
+
+      setDirectDivisionRows(
+        (
+          divisionResponse.data?.data ||
+          []
+        )
+          .map(
+            (
+              division:
+                {
+                  name?: string;
+                }
+            ) =>
+              String(
+                division.name ||
+                ''
+              ).trim()
+          )
+          .filter(
+            Boolean
+          )
       );
 
       setLeaveYearDay(
@@ -1019,6 +1070,22 @@ export default function Employees() {
             );
           }
 
+          /*
+           * The backend balance endpoint calls syncPolicyBalancesForUser().
+           * Trigger it immediately when Grade or DOJ changed so prorated
+           * Granted values are refreshed now, not only on a later balance read.
+           */
+          if (
+            form.grade !==
+              editingUser.grade ||
+            form.dateOfJoining !==
+              editingUser.dateOfJoining
+          ) {
+            await api.get(
+              `/leave-requests/balance/${editingUser.id}`
+            );
+          }
+
           showMessage(
             'success',
             editingUser.detailsStatus ===
@@ -1218,6 +1285,26 @@ export default function Employees() {
           );
 
           await refreshLookups();
+
+          setDirectDivisionRows(
+            (
+              previous
+            ) =>
+              Array.from(
+                new Set([
+                  ...previous,
+                  name,
+                ])
+              ).sort(
+                (
+                  a,
+                  b
+                ) =>
+                  a.localeCompare(
+                    b
+                  )
+              )
+          );
 
           setForm(
             (

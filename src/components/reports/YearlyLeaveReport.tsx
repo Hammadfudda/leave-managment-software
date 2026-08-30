@@ -473,14 +473,39 @@ export default function YearlyLeaveReport() {
       ]
     );
 
-  const exportSelectedCsv =
+  const exportYearCsv =
     () => {
       if (
-        selectedGroups.length ===
+        groups.length ===
         0
       ) {
         return;
       }
+
+      /*
+       * Screen stays intentionally filtered.
+       * Export is year-wide and includes every employee/leave row,
+       * ordered Division -> Department -> Manager -> Employee -> Leave Type.
+       */
+      const exportGroups =
+        [...groups].sort(
+          (
+            a,
+            b
+          ) =>
+            a.division.localeCompare(
+              b.division
+            ) ||
+            a.department.localeCompare(
+              b.department
+            ) ||
+            a.managerName.localeCompare(
+              b.managerName
+            ) ||
+            a.employeeName.localeCompare(
+              b.employeeName
+            )
+        );
 
       const csvRows = [
         [
@@ -497,11 +522,21 @@ export default function YearlyLeaveReport() {
           'Used',
           'Remaining',
         ],
-        ...selectedGroups.flatMap(
+        ...exportGroups.flatMap(
           (
             group
           ) =>
-            group.rows.map(
+            [...group.rows]
+              .sort(
+                (
+                  a,
+                  b
+                ) =>
+                  a.leaveType.localeCompare(
+                    b.leaveType
+                  )
+              )
+              .map(
               (
                 row
               ) => [
@@ -585,7 +620,7 @@ export default function YearlyLeaveReport() {
         url;
 
       link.download =
-        `yearly-leave-report-${year}-${selectedGroups[0].employeeCode || 'employee'}.csv`;
+        `yearly-leave-report-${year}-all-employees.csv`;
 
       document.body.appendChild(
         link
@@ -623,7 +658,7 @@ export default function YearlyLeaveReport() {
 
         <p className="mt-1 text-sm text-gray-500">
           Select Year → Division → Department → Manager → Team Member.
-          No employee leave details are shown before the complete filter path is selected.
+          No employee leave details are shown before the complete filter path is selected. Export downloads the full selected year across all Divisions, Departments, Managers and employees.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
@@ -850,15 +885,15 @@ export default function YearlyLeaveReport() {
             type="button"
             disabled={
               loading ||
-              selectedGroups.length ===
+              groups.length ===
                 0
             }
             onClick={
-              exportSelectedCsv
+              exportYearCsv
             }
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Export CSV
+            Export Full Year CSV
           </button>
         </div>
 
