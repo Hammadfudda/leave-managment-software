@@ -1135,7 +1135,7 @@ export default function SmartCsvImportEnhancer() {
               </div>
 
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-6 text-amber-800">
-                Conflicting quotas for the same Grade + Leave Type block the import. Manager assignment, missing Master Data review, temporary passwords and QStash email scheduling keep the existing flow.
+                If the same Grade and Leave Type has different quota values in the CSV, the import will stop and ask you to correct them. You can also review manager assignments and any missing employee details before confirming the import. Temporary login passwords and employee emails will continue to work automatically.
               </div>
             </div>
 
