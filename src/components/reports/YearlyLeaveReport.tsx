@@ -13,7 +13,7 @@ import {
   type YearlyLeaveSnapshot,
 } from '../../services/yearlyReports';
 
-import {
+import api, {
   getApiErrorMessage,
 } from '../../services/api';
 
@@ -93,6 +93,80 @@ export default function YearlyLeaveReport() {
     setEmployeeFilter,
   ] =
     useState('');
+
+
+  const [
+    departmentDivisionByName,
+    setDepartmentDivisionByName,
+  ] =
+    useState<
+      Record<string, string>
+    >({});
+
+  useEffect(
+    () => {
+      let active =
+        true;
+
+      void api
+        .get(
+          '/departments'
+        )
+        .then(
+          (
+            response
+          ) => {
+            if (
+              !active
+            ) {
+              return;
+            }
+
+            setDepartmentDivisionByName(
+              Object.fromEntries(
+                (
+                  response.data?.data ||
+                  []
+                ).map(
+                  (
+                    department:
+                      {
+                        name?: string;
+                        divisionName?: string;
+                      }
+                  ) => [
+                    String(
+                      department.name ||
+                      ''
+                    ),
+                    String(
+                      department.divisionName ||
+                      ''
+                    ),
+                  ]
+                )
+              )
+            );
+          }
+        )
+        .catch(
+          (
+            hierarchyError
+          ) => {
+            console.warn(
+              'Unable to load Department → Division fallback for yearly report.',
+              hierarchyError
+            );
+          }
+        );
+
+      return () => {
+        active =
+          false;
+      };
+    },
+    []
+  );
 
   useEffect(
     () => {
@@ -246,7 +320,17 @@ export default function YearlyLeaveReport() {
               employeeCode:
                 row.employeeCode,
               division:
-                row.division,
+                row.division ||
+                (
+                  year ===
+                  currentYear
+                    ? employee?.roleLabel ||
+                      departmentDivisionByName[
+                        row.department
+                      ] ||
+                      ''
+                    : ''
+                ),
               department:
                 row.department,
               designation:
@@ -313,6 +397,9 @@ export default function YearlyLeaveReport() {
       [
         rows,
         users,
+        year,
+        currentYear,
+        departmentDivisionByName,
       ]
     );
 

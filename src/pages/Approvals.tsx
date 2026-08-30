@@ -27,7 +27,7 @@ import {
   formatDate,
 } from '../utils/formatDate';
 
-import {
+import api, {
   getApiErrorMessage,
 } from '../services/api';
 
@@ -222,6 +222,14 @@ export default function Approvals() {
     useState('');
 
   const [
+    departmentDivisionByName,
+    setDepartmentDivisionByName,
+  ] =
+    useState<
+      Record<string, string>
+    >({});
+
+  const [
     query,
     setQuery,
   ] =
@@ -262,10 +270,44 @@ export default function Approvals() {
       const load =
         async () => {
           try {
-            await Promise.all([
-              refreshLeaveRequests(),
-              refreshEmployees(),
-            ]);
+            const [
+              ,
+              ,
+              departmentResponse,
+            ] =
+              await Promise.all([
+                refreshLeaveRequests(),
+                refreshEmployees(),
+                api.get(
+                  '/departments'
+                ),
+              ]);
+
+            setDepartmentDivisionByName(
+              Object.fromEntries(
+                (
+                  departmentResponse.data?.data ||
+                  []
+                ).map(
+                  (
+                    department:
+                      {
+                        name?: string;
+                        divisionName?: string;
+                      }
+                  ) => [
+                    String(
+                      department.name ||
+                      ''
+                    ),
+                    String(
+                      department.divisionName ||
+                      ''
+                    ),
+                  ]
+                )
+              )
+            );
           } catch (
             error
           ) {
@@ -359,6 +401,19 @@ export default function Approvals() {
       ? pending
       : history;
 
+  const getDivisionForLeave =
+    (
+      leave:
+        LeaveRequest
+    ) =>
+      getUserById(
+        leave.employeeId
+      )?.roleLabel ||
+      departmentDivisionByName[
+        leave.department
+      ] ||
+      '';
+
   const divisions =
     useMemo(
       () =>
@@ -369,10 +424,9 @@ export default function Approvals() {
                 (
                   leave
                 ) =>
-                  getUserById(
-                    leave.employeeId
-                  )?.roleLabel ||
-                  ''
+                  getDivisionForLeave(
+                    leave
+                  )
               )
               .filter(
                 Boolean
@@ -382,6 +436,7 @@ export default function Approvals() {
       [
         leaveRequests,
         getUserById,
+        departmentDivisionByName,
       ]
     );
 
@@ -475,7 +530,9 @@ export default function Approvals() {
               matchesSearch &&
               (
                 !divisionFilter ||
-                employee?.roleLabel ===
+                getDivisionForLeave(
+                  leave
+                ) ===
                   divisionFilter
               ) &&
               (
@@ -505,6 +562,7 @@ export default function Approvals() {
         typeFilter,
         statusFilter,
         getUserById,
+        departmentDivisionByName,
       ]
     );
 
@@ -1027,9 +1085,9 @@ export default function Approvals() {
                     ) =>
                       leave.department ===
                         department &&
-                      getUserById(
-                        leave.employeeId
-                      )?.roleLabel ===
+                      getDivisionForLeave(
+                        leave
+                      ) ===
                         divisionFilter
                   )
               )
@@ -1199,9 +1257,9 @@ export default function Approvals() {
                     </td>
 
                     <td className="px-5 py-3 text-gray-600">
-                      {getUserById(
-                        leave.employeeId
-                      )?.roleLabel ||
+                      {getDivisionForLeave(
+                        leave
+                      ) ||
                         '—'}
                     </td>
 

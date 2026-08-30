@@ -914,8 +914,37 @@ export default function MyTeam() {
       request:
         LeaveRequest
     ) => {
+      /*
+       * A Stop card is a separate request record. Admin finalized-decision
+       * actions belong to the ORIGINAL leave, because backend correctly blocks
+       * overriding a finalized stop-request itself.
+       */
+      const target =
+        request.isStopRequest &&
+        request.originalRequestId
+          ? leaveRequests.find(
+              (
+                candidate
+              ) =>
+                candidate.id ===
+                request.originalRequestId
+            ) ||
+            null
+          : request;
+
+      if (
+        !target ||
+        target.isStopRequest
+      ) {
+        setActionError(
+          'The original leave request could not be found for this Stop record.'
+        );
+
+        return;
+      }
+
       setManageDecisionTarget(
-        request
+        target
       );
 
       setFinalError(
@@ -1929,7 +1958,6 @@ export default function MyTeam() {
                                 )}
 
                               {isAdmin &&
-                                !request.isStopRequest &&
                                 (
                                   request.status ===
                                     'approved' ||

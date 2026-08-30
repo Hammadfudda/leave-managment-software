@@ -436,10 +436,14 @@ export default function Employees() {
 
   const loadHierarchyAndSettings =
     async () => {
+      /*
+       * Division / Department must never disappear just because the optional
+       * Organization settings record is missing for a legacy Admin account.
+       * Load hierarchy first, then load Leave Year settings independently.
+       */
       const [
         departmentResponse,
         divisionResponse,
-        settings,
       ] =
         await Promise.all([
           api.get(
@@ -448,7 +452,6 @@ export default function Employees() {
           api.get(
             '/roles'
           ),
-          getOrganizationSettings(),
         ]);
 
       setDepartmentRows(
@@ -478,17 +481,41 @@ export default function Employees() {
           )
       );
 
-      setLeaveYearDay(
-        settings.leaveYearStartDay
-      );
+      try {
+        const settings =
+          await getOrganizationSettings();
 
-      setLeaveYearMonth(
-        settings.leaveYearStartMonth
-      );
+        setLeaveYearDay(
+          settings.leaveYearStartDay
+        );
 
-      setLeaveYearDisplay(
-        settings.leaveYearStart
-      );
+        setLeaveYearMonth(
+          settings.leaveYearStartMonth
+        );
+
+        setLeaveYearDisplay(
+          settings.leaveYearStart
+        );
+      } catch (
+        settingsError
+      ) {
+        console.warn(
+          'Organization Leave Year settings were not available; using 01-01 until backend fallback is active.',
+          settingsError
+        );
+
+        setLeaveYearDay(
+          1
+        );
+
+        setLeaveYearMonth(
+          1
+        );
+
+        setLeaveYearDisplay(
+          '01-01'
+        );
+      }
     };
 
   useEffect(
