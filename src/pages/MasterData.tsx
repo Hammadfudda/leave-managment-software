@@ -311,7 +311,7 @@ export default function MasterData() {
          * unavailable. The current saved value can be retried from Others.
          */
         console.warn(
-          'Unable to load Organization Leave Year Start.',
+          'Unable to load Organization Start year date.',
           error
         );
       }
@@ -860,7 +860,7 @@ export default function MasterData() {
         showMessage(
           'success',
           'Leave Year Updated',
-          'Organization Leave Year Start has been saved successfully.'
+          'Organization Start year date has been saved successfully.'
         );
       } catch (
         error
@@ -870,7 +870,7 @@ export default function MasterData() {
           'Unable to Save Leave Year',
           getApiErrorMessage(
             error,
-            'Unable to save Organization Leave Year Start.'
+            'Unable to save Organization Start year date.'
           )
         );
       } finally {
@@ -1043,7 +1043,7 @@ export default function MasterData() {
           <div className="max-w-3xl rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
             <div className="flex flex-col gap-1">
               <h2 className="text-base font-semibold text-gray-900">
-                Leave Year Start
+                Start year date
               </h2>
 
               <p className="text-sm leading-6 text-gray-500">
@@ -1142,7 +1142,7 @@ export default function MasterData() {
               </Button>
 
               <span className="text-sm text-gray-500">
-                Current Leave Year Start:{' '}
+                Current Start year date:{' '}
                 <strong className="font-semibold text-gray-800">
                   {
                     leaveYearDisplay
