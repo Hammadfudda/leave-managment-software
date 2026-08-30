@@ -40,7 +40,6 @@ import {
 
 import {
   getOrganizationSettings,
-  updateOrganizationSettings,
 } from '../services/organizationSettings';
 
 import api, {
@@ -1456,54 +1455,6 @@ export default function Employees() {
       }
     };
 
-  const saveLeaveYearStart =
-    async () => {
-      setSavingLeaveYear(
-        true
-      );
-
-      try {
-        const settings =
-          await updateOrganizationSettings(
-            leaveYearDay,
-            leaveYearMonth
-          );
-
-        setLeaveYearDay(
-          settings.leaveYearStartDay
-        );
-
-        setLeaveYearMonth(
-          settings.leaveYearStartMonth
-        );
-
-        setLeaveYearDisplay(
-          settings.leaveYearStart
-        );
-
-        showMessage(
-          'success',
-          'Leave Year Updated',
-          'Organization Leave Year Start has been saved.'
-        );
-      } catch (
-        error
-      ) {
-        showMessage(
-          'error',
-          'Unable to Save Leave Year',
-          getApiErrorMessage(
-            error,
-            'Unable to save Organization Leave Year Start.'
-          )
-        );
-      } finally {
-        setSavingLeaveYear(
-          false
-        );
-      }
-    };
-
   const handleImport =
     async (
       event:
@@ -1773,20 +1724,7 @@ export default function Employees() {
           ? 'Add Designation'
           : 'Add Department';
 
-  const months = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
+
 
   return (
     <div className="space-y-6">
@@ -2858,129 +2796,6 @@ export default function Employees() {
                   </p>
                 )}
               </FormField>
-
-              <div className="sm:col-span-2 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-                <p className="text-sm font-semibold text-blue-950">
-                  Leave Year Start
-                </p>
-
-                <p className="mt-1 text-xs text-blue-700">
-                  Company-wide setting used with Date of Joining for prorated leave. Decimal results are always rounded down.
-                </p>
-
-                <div className="mt-3 grid max-w-md grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-blue-900">
-                      Day
-                    </label>
-
-                    <input
-                      type="number"
-                      min={
-                        1
-                      }
-                      max={
-                        31
-                      }
-                      value={
-                        leaveYearDay
-                      }
-                      onChange={
-                        (
-                          event
-                        ) =>
-                          setLeaveYearDay(
-                            Number(
-                              event.target.value
-                            )
-                          )
-                      }
-                      className={
-                        inputCls
-                      }
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-blue-900">
-                      Month
-                    </label>
-
-                    <select
-                      value={
-                        leaveYearMonth
-                      }
-                      onChange={
-                        (
-                          event
-                        ) =>
-                          setLeaveYearMonth(
-                            Number(
-                              event.target.value
-                            )
-                          )
-                      }
-                      className={
-                        inputCls
-                      }
-                    >
-                      {months.map(
-                        (
-                          month,
-                          index
-                        ) => (
-                          <option
-                            key={
-                              month
-                            }
-                            value={
-                              index +
-                              1
-                            }
-                          >
-                            {
-                              month
-                            }
-                          </option>
-                        )
-                      )}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    disabled={
-                      savingLeaveYear
-                    }
-                    onClick={() =>
-                      void saveLeaveYearStart()
-                    }
-                    className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {savingLeaveYear
-                      ? 'Saving...'
-                      : 'Save Leave Year Start'}
-                  </button>
-
-                  <span className="text-xs text-blue-700">
-                    Current:{' '}
-                    {leaveYearDisplay ||
-                      `${String(
-                        leaveYearDay
-                      ).padStart(
-                        2,
-                        '0'
-                      )}-${String(
-                        leaveYearMonth
-                      ).padStart(
-                        2,
-                        '0'
-                      )}`}
-                  </span>
-                </div>
-              </div>
 
               {editingUser?.id && (
                 <FormField label="Status">
