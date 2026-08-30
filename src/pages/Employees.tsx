@@ -587,17 +587,15 @@ export default function Employees() {
             }
 
             /*
-             * Legacy unassigned Department remains selectable so old
-             * production records do not break. Backend safely links it
-             * to the selected Division on a valid employee create.
+             * Backward compatibility for editing one legacy employee only.
+             * New employee creation must show ONLY Departments assigned to
+             * the selected Division.
              */
-            return (
+            return Boolean(
+              editingUser &&
               !department.divisionName &&
-              (
-                editingUser?.department ===
-                  department.name ||
-                !editingUser
-              )
+              editingUser.department ===
+                department.name
             );
           }
         ),
@@ -725,24 +723,47 @@ export default function Employees() {
         return users.filter(
           (
             candidate
-          ) =>
-            candidate.role ===
-              'manager' &&
-            candidate.status ===
-              'active' &&
-            candidate.department ===
-              form.department &&
-            (
+          ) => {
+            if (
+              candidate.role !==
+                'manager' ||
+              candidate.status !==
+                'active' ||
+              candidate.department !==
+                form.department ||
+              candidate.id ===
+                editingUser?.id
+            ) {
+              return false;
+            }
+
+            /*
+             * New manager records store Division in roleLabel.
+             * For older records where roleLabel is blank, resolve Division
+             * from that manager's Department hierarchy.
+             */
+            const candidateDivision =
+              candidate.roleLabel ||
+              departmentRows.find(
+                (
+                  department
+                ) =>
+                  department.name ===
+                  candidate.department
+              )?.divisionName ||
+              '';
+
+            return (
               !form.roleLabel ||
-              candidate.roleLabel ===
+              candidateDivision ===
                 form.roleLabel
-            ) &&
-            candidate.id !==
-              editingUser?.id
+            );
+          }
         );
       },
       [
         users,
+        departmentRows,
         form.department,
         form.roleLabel,
         editingUser?.id,
