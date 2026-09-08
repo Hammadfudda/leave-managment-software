@@ -142,20 +142,20 @@ export default function Sidebar({
         }`}
       >
         <div className="flex h-full flex-col">
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-            <div className="flex items-center gap-2.5">
+          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3.5">
+            <div className="flex min-w-0 items-center gap-2.5">
               <img
                 src="/neddconsultantlogo.png"
                 alt="Nedd Consultant"
-                className="h-9 w-auto max-w-[70px] object-contain"
+                className="h-14 w-auto max-w-[92px] shrink-0 object-contain"
               />
 
-              <div>
-                <p className="text-sm font-semibold text-gray-900">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-gray-900">
                   Nedd Consultant
                 </p>
 
-                <p className="text-[11px] text-gray-500">
+                <p className="truncate text-[11px] text-gray-500">
                   Leave Management Software
                 </p>
               </div>
