@@ -435,11 +435,6 @@ export default function Employees() {
 
   const loadHierarchyAndSettings =
     async () => {
-      /*
-       * Division / Department must never disappear just because the optional
-       * Organization settings record is missing for a legacy Admin account.
-       * Load hierarchy first, then load Leave Year settings independently.
-       */
       const [
         departmentResponse,
         divisionResponse,
@@ -586,11 +581,6 @@ export default function Employees() {
               return true;
             }
 
-            /*
-             * Backward compatibility for editing one legacy employee only.
-             * New employee creation must show ONLY Departments assigned to
-             * the selected Division.
-             */
             return Boolean(
               editingUser &&
               !department.divisionName &&
@@ -707,10 +697,6 @@ export default function Employees() {
       ]
     );
 
-  /*
-   * Existing manager rule is preserved and tightened only by Division:
-   * active Managers from the selected Department and selected Division.
-   */
   const availableManagers =
     useMemo(
       () => {
@@ -737,11 +723,6 @@ export default function Employees() {
               return false;
             }
 
-            /*
-             * New manager records store Division in roleLabel.
-             * For older records where roleLabel is blank, resolve Division
-             * from that manager's Department hierarchy.
-             */
             const candidateDivision =
               candidate.roleLabel ||
               departmentRows.find(
@@ -1095,10 +1076,6 @@ export default function Employees() {
             updatePayload
           );
 
-          /*
-           * Existing dedicated endpoint is retained; only user-facing
-           * terminology changes from Role to Division.
-           */
           await updateEmployeeRoleLabel(
             editingUser.id,
             form.roleLabel
@@ -1117,11 +1094,6 @@ export default function Employees() {
             );
           }
 
-          /*
-           * The backend balance endpoint calls syncPolicyBalancesForUser().
-           * Trigger it immediately when Grade or DOJ changed so prorated
-           * Granted values are refreshed now, not only on a later balance read.
-           */
           if (
             form.grade !==
               editingUser.grade ||
@@ -1744,8 +1716,6 @@ export default function Employees() {
             'designation'
           ? 'Add Designation'
           : 'Add Department';
-
-
 
   return (
     <div className="space-y-6">

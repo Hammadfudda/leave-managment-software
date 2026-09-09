@@ -63,9 +63,6 @@ export default function Layout() {
               true
           );
         } catch (error) {
-          /*
-           * Existing fail-closed account-security behavior is preserved.
-           */
           setPasswordCheckError(
             getApiErrorMessage(
               error,
@@ -148,12 +145,6 @@ export default function Layout() {
         </main>
       </div>
 
-      {/*
-       * Smart CSV remains exactly where it was. The old DOM-injection
-       * UI enhancers are intentionally removed because the corresponding
-       * changes now live directly inside Employees, MasterData, Approvals
-       * and MyTeam.
-       */}
       {location.pathname === '/employees' && (
         <SmartCsvImportEnhancer />
       )}
