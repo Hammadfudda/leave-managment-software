@@ -24,6 +24,8 @@ import {
 
 import Button from '../components/ui/Button';
 
+const NEDD_DIGITAL_LOGO = '/neddconsultantlogo.png';
+
 import superAdminApi, {
   clearSuperAdminToken,
   getSuperAdminError,
@@ -123,7 +125,7 @@ export default function SuperAdminApp() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 text-sm text-slate-300">
-        Loading SaaS Admin...
+        Loading Nedd Digital Panel...
       </div>
     );
   }
@@ -227,16 +229,20 @@ function Login({
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
       <div className="w-full max-w-md">
         <div className="mb-5 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white">
-            <ShieldCheck size={28} />
+          <div className="mx-auto flex h-16 w-40 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900 px-4">
+            <img
+              src={NEDD_DIGITAL_LOGO}
+              alt="Nedd Digital"
+              className="max-h-11 w-auto object-contain"
+            />
           </div>
 
           <h1 className="mt-4 text-2xl font-semibold text-white">
-            SaaS Owner
+            Nedd Digital Panel
           </h1>
 
           <p className="mt-1 text-sm text-slate-400">
-            Leave Management Control Panel
+            Leave Management Super Admin Panel
           </p>
         </div>
 
@@ -855,7 +861,7 @@ function Dashboard({
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 lg:px-6">
           <div>
             <h1 className="font-semibold">
-              SaaS Control Panel
+              Nedd Digital Panel
             </h1>
 
             <p className="text-xs text-slate-400">
