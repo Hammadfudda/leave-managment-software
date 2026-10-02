@@ -137,25 +137,25 @@ export default function Sidebar({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 transform border-r border-gray-200 bg-white transition-transform duration-300 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 w-64 transform border-r border-[#0d4270] bg-[#062b4f] transition-transform duration-300 lg:static lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex h-full flex-col">
-          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3.5">
+        <div className="flex h-full flex-col text-white">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3.5">
             <div className="flex min-w-0 items-center gap-2.5">
               <img
                 src="/neddconsultantlogo.png"
-                alt="Nedd Consultant"
+                alt="Nedd Digital"
                 className="h-14 w-auto max-w-[92px] shrink-0 object-contain"
               />
 
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-gray-900">
-                  Nedd Consultant
+                <p className="truncate text-sm font-semibold text-white">
+                  Nedd Digital
                 </p>
 
-                <p className="truncate text-[11px] text-gray-500">
+                <p className="truncate text-[11px] text-white/65">
                   Leave Management Software
                 </p>
               </div>
@@ -163,7 +163,7 @@ export default function Sidebar({
 
             <button
               onClick={onClose}
-              className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 lg:hidden"
+              className="rounded-lg p-1 text-white/70 hover:bg-white/10 lg:hidden"
             >
               <X size={18} />
             </button>
@@ -188,8 +188,8 @@ export default function Sidebar({
                   className={({ isActive }) =>
                     `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                       isActive
-                        ? "bg-blue-50 text-blue-700"
-                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                        ? "bg-[#ffb703] text-[#062b4f] shadow-sm"
+                        : "text-white/80 hover:bg-white/10 hover:text-white"
                     }`
                   }
                 >
@@ -200,18 +200,18 @@ export default function Sidebar({
             })}
           </nav>
 
-          <div className="border-t border-gray-100 p-3">
-            <div className="mb-3 flex items-center gap-3 rounded-lg bg-gray-50 px-3 py-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold text-white">
+          <div className="border-t border-white/10 p-3">
+            <div className="mb-3 flex items-center gap-3 rounded-lg bg-white/10 px-3 py-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#ffb703] text-sm font-semibold text-[#062b4f]">
                 {user.fullName.charAt(0)}
               </div>
 
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-gray-900">
+                <p className="truncate text-sm font-medium text-white">
                   {user.fullName}
                 </p>
 
-                <p className="truncate text-xs text-gray-500">
+                <p className="truncate text-xs text-white/65">
                   {roleLabel[user.role]}
                 </p>
               </div>
@@ -219,7 +219,7 @@ export default function Sidebar({
 
             <button
               onClick={logout}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[#ffb703] transition-colors hover:bg-white/10"
             >
               <LogOut size={18} />
               Sign Out
