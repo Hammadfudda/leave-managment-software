@@ -67,12 +67,14 @@ interface BackendUser {
   canApproveOtherDepartments?: boolean;
 
   profilePhotoUrl?: string;
+  mustChangePassword?: boolean;
 }
 
 interface LoginResponse {
   success: boolean;
   accessToken: string;
   user: BackendUser;
+  mustChangePassword?: boolean;
 }
 
 interface AuthContextType {
@@ -195,6 +197,8 @@ function mapBackendUser(
 
     profilePhotoUrl:
       backendUser.profilePhotoUrl,
+    mustChangePassword:
+      Boolean(backendUser.mustChangePassword),
   };
 }
 
@@ -244,6 +248,14 @@ export function AuthProvider({
               refreshedToken
             );
             token = refreshedToken;
+
+            if (refreshResponse.data?.user?._id) {
+              const refreshedUser = mapBackendUser(
+                refreshResponse.data.user as BackendUser
+              );
+              localStorage.setItem('authUser', JSON.stringify(refreshedUser));
+              setUser(refreshedUser);
+            }
           } catch {
             removeAccessToken();
             localStorage.removeItem(
