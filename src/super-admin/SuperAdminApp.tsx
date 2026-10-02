@@ -16,6 +16,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  RotateCcw,
   Send,
   ShieldCheck,
   Trash2,
@@ -43,7 +44,8 @@ interface Organization {
   id: string;
   name: string;
   slug: string;
-  status: 'active' | 'suspended';
+  status: 'active' | 'suspended' | 'pending_deletion';
+  scheduledPurgeAt?: string | null;
   createdAt: string;
   admin: {
     id: string;
@@ -336,6 +338,9 @@ function Dashboard({
 }) {
   const [tab, setTab] =
     useState<DashboardTab>('clients');
+
+  const [clientView, setClientView] =
+    useState<'active' | 'deleted'>('active');
 
   const [organizations, setOrganizations] =
     useState<Organization[]>([]);
@@ -688,6 +693,33 @@ function Dashboard({
     }
   };
 
+  const restoreClient = async (organization: Organization) => {
+    setSaving(true);
+    setError('');
+    setNotice('');
+
+    try {
+      const response = await superAdminApi.patch(
+        `/super-admin/organizations/${organization.id}/restore`
+      );
+
+      setNotice(
+        response.data.message ||
+          'Client organization restored successfully.'
+      );
+      await load();
+    } catch (requestError) {
+      setError(
+        getSuperAdminError(
+          requestError,
+          'Unable to restore this client.'
+        )
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const deleteClient = async () => {
     if (!deleteTarget) {
       return;
@@ -698,7 +730,7 @@ function Dashboard({
       deleteTarget.name
     ) {
       setError(
-        `Type "${deleteTarget.name}" exactly to confirm permanent deletion.`
+        `Type "${deleteTarget.name}" exactly to move the client to Recently Deleted.`
       );
       return;
     }
@@ -1038,6 +1070,23 @@ function Dashboard({
                   No clients yet.
                 </div>
               ) : (
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setClientView('active')}
+                    className={`rounded-lg px-3 py-2 text-sm font-medium ${clientView === 'active' ? 'bg-blue-600 text-white' : 'border border-slate-700 text-slate-300'}`}
+                  >
+                    Active Clients
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClientView('deleted')}
+                    className={`rounded-lg px-3 py-2 text-sm font-medium ${clientView === 'deleted' ? 'bg-amber-600 text-white' : 'border border-slate-700 text-slate-300'}`}
+                  >
+                    Recently Deleted
+                  </button>
+                </div>
+
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-950/60 text-left text-xs uppercase text-slate-500">
@@ -1058,7 +1107,13 @@ function Dashboard({
                     </thead>
 
                     <tbody className="divide-y divide-slate-800">
-                      {organizations.map(
+                      {organizations
+                        .filter((organization) =>
+                          clientView === 'deleted'
+                            ? organization.status === 'pending_deletion'
+                            : organization.status !== 'pending_deletion'
+                        )
+                        .map(
                         (
                           organization
                         ) => (
@@ -1101,7 +1156,9 @@ function Dashboard({
                                   organization.status ===
                                   'active'
                                     ? 'bg-emerald-950 text-emerald-300'
-                                    : 'bg-rose-950 text-rose-300'
+                                    : organization.status === 'pending_deletion'
+                                      ? 'bg-amber-950 text-amber-300'
+                                      : 'bg-rose-950 text-rose-300'
                                 }`}
                               >
                                 {
@@ -1609,21 +1666,21 @@ function Dashboard({
           <div className="space-y-4">
             <div className="rounded-xl border border-rose-900 bg-rose-950/40 p-4 text-sm text-rose-200">
               <p className="font-semibold">
-                Permanent deletion
+                10-day restore window
               </p>
 
               <p className="mt-2 leading-6 text-rose-300">
-                This will permanently delete the Client Admin, every Manager, every Employee, and all tenant database records belonging to this organization.
+                This will move the Client Admin, every Manager, every Employee, and all tenant data to Recently Deleted. Access will be revoked immediately.
               </p>
 
               <p className="mt-2 font-medium">
-                This action cannot be undone.
+                You have 10 days to restore it. After 10 days, the database purge will be permanent and cannot be undone.
               </p>
             </div>
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-300">
-                Type <strong>{deleteTarget.name}</strong> to confirm
+                Type <strong>{deleteTarget.name}</strong> to confirm deletion
               </label>
 
               <input
@@ -1672,7 +1729,7 @@ function Dashboard({
                     deletingOrganizationId
                   )
                 }
-                loadingText="Deleting Client..."
+                loadingText="Moving to Recently Deleted..."
                 disabled={
                   deleteConfirmation.trim() !==
                   deleteTarget.name
