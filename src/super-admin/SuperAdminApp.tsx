@@ -750,7 +750,7 @@ function Dashboard({
 
       setNotice(
         response.data.message ||
-          'Client and all tenant users/data were deleted.'
+          'Client moved to Recently Deleted. It will be permanently purged after 10 days unless restored.'
       );
 
       setDeleteTarget(null);
