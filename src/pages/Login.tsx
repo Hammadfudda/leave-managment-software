@@ -186,7 +186,7 @@ export default function Login() {
             <div className="relative">
               <div className="inline-flex rounded-2xl bg-white px-3 py-2 shadow-xl shadow-black/15">
                 <img
-                  src="/nedddigitallogo.svg"
+                  src="/neddconsultantlogo.png"
                   alt="Nedd Digital"
                   className="h-20 w-auto object-contain"
                 />
@@ -244,7 +244,7 @@ export default function Login() {
               <div className="mb-8 flex justify-center lg:hidden">
                 <div className="inline-flex rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
                   <img
-                    src="/nedddigitallogo.svg"
+                    src="/neddconsultantlogo.png"
                     alt="Nedd Digital"
                     className="h-16 w-auto object-contain"
                   />
