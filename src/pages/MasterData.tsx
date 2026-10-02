@@ -380,7 +380,7 @@ export default function MasterData() {
               'Unable to Load Data',
               getApiErrorMessage(
                 error,
-                'Master data could not be loaded from the database.'
+                'Unable to load data.'
               )
             );
           } finally {
@@ -1141,7 +1141,7 @@ export default function MasterData() {
       ) {
         return (
           <div className="rounded-2xl border border-gray-100 bg-white px-5 py-12 text-center text-sm text-gray-500 shadow-sm">
-            Loading master data from database...
+            Loading...
           </div>
         );
       }
