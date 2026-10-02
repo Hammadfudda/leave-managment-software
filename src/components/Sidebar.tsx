@@ -145,7 +145,7 @@ export default function Sidebar({
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3.5">
             <div className="flex min-w-0 items-center gap-2.5">
               <img
-                src="/neddconsultantlogo.png"
+                src="/nedddigitallogo.svg"
                 alt="Nedd Digital"
                 className="h-14 w-auto max-w-[92px] shrink-0 object-contain"
               />
