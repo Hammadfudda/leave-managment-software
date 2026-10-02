@@ -1130,10 +1130,13 @@ function Dashboard({
                               </p>
 
                               <p className="text-xs text-slate-500">
-                                {
-                                  organization.slug
-                                }
+                                {organization.slug}
                               </p>
+                              {organization.status === 'pending_deletion' && organization.scheduledPurgeAt && (
+                                <p className="mt-1 text-xs font-medium text-amber-300">
+                                  Permanent deletion: {new Date(organization.scheduledPurgeAt).toLocaleString()}
+                                </p>
+                              )}
                             </td>
 
                             <td className="px-5 py-4">
