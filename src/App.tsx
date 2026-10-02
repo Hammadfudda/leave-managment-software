@@ -3,6 +3,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from "react-router-dom";
 
 import { AppDataProvider } from "./context/AppDataContext";
@@ -28,6 +29,7 @@ import Profile from "./pages/Profile";
 import MasterData from "./pages/MasterData";
 import MyTeam from "./pages/MyTeam";
 import Feedback from "./pages/Feedback";
+import ChangePassword from "./pages/ChangePassword";
 
 import SuperAdminPortal from "./super-admin/SuperAdminPortal";
 
@@ -41,6 +43,7 @@ function Protected({
   roles?: Role[];
 }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -54,6 +57,10 @@ function Protected({
 
   if (!user) {
     return <Navigate to="/" replace />;
+  }
+
+  if (user.mustChangePassword && location.pathname !== "/change-password") {
+    return <Navigate to="/change-password" replace />;
   }
 
   if (
@@ -120,6 +127,16 @@ export default function App() {
             <Route
               path="/super-admin/*"
               element={<SuperAdminPortal />}
+            />
+
+            {/* MANDATORY TEMPORARY-PASSWORD CHANGE */}
+            <Route
+              path="/change-password"
+              element={
+                <Protected>
+                  <ChangePassword />
+                </Protected>
+              }
             />
 
             {/* AUTHENTICATED AREA */}
