@@ -17,6 +17,7 @@ import api, {
 
 interface LoginResult {
   success: boolean;
+  mustChangePassword?: boolean;
   error?: string;
 }
 
@@ -432,6 +433,7 @@ export function AuthProvider({
 
       return {
         success: true,
+        mustChangePassword: Boolean(response.data.mustChangePassword || mappedUser.mustChangePassword),
       };
     } catch (error) {
       removeAccessToken();
