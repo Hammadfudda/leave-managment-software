@@ -861,14 +861,26 @@ function Dashboard({
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 bg-slate-900">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 lg:px-6">
-          <div>
-            <h1 className="font-semibold">
-              Nedd Digital Panel
-            </h1>
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-11 w-36 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-white px-3">
+              <img
+                src={NEDD_DIGITAL_LOGO}
+                alt="Nedd Digital"
+                className="max-h-8 w-auto object-contain"
+                loading="eager"
+                decoding="async"
+              />
+            </div>
 
-            <p className="text-xs text-slate-400">
-              {user.fullName} · {user.email}
-            </p>
+            <div className="min-w-0">
+              <h1 className="font-semibold">
+                Nedd Digital Panel
+              </h1>
+
+              <p className="truncate text-xs text-slate-400">
+                {user.fullName} · {user.email}
+              </p>
+            </div>
           </div>
 
           <button
