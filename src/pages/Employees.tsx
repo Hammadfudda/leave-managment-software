@@ -12,7 +12,10 @@ import {
   Filter,
   KeyRound,
   Plus,
+  RotateCcw,
   Search,
+  ShieldCheck,
+  ShieldOff,
   Trash2,
   UserPlus,
 } from 'lucide-react';
@@ -309,6 +312,26 @@ export default function Employees() {
     useState(false);
 
   const [
+    removedEmployees,
+    setRemovedEmployees,
+  ] = useState<BackendEmployee[]>([]);
+
+  const [
+    showRecentlyDeleted,
+    setShowRecentlyDeleted,
+  ] = useState(false);
+
+  const [
+    restoringId,
+    setRestoringId,
+  ] = useState<string | null>(null);
+
+  const [
+    suspendingId,
+    setSuspendingId,
+  ] = useState<string | null>(null);
+
+  const [
     importing,
     setImporting,
   ] =
@@ -558,6 +581,12 @@ export default function Employees() {
       refreshLookups,
     ]
   );
+
+  useEffect(() => {
+    if (showRecentlyDeleted) {
+      void loadRecentlyDeleted();
+    }
+  }, [showRecentlyDeleted]);
 
   const filteredDepartments =
     useMemo(
@@ -1196,6 +1225,7 @@ export default function Employees() {
         resetForm();
 
         await refreshEmployees();
+        await loadRecentlyDeleted();
       } catch (
         error
       ) {
@@ -1253,6 +1283,71 @@ export default function Employees() {
       }
     };
 
+  const handleSuspend = async (user: User) => {
+    setSuspendingId(user.id);
+    try {
+      const endpoint =
+        user.status === 'active'
+          ? `/employees/${user.id}/suspend`
+          : `/employees/${user.id}/activate`;
+
+      await api.patch(endpoint);
+
+      showMessage(
+        'success',
+        user.status === 'active' ? 'Account Suspended' : 'Account Activated',
+        `${user.fullName}'s account status was updated successfully.`
+      );
+
+      await refreshEmployees();
+    } catch (error) {
+      showMessage(
+        'error',
+        'Status Update Failed',
+        getApiErrorMessage(error, 'Unable to update this account status.')
+      );
+    } finally {
+      setSuspendingId(null);
+    }
+  };
+
+  const loadRecentlyDeleted = async () => {
+    try {
+      const data = await getRemovedEmployees();
+      setRemovedEmployees(data || []);
+    } catch (error) {
+      showMessage(
+        'error',
+        'Unable to Load Recently Deleted',
+        getApiErrorMessage(error, 'Unable to load recently deleted accounts.')
+      );
+    }
+  };
+
+  const handleRestore = async (id: string, fullName: string) => {
+    setRestoringId(id);
+    try {
+      await restoreEmployee(id);
+      showMessage(
+        'success',
+        'Account Restored',
+        `${fullName} has been restored.`
+      );
+      await Promise.all([
+        refreshEmployees(),
+        loadRecentlyDeleted(),
+      ]);
+    } catch (error) {
+      showMessage(
+        'error',
+        'Restore Failed',
+        getApiErrorMessage(error, 'Unable to restore this account.')
+      );
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
   const handleRemove =
     async () => {
       if (
@@ -1273,7 +1368,7 @@ export default function Employees() {
         showMessage(
           'success',
           'Employee Removed',
-          `${removeTarget.fullName} has been removed.`
+          `${removeTarget.fullName} moved to Recently Deleted. It can be restored for 10 days.`
         );
 
         setRemoveTarget(
@@ -1769,6 +1864,26 @@ export default function Employees() {
 
   return (
     <div className="space-y-6">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setShowRecentlyDeleted(false)}
+          className={`rounded-lg px-3 py-2 text-sm font-medium ${!showRecentlyDeleted ? 'bg-blue-600 text-white' : 'border border-gray-200 bg-white text-gray-700'}`}
+        >
+          Employees
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setShowRecentlyDeleted(true);
+            void loadRecentlyDeleted();
+          }}
+          className={`rounded-lg px-3 py-2 text-sm font-medium ${showRecentlyDeleted ? 'bg-amber-500 text-white' : 'border border-gray-200 bg-white text-gray-700'}`}
+        >
+          Recently Deleted
+        </button>
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">
@@ -2253,22 +2368,28 @@ export default function Employees() {
                             Reset Password
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setRemoveTarget(
-                                user
-                              )
-                            }
-                            className="inline-flex items-center gap-1 text-sm font-medium text-rose-600 hover:text-rose-700"
-                          >
-                            <Trash2
-                              size={
-                                14
-                              }
-                            />
-                            Remove
-                          </button>
+                          {user.status !== 'pending_deletion' && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={suspendingId === user.id}
+                                onClick={() => void handleSuspend(user)}
+                                className={`inline-flex items-center gap-1 text-sm font-medium ${user.status === 'active' ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700'} disabled:opacity-50`}
+                              >
+                                {user.status === 'active' ? <ShieldOff size={14} /> : <ShieldCheck size={14} />}
+                                {suspendingId === user.id ? 'Updating…' : user.status === 'active' ? 'Suspend' : 'Activate'}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setRemoveTarget(user)}
+                                className="inline-flex items-center gap-1 text-sm font-medium text-rose-600 hover:text-rose-700"
+                              >
+                                <Trash2 size={14} />
+                                Remove
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
