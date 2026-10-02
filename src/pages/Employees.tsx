@@ -36,6 +36,8 @@ import {
   updateEmployeeRoleLabel,
   exportEmployeesCsv,
   importEmployeesCsv,
+  getRemovedEmployees,
+  type BackendEmployee,
   type CreateEmployeePayload,
   type CsvHardError,
   type CsvImportResponse,
@@ -1375,7 +1377,7 @@ export default function Employees() {
           null
         );
 
-        await refreshEmployees();
+        await Promise.all([refreshEmployees(), loadRecentlyDeleted()]);
       } catch (
         error
       ) {
@@ -2169,6 +2171,56 @@ export default function Employees() {
           Clear Filters
         </button>
       </div>
+
+      {showRecentlyDeleted && (
+        <div className="overflow-hidden rounded-2xl border border-amber-100 bg-white shadow-sm">
+          <div className="border-b border-amber-100 bg-amber-50/60 px-5 py-4">
+            <h2 className="font-semibold text-gray-900">
+              Recently Deleted Accounts
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Removed accounts stay here for 10 days. After the restore window expires, the scheduled purge permanently removes the account and its personal attached data.
+            </p>
+          </div>
+
+          {removedEmployees.length === 0 ? (
+            <div className="p-8 text-center text-sm text-gray-500">
+              No accounts are waiting for deletion.
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {removedEmployees.map((employee) => (
+                <div
+                  key={employee._id}
+                  className="flex flex-wrap items-center justify-between gap-4 px-5 py-4"
+                >
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {employee.fullName}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {employee.employeeId} · {employee.email}
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-amber-700">
+                      Permanently deleted: {employee.scheduledPurgeAt ? new Date(employee.scheduledPurgeAt).toLocaleString() : 'scheduled'}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={restoringId === employee._id}
+                    onClick={() => void handleRestore(employee._id, employee.fullName)}
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <RotateCcw size={15} />
+                    {restoringId === employee._id ? 'Restoring…' : 'Restore Account'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
         {employeesLoading ? (
