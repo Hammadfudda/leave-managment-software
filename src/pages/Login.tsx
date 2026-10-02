@@ -130,7 +130,7 @@ export default function Login() {
         result.success
       ) {
         navigate(
-          '/dashboard',
+          result.mustChangePassword ? '/change-password' : '/dashboard',
           {
             replace: true,
           }
