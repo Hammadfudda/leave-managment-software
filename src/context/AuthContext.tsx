@@ -212,12 +212,47 @@ export function AuthProvider({
   useEffect(() => {
     const restoreSession =
       async () => {
-        const token =
-          getAccessToken();
+        /*
+         * The access token is memory-only. On a full page reload,
+         * use the existing httpOnly refresh cookie to obtain a new
+         * short-lived access token before loading the current user.
+         */
+        let token = getAccessToken();
 
         if (!token) {
-          setLoading(false);
-          return;
+          try {
+            const refreshResponse =
+              await api.post(
+                '/auth/refresh'
+              );
+
+            const refreshedToken =
+              refreshResponse.data
+                ?.accessToken;
+
+            if (
+              typeof refreshedToken !==
+                'string' ||
+              !refreshedToken
+            ) {
+              throw new Error(
+                'Session refresh failed.'
+              );
+            }
+
+            setAccessToken(
+              refreshedToken
+            );
+            token = refreshedToken;
+          } catch {
+            removeAccessToken();
+            localStorage.removeItem(
+              'authUser'
+            );
+            setUser(null);
+            setLoading(false);
+            return;
+          }
         }
 
         /*
