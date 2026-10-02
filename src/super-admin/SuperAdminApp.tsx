@@ -229,15 +229,13 @@ function Login({
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
       <div className="w-full max-w-md">
         <div className="mb-5 text-center">
-          <div className="mx-auto flex h-16 w-40 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900 px-4">
-            <img
-              src={NEDD_DIGITAL_LOGO}
-              alt="Nedd Digital"
-              className="max-h-11 w-auto object-contain"
-              loading="eager"
-              decoding="async"
-            />
-          </div>
+          <img
+            src={NEDD_DIGITAL_LOGO}
+            alt="Nedd Digital"
+            className="mx-auto block h-auto max-h-14 w-auto max-w-[220px] object-contain"
+            loading="eager"
+            decoding="async"
+          />
 
           <h1 className="mt-4 text-2xl font-semibold text-white">
             Nedd Digital Panel
@@ -862,15 +860,13 @@ function Dashboard({
       <header className="border-b border-slate-800 bg-slate-900">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-11 w-36 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-white px-3">
-              <img
-                src={NEDD_DIGITAL_LOGO}
-                alt="Nedd Digital"
-                className="max-h-8 w-auto object-contain"
-                loading="eager"
-                decoding="async"
-              />
-            </div>
+            <img
+              src={NEDD_DIGITAL_LOGO}
+              alt="Nedd Digital"
+              className="h-auto max-h-10 w-auto max-w-[170px] object-contain"
+              loading="eager"
+              decoding="async"
+            />
 
             <div className="min-w-0">
               <h1 className="font-semibold">
