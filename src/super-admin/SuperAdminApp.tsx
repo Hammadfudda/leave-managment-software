@@ -24,7 +24,7 @@ import {
 
 import Button from '../components/ui/Button';
 
-const NEDD_DIGITAL_LOGO = '/neddconsultantlogo.png';
+const NEDD_DIGITAL_LOGO = '/neddconsultantlogo.png?v=20261003';
 
 import superAdminApi, {
   clearSuperAdminToken,
@@ -234,6 +234,8 @@ function Login({
               src={NEDD_DIGITAL_LOGO}
               alt="Nedd Digital"
               className="max-h-11 w-auto object-contain"
+              loading="eager"
+              decoding="async"
             />
           </div>
 
