@@ -29,6 +29,7 @@ import Profile from "./pages/Profile";
 import MasterData from "./pages/MasterData";
 import MyTeam from "./pages/MyTeam";
 import Feedback from "./pages/Feedback";
+// Forced password-change route for temporary-password accounts.
 import ChangePassword from "./pages/ChangePassword";
 
 import SuperAdminPortal from "./super-admin/SuperAdminPortal";
