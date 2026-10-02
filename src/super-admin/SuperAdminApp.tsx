@@ -1713,7 +1713,7 @@ function Dashboard({
                   void deleteClient()
                 }
               >
-                Permanently Delete
+                Move to Recently Deleted
               </Button>
             </div>
           </div>
