@@ -1164,9 +1164,7 @@ function Dashboard({
                                       : 'bg-rose-950 text-rose-300'
                                 }`}
                               >
-                                {
-                                  organization.status
-                                }
+                                {organization.status === 'pending_deletion' ? 'Recently Deleted' : organization.status}
                               </span>
                             </td>
 
