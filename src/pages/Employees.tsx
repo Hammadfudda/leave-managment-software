@@ -10,6 +10,7 @@ import {
 import {
   Eye,
   Filter,
+  KeyRound,
   Plus,
   Search,
   Trash2,
@@ -282,6 +283,14 @@ export default function Employees() {
     );
 
   const [
+    resetPasswordTarget,
+    setResetPasswordTarget,
+  ] =
+    useState<User | null>(
+      null
+    );
+
+  const [
     saving,
     setSaving,
   ] =
@@ -290,6 +299,12 @@ export default function Employees() {
   const [
     deleting,
     setDeleting,
+  ] =
+    useState(false);
+
+  const [
+    resettingPassword,
+    setResettingPassword,
   ] =
     useState(false);
 
@@ -1200,6 +1215,41 @@ export default function Employees() {
         setSaving(
           false
         );
+      }
+    };
+
+  const handleResetPassword =
+    async () => {
+      if (!resetPasswordTarget) {
+        return;
+      }
+
+      setResettingPassword(true);
+
+      try {
+        const response = await api.patch(
+          `/employees/${resetPasswordTarget.id}/reset-password`
+        );
+
+        showMessage(
+          'success',
+          'Temporary Password Sent',
+          response.data?.message ||
+            `A new temporary password was emailed to ${resetPasswordTarget.fullName}.`
+        );
+
+        setResetPasswordTarget(null);
+      } catch (error) {
+        showMessage(
+          'error',
+          'Password Reset Failed',
+          getApiErrorMessage(
+            error,
+            'Unable to reset this user password.'
+          )
+        );
+      } finally {
+        setResettingPassword(false);
       }
     };
 
@@ -2193,6 +2243,19 @@ export default function Employees() {
                           <button
                             type="button"
                             onClick={() =>
+                              setResetPasswordTarget(
+                                user
+                              )
+                            }
+                            className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                          >
+                            <KeyRound size={14} />
+                            Reset Password
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
                               setRemoveTarget(
                                 user
                               )
@@ -3098,6 +3161,53 @@ export default function Employees() {
               </div>
             );
           })()}
+      </Modal>
+
+      <Modal
+        open={
+          Boolean(
+            resetPasswordTarget
+          )
+        }
+        onClose={() => {
+          if (resettingPassword) {
+            return;
+          }
+
+          setResetPasswordTarget(null);
+        }}
+        title="Reset Password"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              disabled={resettingPassword}
+              onClick={() =>
+                setResetPasswordTarget(null)
+              }
+            >
+              Cancel
+            </Button>
+
+            <Button
+              loading={resettingPassword}
+              loadingText="Sending..."
+              onClick={() =>
+                void handleResetPassword()
+              }
+            >
+              Reset & Email Temporary Password
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm leading-6 text-gray-600">
+          A new temporary password will be generated and emailed to{' '}
+          <strong className="text-gray-900">
+            {resetPasswordTarget?.fullName}
+          </strong>
+          . Their current sessions will be signed out, and they will be required to change the temporary password after login.
+        </p>
       </Modal>
 
       <Modal
