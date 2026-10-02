@@ -15,16 +15,47 @@ const api = axios.create({
   },
 });
 
+// Keep the short-lived access token in memory only. The refresh token remains
+// in the server-issued httpOnly cookie, so JavaScript cannot read either token.
+let accessToken: string | null = null;
+let refreshPromise: Promise<string | null> | null = null;
+
 export const getAccessToken = (): string | null => {
-  return localStorage.getItem('accessToken');
+  return accessToken;
 };
 
 export const setAccessToken = (token: string): void => {
-  localStorage.setItem('accessToken', token);
+  accessToken = token;
 };
 
 export const removeAccessToken = (): void => {
-  localStorage.removeItem('accessToken');
+  accessToken = null;
+};
+
+const refreshAccessToken = async (): Promise<string | null> => {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = api
+    .post('/auth/refresh')
+    .then((response) => {
+      const token = response.data?.accessToken;
+      if (typeof token !== 'string' || !token) {
+        removeAccessToken();
+        return null;
+      }
+
+      setAccessToken(token);
+      return token;
+    })
+    .catch(() => {
+      removeAccessToken();
+      return null;
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
+
+  return refreshPromise;
 };
 
 api.interceptors.request.use(
@@ -42,7 +73,31 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
+    const originalRequest = error.config as
+      | (InternalAxiosRequestConfig & { _retry?: boolean })
+      | undefined;
+
+    const isAuthRequest =
+      originalRequest?.url === '/auth/login' ||
+      originalRequest?.url === '/auth/refresh' ||
+      originalRequest?.url === '/auth/logout';
+
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !isAuthRequest
+    ) {
+      originalRequest._retry = true;
+
+      const token = await refreshAccessToken();
+      if (token) {
+        originalRequest.headers.Authorization = `Bearer ${token}`;
+        return api(originalRequest);
+      }
+    }
+
     if (error.response?.status === 401) {
       removeAccessToken();
     }
