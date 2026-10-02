@@ -6,6 +6,8 @@ import {
 import {
   ArrowRight,
   LockKeyhole,
+  Eye,
+  EyeOff,
   Mail,
   ShieldCheck,
   Sparkles,
@@ -39,6 +41,9 @@ export default function Login() {
 
   const [password, setPassword] =
     useState('');
+
+  const [showPassword, setShowPassword] =
+    useState(false);
 
   const [loading, setLoading] =
     useState(false);
@@ -312,7 +317,7 @@ export default function Login() {
                     <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
                     <input
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       value={
                         password
                       }
@@ -330,8 +335,18 @@ export default function Login() {
                       }
                       autoComplete="current-password"
                       placeholder="Enter your password"
-                      className="w-full rounded-2xl border border-slate-200 bg-white py-3.5 pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+                      className="w-full rounded-2xl border border-slate-200 bg-white py-3.5 pl-11 pr-11 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50"
                     />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((current) => !current)}
+                      disabled={loading}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600 disabled:cursor-not-allowed"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
                 </div>
 
