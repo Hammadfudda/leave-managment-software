@@ -1169,88 +1169,60 @@ function Dashboard({
 
                             <td className="px-5 py-4">
                               <div className="flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    openEdit(
-                                      organization
-                                    )
-                                  }
-                                  className="inline-flex items-center gap-1 rounded-lg border border-blue-900 bg-blue-950/30 px-2.5 py-1.5 text-xs text-blue-300 hover:bg-blue-900/40"
-                                >
-                                  <Pencil
-                                    size={14}
-                                  />
-                                  Edit
-                                </button>
+                                {organization.status !== 'pending_deletion' ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => openEdit(organization)}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-blue-900 bg-blue-950/30 px-2.5 py-1.5 text-xs text-blue-300 hover:bg-blue-900/40"
+                                    >
+                                      <Pencil size={14} />
+                                      Edit
+                                    </button>
 
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setResetTarget(
-                                      organization
-                                    )
-                                  }
-                                  className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-300"
-                                >
-                                  <UserRoundCog
-                                    size={14}
-                                  />
-                                  Reset Password
-                                </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setResetTarget(organization)}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-300"
+                                    >
+                                      <UserRoundCog size={14} />
+                                      Reset Password
+                                    </button>
 
-                                <button
-                                  type="button"
-                                  disabled={
-                                    saving
-                                  }
-                                  onClick={() =>
-                                    void toggleStatus(
-                                      organization
-                                    )
-                                  }
-                                  className={`rounded-lg px-2.5 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
-                                    organization.status ===
-                                    'active'
-                                      ? 'bg-rose-950 text-rose-300'
-                                      : 'bg-emerald-950 text-emerald-300'
-                                  }`}
-                                >
-                                  {organization.status ===
-                                  'active'
-                                    ? 'Suspend'
-                                    : 'Activate'}
-                                </button>
+                                    <button
+                                      type="button"
+                                      disabled={saving}
+                                      onClick={() => void toggleStatus(organization)}
+                                      className={`rounded-lg px-2.5 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${organization.status === 'active' ? 'bg-rose-950 text-rose-300' : 'bg-emerald-950 text-emerald-300'}`}
+                                    >
+                                      {organization.status === 'active' ? 'Suspend' : 'Activate'}
+                                    </button>
 
-                                <button
-                                  type="button"
-                                  disabled={
-                                    Boolean(
-                                      deletingOrganizationId
-                                    )
-                                  }
-                                  onClick={() => {
-                                    setDeleteTarget(
-                                      organization
-                                    );
-
-                                    setDeleteConfirmation(
-                                      ''
-                                    );
-
-                                    setError('');
-                                  }}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-rose-900 bg-rose-950/40 px-2.5 py-1.5 text-xs font-medium text-rose-300 hover:bg-rose-900/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  <Trash2
-                                    size={14}
-                                  />
-
-                                  {deletingOrganizationId ===
-                                  organization.id
-                                    ? 'Deleting...'
-                                    : 'Delete'}
-                                </button>
+                                    <button
+                                      type="button"
+                                      disabled={Boolean(deletingOrganizationId)}
+                                      onClick={() => {
+                                        setDeleteTarget(organization);
+                                        setDeleteConfirmation('');
+                                        setError('');
+                                      }}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-rose-900 bg-rose-950/40 px-2.5 py-1.5 text-xs font-medium text-rose-300 hover:bg-rose-900/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      <Trash2 size={14} />
+                                      {deletingOrganizationId === organization.id ? 'Deleting...' : 'Delete'}
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={saving}
+                                    onClick={() => void restoreClient(organization)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-900 bg-emerald-950/30 px-2.5 py-1.5 text-xs text-emerald-300 hover:bg-emerald-900/40 disabled:opacity-50"
+                                  >
+                                    <RotateCcw size={14} />
+                                    Restore
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
