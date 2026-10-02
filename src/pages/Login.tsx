@@ -186,8 +186,8 @@ export default function Login() {
             <div className="relative">
               <div className="inline-flex rounded-2xl bg-white px-3 py-2 shadow-xl shadow-black/15">
                 <img
-                  src="/neddconsultantlogo.png"
-                  alt="Nedd Consultant"
+                  src="/nedddigitallogo.svg"
+                  alt="Nedd Digital"
                   className="h-20 w-auto object-contain"
                 />
               </div>
@@ -235,7 +235,7 @@ export default function Login() {
             </div>
 
             <p className="relative text-xs text-blue-100/40">
-              Powered by Nedd Consultant
+              Powered by Nedd Digital
             </p>
           </section>
 
@@ -244,8 +244,8 @@ export default function Login() {
               <div className="mb-8 flex justify-center lg:hidden">
                 <div className="inline-flex rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
                   <img
-                    src="/neddconsultantlogo.png"
-                    alt="Nedd Consultant"
+                    src="/nedddigitallogo.svg"
+                    alt="Nedd Digital"
                     className="h-16 w-auto object-contain"
                   />
                 </div>
@@ -366,7 +366,7 @@ export default function Login() {
               </div>
 
               <p className="mt-8 text-center text-xs text-slate-400">
-                © 2026 Nedd Consultant · Leave Management Software
+                © 2026 Nedd Digital · Leave Management Software
               </p>
             </div>
           </section>
