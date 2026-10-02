@@ -280,11 +280,27 @@ export function AuthProvider({
               mappedUser
             );
           }
-        } catch {
+        } catch (error) {
           /*
-           * Keep the cached user if the
-           * profile refresh fails.
+           * A 401 means the session is no longer valid
+           * (including an account without an organization).
+           * Clear the cached session instead of leaving the
+           * user inside a dashboard that can no longer access data.
            */
+          const status =
+            (
+              error as {
+                response?: {
+                  status?: number;
+                };
+              }
+            )?.response?.status;
+
+          if (status === 401) {
+            removeAccessToken();
+            localStorage.removeItem('authUser');
+            setUser(null);
+          }
         } finally {
           setLoading(false);
         }
