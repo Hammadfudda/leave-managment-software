@@ -37,6 +37,7 @@ import {
   exportEmployeesCsv,
   importEmployeesCsv,
   getRemovedEmployees,
+  restoreEmployee,
   type BackendEmployee,
   type CreateEmployeePayload,
   type CsvHardError,
