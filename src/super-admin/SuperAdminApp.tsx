@@ -1060,16 +1060,20 @@ function Dashboard({
                 </button>
               </div>
 
-              {loading ? (
+              {loading && (
                 <div className="p-10 text-center text-sm text-slate-400">
                   Loading clients...
                 </div>
-              ) : organizations.length ===
-                0 ? (
+              )}
+
+              {!loading && organizations.length === 0 && (
                 <div className="p-10 text-center text-sm text-slate-400">
                   No clients yet.
                 </div>
-              ) : (
+              )}
+
+              {!loading && organizations.length > 0 && (
+                <>
                 <div className="mb-4 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -1232,6 +1236,7 @@ function Dashboard({
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </div>
           </>
