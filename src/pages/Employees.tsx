@@ -2378,72 +2378,39 @@ export default function Employees() {
                       </td>
 
                       <td className="px-5 py-3">
-                        <div className="flex flex-wrap gap-3">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setViewUser(
-                                user
-                              )
+                        <select
+                          defaultValue=""
+                          onChange={(event) => {
+                            const action = event.target.value;
+                            event.target.value = '';
+
+                            if (action === 'view') {
+                              setViewUser(user);
+                            } else if (action === 'edit') {
+                              handleEdit(user);
+                            } else if (action === 'reset-password') {
+                              setResetPasswordTarget(user);
+                            } else if (action === 'toggle-status') {
+                              void handleSuspend(user);
+                            } else if (action === 'remove') {
+                              setRemoveTarget(user);
                             }
-                            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
-                          >
-                            <Eye
-                              size={
-                                14
-                              }
-                            />
-                            View
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleEdit(
-                                user
-                              )
-                            }
-                            className="text-sm font-medium text-amber-600 hover:text-amber-700"
-                          >
-                            Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setResetPasswordTarget(
-                                user
-                              )
-                            }
-                            className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700"
-                          >
-                            <KeyRound size={14} />
-                            Reset Password
-                          </button>
-
-                          {user.status !== 'pending_deletion' && (
-                            <>
-                              <button
-                                type="button"
-                                disabled={suspendingId === user.id}
-                                onClick={() => void handleSuspend(user)}
-                                className={`inline-flex items-center gap-1 text-sm font-medium ${user.status === 'active' ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700'} disabled:opacity-50`}
-                              >
-                                {user.status === 'active' ? <ShieldOff size={14} /> : <ShieldCheck size={14} />}
-                                {suspendingId === user.id ? 'Updating…' : user.status === 'active' ? 'Suspend' : 'Activate'}
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => setRemoveTarget(user)}
-                                className="inline-flex items-center gap-1 text-sm font-medium text-rose-600 hover:text-rose-700"
-                              >
-                                <Trash2 size={14} />
-                                Remove
-                              </button>
-                            </>
-                          )}
-                        </div>
+                          }}
+                          disabled={suspendingId === user.id}
+                          className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 outline-none transition hover:border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                          aria-label={`Actions for ${user.fullName}`}
+                        >
+                          <option value="" disabled>
+                            Actions
+                          </option>
+                          <option value="view">View Details</option>
+                          <option value="edit">Edit</option>
+                          <option value="reset-password">Reset Password</option>
+                          <option value="toggle-status">
+                            {user.status === 'active' ? 'Suspend' : 'Activate'}
+                          </option>
+                          <option value="remove">Remove</option>
+                        </select>
                       </td>
                     </tr>
                   )
