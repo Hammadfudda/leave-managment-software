@@ -2299,7 +2299,7 @@ carryForwardAllowed:
 
           refreshLeavePolicies,
 
-          addUser:
+          addUser,
 
           updateUser,
 
