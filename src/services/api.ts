@@ -32,7 +32,7 @@ export const removeAccessToken = (): void => {
   accessToken = null;
 };
 
-const refreshAccessToken = async (): Promise<string | null> => {
+export const refreshAccessToken = async (): Promise<string | null> => {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = api
@@ -78,10 +78,14 @@ api.interceptors.response.use(
       | (InternalAxiosRequestConfig & { _retry?: boolean })
       | undefined;
 
+    const requestUrl = originalRequest?.url || '';
     const isAuthRequest =
-      originalRequest?.url === '/auth/login' ||
-      originalRequest?.url === '/auth/refresh' ||
-      originalRequest?.url === '/auth/logout';
+      requestUrl === '/auth/login' ||
+      requestUrl === '/auth/refresh' ||
+      requestUrl === '/auth/logout' ||
+      requestUrl.endsWith('/auth/login') ||
+      requestUrl.endsWith('/auth/refresh') ||
+      requestUrl.endsWith('/auth/logout');
 
     if (
       error.response?.status === 401 &&
