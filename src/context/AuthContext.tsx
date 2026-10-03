@@ -13,6 +13,7 @@ import api, {
   getApiErrorMessage,
   removeAccessToken,
   setAccessToken,
+  refreshAccessToken,
 } from '../services/api';
 
 interface LoginResult {
@@ -225,47 +226,17 @@ export function AuthProvider({
         let token = getAccessToken();
 
         if (!token) {
-          try {
-            const refreshResponse =
-              await api.post(
-                '/auth/refresh'
-              );
+          const refreshedToken = await refreshAccessToken();
 
-            const refreshedToken =
-              refreshResponse.data
-                ?.accessToken;
-
-            if (
-              typeof refreshedToken !==
-                'string' ||
-              !refreshedToken
-            ) {
-              throw new Error(
-                'Session refresh failed.'
-              );
-            }
-
-            setAccessToken(
-              refreshedToken
-            );
-            token = refreshedToken;
-
-            if (refreshResponse.data?.user?._id) {
-              const refreshedUser = mapBackendUser(
-                refreshResponse.data.user as BackendUser
-              );
-              localStorage.setItem('authUser', JSON.stringify(refreshedUser));
-              setUser(refreshedUser);
-            }
-          } catch {
+          if (!refreshedToken) {
             removeAccessToken();
-            localStorage.removeItem(
-              'authUser'
-            );
+            localStorage.removeItem('authUser');
             setUser(null);
             setLoading(false);
             return;
           }
+
+          token = refreshedToken;
         }
 
         /*
